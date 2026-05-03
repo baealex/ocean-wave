@@ -12,7 +12,7 @@ import * as Icon from '~/icon';
 
 import type { Music } from '~/models/type';
 
-const TRACK_LIMIT = 5;
+const TRACK_LIMIT = 4;
 const RECENT_LIMIT = 4;
 const DORMANT_DAYS = 30;
 
@@ -129,12 +129,20 @@ const ActionCard = ({
     </button>
 );
 
-const DiscoveryTrack = ({ music, index, maxDormantDays }: { music: Music; index: number; maxDormantDays: number }) => {
-    const lastPlayedAt = music.lastPlayedAt ? new Date(music.lastPlayedAt).getTime() : null;
-    const dormantDays = lastPlayedAt && !Number.isNaN(lastPlayedAt)
-        ? Math.max(Math.floor((Date.now() - lastPlayedAt) / 24 / 60 / 60 / 1000), 0)
-        : DORMANT_DAYS;
-    const width = maxDormantDays > 0 ? Math.max((dormantDays / maxDormantDays) * 100, 8) : 8;
+const TrackSignalRow = ({
+    music,
+    index,
+    meta,
+    ratio,
+    tone = 'neutral'
+}: {
+    music: Music;
+    index: number;
+    meta: string;
+    ratio?: number;
+    tone?: 'primary' | 'neutral';
+}) => {
+    const width = ratio === undefined ? 0 : Math.max(Math.min(ratio, 1) * 100, 8);
 
     return (
         <Link
@@ -149,10 +157,17 @@ const DiscoveryTrack = ({ music, index, maxDormantDays }: { music: Music; index:
             />
             <span className="flex min-w-0 flex-col gap-1">
                 <span className="truncate text-sm font-medium text-[var(--b-color-text)]">{music.name}</span>
-                <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">{music.artist.name} · {music.playCount > 0 ? `${dormantDays}d quiet` : 'unheard'}</span>
-                <span className="h-1 overflow-hidden rounded-full bg-[var(--b-color-border-subtle)]" aria-hidden="true">
-                    <span className="block h-full rounded-[inherit] bg-[var(--b-color-point)]" style={{ width: `${width}%` }} />
-                </span>
+                <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">{music.artist.name} · {meta}</span>
+                {ratio !== undefined && (
+                    <span className="h-1 overflow-hidden rounded-full bg-[var(--b-color-border-subtle)]" aria-hidden="true">
+                        <span
+                            className={tone === 'primary'
+                                ? 'block h-full rounded-[inherit] bg-[var(--b-color-point)] opacity-80'
+                                : 'block h-full rounded-[inherit] bg-[var(--b-color-text-muted)] opacity-45'}
+                            style={{ width: `${width}%` }}
+                        />
+                    </span>
+                )}
             </span>
         </Link>
     );
@@ -192,12 +207,15 @@ export default function Dashboard() {
     const recentMusics = [...playedMusics]
         .sort((a, b) => new Date(b.lastPlayedAt ?? 0).getTime() - new Date(a.lastPlayedAt ?? 0).getTime())
         .slice(0, RECENT_LIMIT);
-    const discoveryMusics = [...availableMusics]
+    const topMusics = [...playedMusics]
+        .sort((a, b) => b.playCount - a.playCount)
+        .slice(0, TRACK_LIMIT);
+    const leastHeardMusics = [...availableMusics]
         .sort((a, b) => {
             if (a.playCount === 0 && b.playCount !== 0) return -1;
             if (a.playCount !== 0 && b.playCount === 0) return 1;
 
-            return new Date(a.lastPlayedAt ?? 0).getTime() - new Date(b.lastPlayedAt ?? 0).getTime();
+            return a.totalPlayedMs - b.totalPlayedMs;
         })
         .slice(0, TRACK_LIMIT);
     const topArtistsByPlays = [...availableMusics]
@@ -224,15 +242,7 @@ export default function Dashboard() {
     const totalPlayedMs = availableMusics.reduce((sum, music) => sum + music.totalPlayedMs, 0);
     const playedCoverage = availableMusics.length ? playedMusics.length / availableMusics.length : 0;
     const losslessRatio = availableMusics.length ? losslessMusics.length / availableMusics.length : 0;
-    const maxDormantDays = Math.max(...discoveryMusics.map((music) => {
-        if (!music.lastPlayedAt) return DORMANT_DAYS;
-
-        const lastPlayedAt = new Date(music.lastPlayedAt).getTime();
-
-        if (Number.isNaN(lastPlayedAt)) return DORMANT_DAYS;
-
-        return Math.max(Math.floor((Date.now() - lastPlayedAt) / 24 / 60 / 60 / 1000), 0);
-    }), DORMANT_DAYS);
+    const maxPlayCount = Math.max(...topMusics.map(music => music.playCount), 0);
     const maxArtistPlayCount = Math.max(...topArtistsByPlays.map(artist => artist.playCount), 0);
     const topArtist = topArtistsByPlays[0] ?? null;
     const topArtistMusics = topArtist
@@ -314,46 +324,85 @@ export default function Dashboard() {
                 </div>
             </Surface>
 
-            <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] gap-[clamp(1rem,2.4vw,1.5rem)] max-[980px]:grid-cols-1">
+            <div className="grid grid-cols-2 gap-[clamp(1rem,2.4vw,1.5rem)] max-[980px]:grid-cols-1">
                 <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
                     <div className="flex items-start justify-between gap-4">
                         <div>
-                            <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Discovery</Text>
-                            <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Tracks worth surfacing</h2>
+                            <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Played a lot</Text>
+                            <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Heavy rotation</h2>
                         </div>
                         <Link to="/library" className="rounded-full border border-[var(--b-color-border-subtle)] bg-transparent px-2.5 py-1.5 text-sm font-medium text-[var(--b-color-text-tertiary)] no-underline transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]">Open</Link>
                     </div>
 
-                    {discoveryMusics.length > 0 ? (
+                    {topMusics.length > 0 ? (
                         <div className="flex flex-col gap-2.5">
-                            {discoveryMusics.map((music, index) => (
-                                <DiscoveryTrack key={music.id} music={music} index={index} maxDormantDays={maxDormantDays} />
+                            {topMusics.map((music, index) => (
+                                <TrackSignalRow
+                                    key={music.id}
+                                    music={music}
+                                    index={index}
+                                    meta={`${formatNumber(music.playCount)} plays · ${formatHours(music.totalPlayedMs)}`}
+                                    ratio={maxPlayCount > 0 ? music.playCount / maxPlayCount : 0}
+                                    tone="primary"
+                                />
                             ))}
                         </div>
                     ) : (
                         <div className="flex min-h-40 items-center rounded-[var(--b-radius-lg)] bg-[var(--b-color-surface-item)] p-4">
-                            <Text as="p" variant="secondary" size="sm">Hidden tracks and quiet favorites will appear here.</Text>
+                            <Text as="p" variant="secondary" size="sm">Heavy rotation appears after a few counted plays.</Text>
                         </div>
                     )}
                 </Surface>
 
                 <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
                     <div>
-                        <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Momentum</Text>
-                        <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Recent plays</h2>
+                        <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Barely played</Text>
+                        <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Unexplored tracks</h2>
                     </div>
 
-                    {recentMusics.length > 0 ? (
+                    {leastHeardMusics.length > 0 ? (
                         <div className="flex flex-col gap-2.5">
-                            {recentMusics.map(music => <RecentTrack key={music.id} music={music} />)}
+                            {leastHeardMusics.map((music, index) => (
+                                <TrackSignalRow
+                                    key={music.id}
+                                    music={music}
+                                    index={index}
+                                    meta={music.playCount === 0 ? 'unheard' : `${formatHours(music.totalPlayedMs)} listened`}
+                                />
+                            ))}
                         </div>
                     ) : (
                         <div className="flex min-h-40 items-center rounded-[var(--b-radius-lg)] bg-[var(--b-color-surface-item)] p-4">
-                            <Text as="p" variant="secondary" size="sm">Recent playback will be tracked after your next session.</Text>
+                            <Text as="p" variant="secondary" size="sm">Tracks with low listening time will appear here.</Text>
                         </div>
                     )}
                 </Surface>
             </div>
+
+            <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">History</Text>
+                        <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Listening history</h2>
+                    </div>
+                    <button
+                        type="button"
+                        disabled
+                        className="rounded-full border border-[var(--b-color-border-subtle)] bg-transparent px-2.5 py-1.5 text-sm font-medium text-[var(--b-color-text-muted)] opacity-50">
+                        Open soon
+                    </button>
+                </div>
+
+                {recentMusics.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2.5 max-[980px]:grid-cols-1">
+                        {recentMusics.map(music => <RecentTrack key={music.id} music={music} />)}
+                    </div>
+                ) : (
+                    <div className="flex min-h-32 items-center rounded-[var(--b-radius-lg)] bg-[var(--b-color-surface-item)] p-4">
+                        <Text as="p" variant="secondary" size="sm">History will start filling in after your next session.</Text>
+                    </div>
+                )}
+            </Surface>
 
             <Surface as="section" className="flex flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
                 <div>

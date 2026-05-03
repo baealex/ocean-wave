@@ -10,7 +10,7 @@ import { queueStore } from '~/store/queue';
 import type { Music } from '~/models/type';
 
 const QUEUE_PREVIEW_LIMIT = 3;
-const FOCUS_TRACK_LIMIT = 4;
+const RECENTLY_ADDED_LIMIT = 4;
 
 const isMusic = (music: Music | undefined): music is Music => Boolean(music);
 
@@ -47,9 +47,10 @@ export default function Home() {
     const upNextCount = selected === null
         ? queueLength
         : Math.max(queueLength - selected - 1, 0);
-    const focusMusics = availableMusics
+    const recentlyAddedMusics = [...availableMusics]
         .filter(music => music.id !== currentTrackId)
-        .slice(0, FOCUS_TRACK_LIMIT);
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, RECENTLY_ADDED_LIMIT);
 
     const handlePrimaryAction = () => {
         if (currentMusic) {
@@ -308,7 +309,7 @@ export default function Home() {
                 </div>
             </Surface>
 
-            {focusMusics.length > 0 && (
+            {recentlyAddedMusics.length > 0 && (
                 <Surface as="section" className="flex flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)] max-sm:rounded-[var(--b-radius-xl)]" aria-labelledby="home-focus-title">
                     <div className="flex items-start justify-between gap-4">
                         <div>
@@ -318,16 +319,16 @@ export default function Home() {
                                 size="xs"
                                 weight="medium"
                                 className="tracking-[0.06em] uppercase">
-                                High rotation
+                                New in library
                             </Text>
                             <h2 id="home-focus-title" className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">
-                                Familiar tracks
+                                Recently added
                             </h2>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2.5 max-[900px]:grid-cols-2 max-sm:grid-cols-1">
-                        {focusMusics.map(music => (
+                        {recentlyAddedMusics.map(music => (
                             <button
                                 key={music.id}
                                 type="button"
