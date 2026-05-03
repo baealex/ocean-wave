@@ -7,27 +7,33 @@ import { musicStore } from '~/store/music';
 import { playlistStore } from '~/store/playlist';
 import { queueStore } from '~/store/queue';
 import { Image, Surface, Text } from '~/components/shared';
+import { useResetQueue } from '~/hooks';
 import * as Icon from '~/icon';
 
 import type { Music } from '~/models/type';
 
 const TOP_LIMIT = 5;
 const RECENT_LIMIT = 4;
+const DORMANT_DAYS = 30;
 
 const formatNumber = (value: number) => value.toLocaleString();
 
-const formatHours = (milliseconds: number) => {
-    const hours = milliseconds / 1000 / 60 / 60;
+const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
 
-    if (hours < 1) {
-        return `${Math.round(hours * 60)}m`;
+const formatHours = (milliseconds: number) => {
+    const minutes = Math.round(milliseconds / 1000 / 60);
+
+    if (minutes < 60) {
+        return `${minutes}m`;
     }
+
+    const hours = minutes / 60;
 
     return `${hours.toFixed(hours >= 10 ? 0 : 1)}h`;
 };
 
 const formatDate = (value: string | null) => {
-    if (!value) return 'Never played';
+    if (!value) return 'Never';
 
     const date = new Date(value);
 
@@ -41,17 +47,23 @@ const formatDate = (value: string | null) => {
     }).format(date);
 };
 
-const formatBitrate = (value: number) => {
-    if (!value) return '—';
+const isLossless = (music: Music) => {
+    const codec = music.codec.toLowerCase();
 
-    return `${Math.round(value / 1000)} kbps`;
+    return codec.includes('flac') || codec.includes('alac') || codec.includes('wav');
 };
 
-const getListenedRatio = (music: Music) => {
-    if (!music.duration || !music.totalPlayedMs) return 0;
+const isDormant = (music: Music) => {
+    if (!music.lastPlayedAt) return true;
 
-    return Math.min(music.totalPlayedMs / (music.duration * 1000), 1);
+    const lastPlayedAt = new Date(music.lastPlayedAt).getTime();
+
+    if (Number.isNaN(lastPlayedAt)) return true;
+
+    return Date.now() - lastPlayedAt > DORMANT_DAYS * 24 * 60 * 60 * 1000;
 };
+
+const takeIds = (musics: Music[], limit = 80) => musics.slice(0, limit).map(music => music.id);
 
 const DashboardStat = ({
     label,
@@ -84,13 +96,46 @@ const DashboardStat = ({
     </Surface>
 );
 
+const ActionCard = ({
+    title,
+    description,
+    count,
+    icon,
+    disabled,
+    onClick
+}: {
+    title: string;
+    description: string;
+    count: string;
+    icon: React.ReactNode;
+    disabled?: boolean;
+    onClick: () => void;
+}) => (
+    <button
+        type="button"
+        disabled={disabled}
+        className="flex min-h-28 w-full min-w-0 flex-col justify-between gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] p-3.5 text-left text-[var(--b-color-text)] transition-[background-color,border-color,opacity] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)] disabled:cursor-not-allowed disabled:opacity-40"
+        onClick={onClick}>
+        <span className="flex items-start justify-between gap-3">
+            <span className="flex min-w-0 flex-col gap-1">
+                <span className="truncate text-sm font-semibold">{title}</span>
+                <span className="line-clamp-2 text-xs leading-[1.45] text-[var(--b-color-text-tertiary)]">{description}</span>
+            </span>
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--b-color-surface-subtle)] text-[var(--b-color-point)] [&_svg]:h-4 [&_svg]:w-4">
+                {icon}
+            </span>
+        </span>
+        <span className="text-xs font-medium text-[var(--b-color-text-muted)]">{count}</span>
+    </button>
+);
+
 const RankedTrack = ({ music, index, maxPlayCount }: { music: Music; index: number; maxPlayCount: number }) => {
     const width = maxPlayCount > 0 ? Math.max((music.playCount / maxPlayCount) * 100, 8) : 0;
 
     return (
         <Link
             to="/player"
-            className="group grid min-h-15 min-w-0 grid-cols-[1.5rem_3rem_minmax(0,1fr)] items-center gap-3 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] p-2.5 text-[var(--b-color-text)] no-underline transition-[background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]">
+            className="grid min-h-15 min-w-0 grid-cols-[1.5rem_3rem_minmax(0,1fr)] items-center gap-3 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] p-2.5 text-[var(--b-color-text)] no-underline transition-[background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]">
             <span className="text-center text-xs font-medium text-[var(--b-color-text-muted)]">{index + 1}</span>
             <Image
                 className="h-12 w-12 shrink-0 overflow-hidden rounded-[var(--b-radius-md)] object-cover"
@@ -126,6 +171,8 @@ const RecentTrack = ({ music }: { music: Music }) => (
 );
 
 export default function Dashboard() {
+    const resetQueue = useResetQueue();
+
     const [{ loaded, musics }] = useStore(musicStore);
     const [{ albums }] = useStore(albumStore);
     const [{ artists }] = useStore(artistStore);
@@ -135,26 +182,47 @@ export default function Dashboard() {
     const availableMusics = musics.filter(music => !music.isHated);
     const likedMusics = availableMusics.filter(music => music.isLiked);
     const playedMusics = availableMusics.filter(music => music.playCount > 0);
+    const unplayedMusics = availableMusics.filter(music => music.playCount === 0);
+    const losslessMusics = availableMusics.filter(isLossless);
+    const dormantFavorites = likedMusics.filter(isDormant);
     const recentMusics = [...playedMusics]
         .sort((a, b) => new Date(b.lastPlayedAt ?? 0).getTime() - new Date(a.lastPlayedAt ?? 0).getTime())
         .slice(0, RECENT_LIMIT);
     const topMusics = [...playedMusics]
         .sort((a, b) => b.playCount - a.playCount)
         .slice(0, TOP_LIMIT);
-    const topArtists = [...artists]
-        .sort((a, b) => b.musicCount - a.musicCount)
+    const topArtistsByPlays = [...availableMusics]
+        .reduce<Array<{ id: string; name: string; playCount: number; musicCount: number }>>((items, music) => {
+            const current = items.find(item => item.id === music.artist.id);
+
+            if (current) {
+                current.playCount += music.playCount;
+                current.musicCount += 1;
+                return items;
+            }
+
+            return [...items, {
+                id: music.artist.id,
+                name: music.artist.name,
+                playCount: music.playCount,
+                musicCount: 1
+            }];
+        }, [])
+        .sort((a, b) => b.playCount - a.playCount)
         .slice(0, TOP_LIMIT);
 
     const totalPlayCount = availableMusics.reduce((sum, music) => sum + music.playCount, 0);
     const totalPlayedMs = availableMusics.reduce((sum, music) => sum + music.totalPlayedMs, 0);
-    const averageBitrate = availableMusics.length
-        ? availableMusics.reduce((sum, music) => sum + (music.bitrate || 0), 0) / availableMusics.length
-        : 0;
-    const listenedRatio = availableMusics.length
-        ? playedMusics.reduce((sum, music) => sum + getListenedRatio(music), 0) / availableMusics.length
-        : 0;
+    const playedCoverage = availableMusics.length ? playedMusics.length / availableMusics.length : 0;
+    const losslessRatio = availableMusics.length ? losslessMusics.length / availableMusics.length : 0;
     const maxPlayCount = Math.max(...topMusics.map(music => music.playCount), 0);
-    const maxArtistMusicCount = Math.max(...topArtists.map(artist => artist.musicCount), 0);
+    const maxArtistPlayCount = Math.max(...topArtistsByPlays.map(artist => artist.playCount), 0);
+    const topArtist = topArtistsByPlays[0] ?? null;
+    const topArtistMusics = topArtist
+        ? availableMusics
+            .filter(music => music.artist.id === topArtist.id)
+            .sort((a, b) => b.playCount - a.playCount)
+        : [];
 
     return (
         <div className="mx-auto flex w-[min(100%,72rem)] flex-col gap-[clamp(1rem,2.4vw,1.5rem)] p-[clamp(1rem,3vw,2rem)] pb-[calc(clamp(1.5rem,4vw,3rem)+env(safe-area-inset-bottom))] text-[var(--b-color-text)] max-sm:p-[var(--b-spacing-md)] max-sm:pb-[calc(var(--b-spacing-xl)+env(safe-area-inset-bottom))]">
@@ -166,12 +234,12 @@ export default function Dashboard() {
                             Dashboard
                         </Text>
                         <Text as="h1" size="2xl" weight="bold" className="max-w-[34rem] leading-[1.08] tracking-[-0.04em]">
-                            Library signal, playback pulse, and collection health.
+                            What to play next, and what your library is hiding.
                         </Text>
                     </div>
                     <div className="flex flex-wrap gap-2">
                         <span className="rounded-full border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] px-3 py-2 text-xs font-medium text-[var(--b-color-text-secondary)]">
-                            {loaded ? 'Library loaded' : 'Loading library'}
+                            {loaded ? `${formatNumber(albums.length)} albums · ${formatNumber(artists.length)} artists · ${formatNumber(playlists.length)} playlists` : 'Loading library'}
                         </span>
                         <span className="rounded-full border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] px-3 py-2 text-xs font-medium text-[var(--b-color-text-secondary)]">
                             {isPlaying ? 'Playing now' : `${formatNumber(queueLength)} queued`}
@@ -181,17 +249,59 @@ export default function Dashboard() {
             </Surface>
 
             <div className="grid grid-cols-4 gap-3 max-[980px]:grid-cols-2 max-sm:grid-cols-1">
-                <DashboardStat label="Songs" value={formatNumber(availableMusics.length)} meta={`${formatNumber(likedMusics.length)} liked`} icon={<Icon.Music />} />
-                <DashboardStat label="Plays" value={formatNumber(totalPlayCount)} meta={`${formatHours(totalPlayedMs)} listened`} icon={<Icon.Play />} />
-                <DashboardStat label="Collection" value={formatNumber(albums.length)} meta={`${formatNumber(artists.length)} artists · ${formatNumber(playlists.length)} playlists`} icon={<Icon.Disc />} />
-                <DashboardStat label="Average quality" value={formatBitrate(averageBitrate)} meta={`${Math.round(listenedRatio * 100)}% listened coverage`} icon={<Icon.Settings />} />
+                <DashboardStat label="Unplayed" value={formatNumber(unplayedMusics.length)} meta={`${formatPercent(playedCoverage)} of library has been heard`} icon={<Icon.Search />} />
+                <DashboardStat label="Favorites to revisit" value={formatNumber(dormantFavorites.length)} meta={`Liked but quiet for ${DORMANT_DAYS}+ days`} icon={<Icon.Heart />} />
+                <DashboardStat label="Listening time" value={formatHours(totalPlayedMs)} meta={`${formatNumber(totalPlayCount)} completed play signals`} icon={<Icon.Play />} />
+                <DashboardStat label="Lossless" value={formatPercent(losslessRatio)} meta={`${formatNumber(losslessMusics.length)} of ${formatNumber(availableMusics.length)} tracks`} icon={<Icon.Activity />} />
             </div>
+
+            <Surface as="section" className="flex flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
+                <div>
+                    <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Next actions</Text>
+                    <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Turn the dashboard into a queue</h2>
+                </div>
+
+                <div className="grid grid-cols-4 gap-2.5 max-[980px]:grid-cols-2 max-sm:grid-cols-1">
+                    <ActionCard
+                        title="Play unheard tracks"
+                        description="Surface the songs that are still invisible in your library."
+                        count={`${formatNumber(unplayedMusics.length)} tracks`}
+                        icon={<Icon.Search />}
+                        disabled={unplayedMusics.length === 0}
+                        onClick={() => void resetQueue(takeIds(unplayedMusics))}
+                    />
+                    <ActionCard
+                        title="Revisit favorites"
+                        description="Bring back liked songs that have been out of rotation."
+                        count={`${formatNumber(dormantFavorites.length)} tracks`}
+                        icon={<Icon.Heart />}
+                        disabled={dormantFavorites.length === 0}
+                        onClick={() => void resetQueue(takeIds(dormantFavorites))}
+                    />
+                    <ActionCard
+                        title="Follow your top artist"
+                        description={topArtist ? `Continue where ${topArtist.name} is strongest.` : 'Top artists appear after playback.'}
+                        count={topArtist ? `${formatNumber(topArtistMusics.length)} tracks` : 'No signal yet'}
+                        icon={<Icon.User />}
+                        disabled={topArtistMusics.length === 0}
+                        onClick={() => void resetQueue(takeIds(topArtistMusics))}
+                    />
+                    <ActionCard
+                        title="Play liked tracks"
+                        description="A safe starting point when you just want the room moving."
+                        count={`${formatNumber(likedMusics.length)} tracks`}
+                        icon={<Icon.Play />}
+                        disabled={likedMusics.length === 0}
+                        onClick={() => void resetQueue(takeIds(likedMusics))}
+                    />
+                </div>
+            </Surface>
 
             <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)] gap-[clamp(1rem,2.4vw,1.5rem)] max-[980px]:grid-cols-1">
                 <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
                     <div className="flex items-start justify-between gap-4">
                         <div>
-                            <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Signal</Text>
+                            <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Pattern</Text>
                             <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Most played tracks</h2>
                         </div>
                         <Link to="/library" className="rounded-full border border-[var(--b-color-border-subtle)] bg-transparent px-2.5 py-1.5 text-sm font-medium text-[var(--b-color-text-tertiary)] no-underline transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]">Open</Link>
@@ -230,19 +340,19 @@ export default function Dashboard() {
 
             <Surface as="section" className="flex flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
                 <div>
-                    <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Library shape</Text>
-                    <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Artist weight</h2>
+                    <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Listening bias</Text>
+                    <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Artists you actually play</h2>
                 </div>
 
                 <div className="grid grid-cols-5 gap-2.5 max-[980px]:grid-cols-2 max-sm:grid-cols-1">
-                    {topArtists.map((artist) => {
-                        const width = maxArtistMusicCount > 0 ? Math.max((artist.musicCount / maxArtistMusicCount) * 100, 8) : 0;
+                    {topArtistsByPlays.map((artist) => {
+                        const width = maxArtistPlayCount > 0 ? Math.max((artist.playCount / maxArtistPlayCount) * 100, 8) : 0;
 
                         return (
                             <Link key={artist.id} to={`/artist/${artist.id}`} className="flex min-h-28 min-w-0 flex-col justify-between gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] p-3.5 text-[var(--b-color-text)] no-underline transition-[background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)]">
                                 <span className="flex min-w-0 flex-col gap-1">
                                     <span className="truncate text-sm font-medium">{artist.name}</span>
-                                    <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">{formatNumber(artist.musicCount)} songs · {formatNumber(artist.albumCount)} albums</span>
+                                    <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">{formatNumber(artist.playCount)} plays · {formatNumber(artist.musicCount)} songs</span>
                                 </span>
                                 <span className="h-1.5 overflow-hidden rounded-full bg-[var(--b-color-border-subtle)]" aria-hidden="true">
                                     <span className="block h-full rounded-[inherit] bg-[var(--b-color-point)]" style={{ width: `${width}%` }} />
@@ -251,6 +361,12 @@ export default function Dashboard() {
                         );
                     })}
                 </div>
+
+                {topArtistsByPlays.length === 0 && (
+                    <div className="flex min-h-32 items-center rounded-[var(--b-radius-lg)] bg-[var(--b-color-surface-item)] p-4">
+                        <Text as="p" variant="secondary" size="sm">Artist bias becomes useful once playback data starts building up.</Text>
+                    </div>
+                )}
             </Surface>
         </div>
     );
