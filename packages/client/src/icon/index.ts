@@ -1,5 +1,6 @@
 export {
     ArrowLeftRight as RightLeft,
+    Activity,
     ArrowUpDown as Sort,
     Check,
     CheckCheck as DoubleCheck,

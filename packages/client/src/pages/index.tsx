@@ -1,5 +1,6 @@
 export { default as AlbumList } from './AlbumList';
 export { default as AlbumDetail } from './AlbumDetail';
+export { default as Dashboard } from './Dashboard';
 export { default as ArtistList } from './ArtistList';
 export { default as ArtistDetail } from './ArtistDetail';
 export { default as Equalizer } from './Equalizer';
