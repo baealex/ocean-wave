@@ -1,6 +1,7 @@
 import type { ComponentType, SVGProps } from 'react';
 
 import {
+    Activity,
     Disc,
     Gear,
     Heart,
@@ -30,6 +31,12 @@ export const appShell = {
                 label: 'Now',
                 path: '/',
                 icon: Play
+            },
+            {
+                id: 'dashboard',
+                label: 'Dashboard',
+                path: '/dashboard',
+                icon: Activity
             },
             {
                 id: 'library',

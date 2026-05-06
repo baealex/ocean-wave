@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import {
     AlbumList,
     AlbumDetail,
+    Dashboard,
     ArtistList,
     ArtistDetail,
     Equalizer,
@@ -31,6 +32,10 @@ const router = createBrowserRouter([
                         className: 'flex flex-col gap-[clamp(1rem,2.4vw,1.5rem)]'
                     }
                 }
+            },
+            {
+                path: '/dashboard',
+                element: <Dashboard />
             },
             {
                 path: '/library',
