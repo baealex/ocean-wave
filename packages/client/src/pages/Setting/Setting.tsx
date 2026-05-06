@@ -52,7 +52,7 @@ export default function Setting() {
 
             <div className="mt-12 flex min-h-8 items-center justify-center gap-2 pb-[max(48px,calc(48px+env(safe-area-inset-bottom)))] text-center text-xs text-[var(--b-color-text-muted)]">
                 <img
-                    src="/ocean-wave.svg"
+                    src="/brand-logo.svg"
                     alt=""
                     aria-hidden="true"
                     className="h-[1.125rem] w-[1.125rem] rounded-md opacity-70"

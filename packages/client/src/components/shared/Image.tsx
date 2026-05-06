@@ -15,7 +15,7 @@ interface ImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
 
 export default function Image({
     src,
-    loading = 'lazy',
+    loading = 'eager',
     icon,
     className,
     style,
@@ -26,26 +26,25 @@ export default function Image({
     void icon;
 
     const [failed, setFailed] = useState(false);
-    const [loaded, setLoaded] = useState(false);
+    const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
 
     useEffect(() => {
         setFailed(false);
-        setLoaded(false);
     }, [src]);
 
     const effectiveSrc = !src || failed ? DEFAULT_ALBUM_ART : src;
+    const loaded = loadedSrc === effectiveSrc;
 
     const handleError: ReactEventHandler<HTMLImageElement> = (event) => {
         onError?.(event);
 
         if (effectiveSrc !== DEFAULT_ALBUM_ART) {
-            setLoaded(false);
             setFailed(true);
         }
     };
 
     const handleLoad: ReactEventHandler<HTMLImageElement> = (event) => {
-        setLoaded(true);
+        setLoadedSrc(effectiveSrc);
         onLoad?.(event);
     };
 

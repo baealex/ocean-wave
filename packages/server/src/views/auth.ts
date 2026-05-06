@@ -261,7 +261,7 @@ const renderLoginPage = (input: {
     <main class="shell">
         <div class="brand">
             <span class="mark" aria-hidden="true">
-                <img src="/ocean-wave.svg" alt="" />
+                <img src="/brand-logo.svg" alt="" />
             </span>
             <span class="brand-copy">
                 <span class="brand-kicker">Private listening room</span>
