@@ -48,6 +48,9 @@
         "overrides": {
             "tar": "^7.5.11",
             "@hono/node-server": "^1.19.13"
+        },
+        "patchedDependencies": {
+            "react-native-track-player@4.1.2": "patches/react-native-track-player@4.1.2.patch"
         }
     }
 }

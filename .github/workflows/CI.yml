@@ -16,6 +16,7 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
+      - 'patches/**'
       - 'scripts/**'
       - 'docs/process/**'
       - 'tests/branding/**'
@@ -35,6 +36,7 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
+      - 'patches/**'
       - 'scripts/**'
       - 'docs/process/**'
       - 'tests/branding/**'
@@ -90,3 +92,45 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+  android-mobile:
+    name: android mobile assemble
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.25.0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Assemble Android debug APK
+        working-directory: packages/mobile/android
+        run: ./gradlew :app:assembleDebug --no-daemon
+

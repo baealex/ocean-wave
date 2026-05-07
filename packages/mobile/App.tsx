@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -17,8 +16,6 @@ import TrackPlayer, { State, usePlaybackState } from 'react-native-track-player'
 import { fetchMobileLibrary, normalizeServerUrl, OceanWaveMusic } from './src/api/oceanWaveClient';
 import { brand } from './src/config/brand';
 import { playLibraryFrom, prepareTrackPlayer } from './src/player/trackPlayer';
-
-const SERVER_URL_KEY = 'ocean-wave:server-url';
 
 function formatDuration(duration?: number | null) {
   if (!duration) return '--:--';
@@ -43,9 +40,6 @@ function App() {
   const normalizedServerUrl = useMemo(() => normalizeServerUrl(serverUrl), [serverUrl]);
 
   useEffect(() => {
-    AsyncStorage.getItem(SERVER_URL_KEY).then(value => {
-      if (value) setServerUrl(value);
-    });
     prepareTrackPlayer().catch(error => setMessage(error instanceof Error ? error.message : String(error)));
   }, []);
 
@@ -57,7 +51,6 @@ function App() {
 
     setIsLoading(true);
     try {
-      await AsyncStorage.setItem(SERVER_URL_KEY, normalizedServerUrl);
       const nextLibrary = await fetchMobileLibrary(normalizedServerUrl);
       setLibrary(nextLibrary);
       setMessage(`${nextLibrary.length.toLocaleString()}곡을 불러왔어요.`);
