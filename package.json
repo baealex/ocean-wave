@@ -15,14 +15,16 @@
         "test:client": "pnpm --filter ocean-wave-client test",
         "test:ci": "pnpm test:metadata && pnpm test:server && pnpm test:client",
         "lint": "biome lint .",
-        "type-check": "pnpm --filter ocean-wave-server type-check && pnpm --filter ocean-wave-client type-check",
+        "type-check": "pnpm --filter ocean-wave-server type-check && pnpm --filter ocean-wave-client type-check && pnpm --filter ocean-wave-mobile type-check",
         "build:server": "pnpm --filter ocean-wave-server build",
         "build:client": "pnpm --filter ocean-wave-client build",
         "build": "pnpm build:server && pnpm build:client",
         "check": "pnpm lint && pnpm type-check && pnpm build",
         "start:server": "pnpm --filter ocean-wave-server start",
         "start": "pnpm build:client && pnpm start:server",
-        "prepare": "node scripts/setup/install-lefthook.mjs"
+        "prepare": "node scripts/setup/install-lefthook.mjs",
+        "dev:mobile": "pnpm --filter ocean-wave-mobile start",
+        "android:mobile": "pnpm --filter ocean-wave-mobile android"
     },
     "devDependencies": {
         "@biomejs/biome": "^2.4.13",
