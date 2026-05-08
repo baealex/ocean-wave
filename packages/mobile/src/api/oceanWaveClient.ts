@@ -10,6 +10,8 @@ export type OceanWaveMusic = {
   id: number;
   name: string;
   duration?: number | null;
+  isLiked?: boolean;
+  createdAt?: string | null;
   artist?: { id: number; name: string } | null;
   album?: { id: number; name: string; cover?: string | null } | null;
 };
@@ -25,6 +27,8 @@ const libraryQuery = `
       id
       name
       duration
+      isLiked
+      createdAt
       artist { id name }
       album { id name cover }
     }
