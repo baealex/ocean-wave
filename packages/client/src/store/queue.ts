@@ -5,8 +5,7 @@ import { musicStore } from './music';
 import {
     type AudioChannel,
     type AudioChannelEventHandler,
-    WebAudioChannel,
-    AppAudioChannel
+    WebAudioChannel
 } from '~/modules/audio-channel';
 import { getNextSelectedIndexAfterRemovingCurrent } from '~/modules/queue-selection';
 import {
@@ -164,9 +163,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
             }
         };
 
-        this.audioChannel = window.AppChannel
-            ? new AppAudioChannel(audioChannelEventHandler)
-            : new WebAudioChannel(audioChannelEventHandler);
+        this.audioChannel = new WebAudioChannel(audioChannelEventHandler);
 
         const key = musicStore.subscribe(async ({ loaded }) => {
             if (loaded) {
