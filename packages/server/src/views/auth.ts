@@ -352,6 +352,28 @@ export const createLogoutPageHandler = (authConfig: AuthConfig): Controller => {
     };
 };
 
+
+export const createApiLoginHandler = (authConfig: AuthConfig): Controller => {
+    return async (req, res) => {
+        if (authConfig.mode !== 'password') {
+            res.status(200).json(buildAuthSessionResponse(authConfig, false)).end();
+            return;
+        }
+
+        const password = typeof req.body?.password === 'string'
+            ? req.body.password
+            : '';
+
+        if (!password || !compareSharedSecret(authConfig.password, password)) {
+            res.status(401).json(INVALID_PASSWORD_RESPONSE).end();
+            return;
+        }
+
+        setAuthenticatedSession(authConfig, res);
+        res.status(200).json(buildAuthSessionResponse(authConfig, true)).end();
+    };
+};
+
 export const createApiLogoutHandler = (authConfig: AuthConfig): Controller => {
     return async (_req, res) => {
         clearAuthenticatedSession(authConfig, res);

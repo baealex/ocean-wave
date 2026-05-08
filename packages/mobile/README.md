@@ -83,6 +83,16 @@ Find the macOS Wi-Fi IP with:
 ipconfig getifaddr en0
 ```
 
+## Auth flow
+
+The companion app uses the server JSON auth routes:
+
+- `GET /api/auth/session` checks whether the server is open or password-protected.
+- `POST /api/auth/login` accepts `{ "password": "..." }` and returns the session state.
+- `POST /api/auth/logout` clears the server session cookie.
+
+For the current MVP, the Android app keeps the captured `ocean-wave.sid` cookie in memory and sends it through explicit `Cookie` headers for GraphQL and audio stream requests. Mobile `fetch` calls use `credentials: omit` so the native cookie jar does not become a second, implicit session store. Durable secure storage is intentionally left for the next auth-hardening pass.
+
 ## CI debug APK artifact
 
 Pull requests that touch mobile or workflow paths run the `android mobile assemble`
