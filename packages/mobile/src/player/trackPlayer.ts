@@ -42,7 +42,7 @@ export async function prepareTrackPlayer() {
   isPrepared = true;
 }
 
-export function toTrack(serverUrl: string, music: OceanWaveMusic): Track {
+export function toTrack(serverUrl: string, music: OceanWaveMusic, sessionCookie?: string | null): Track {
   return {
     id: String(music.id),
     url: audioStreamUrl(serverUrl, music.id),
@@ -51,13 +51,19 @@ export function toTrack(serverUrl: string, music: OceanWaveMusic): Track {
     album: music.album?.name ?? undefined,
     duration: music.duration ?? undefined,
     artwork: albumArtUrl(serverUrl, music.album?.cover),
+    headers: sessionCookie ? { Cookie: sessionCookie } : undefined,
   };
 }
 
-export async function playLibraryFrom(serverUrl: string, musics: OceanWaveMusic[], index = 0) {
+export async function playLibraryFrom(
+  serverUrl: string,
+  musics: OceanWaveMusic[],
+  index = 0,
+  sessionCookie?: string | null,
+) {
   await prepareTrackPlayer();
   await TrackPlayer.reset();
-  await TrackPlayer.add(musics.map(music => toTrack(serverUrl, music)));
+  await TrackPlayer.add(musics.map(music => toTrack(serverUrl, music, sessionCookie)));
   await TrackPlayer.skip(index);
   await TrackPlayer.play();
 }

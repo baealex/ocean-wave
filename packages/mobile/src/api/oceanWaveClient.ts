@@ -1,3 +1,11 @@
+export type OceanWaveAuthMode = 'open' | 'password';
+
+export type OceanWaveAuthSession = {
+  mode: OceanWaveAuthMode;
+  authRequired: boolean;
+  authenticated: boolean;
+};
+
 export type OceanWaveMusic = {
   id: number;
   name: string;
@@ -30,6 +38,21 @@ export function normalizeServerUrl(input: string) {
   return `http://${trimmed}`;
 }
 
+const withCookie = (cookie?: string | null): Record<string, string> => {
+  return cookie ? { Cookie: cookie } : {};
+};
+
+export function extractSessionCookie(response: Response) {
+  const rawCookie = response.headers.get('set-cookie');
+  if (!rawCookie) return null;
+
+  return rawCookie
+    .split(',')
+    .map(value => value.trim())
+    .find(value => value.startsWith('ocean-wave.sid='))
+    ?.split(';')[0] ?? null;
+}
+
 export function audioStreamUrl(serverUrl: string, musicId: number) {
   return `${normalizeServerUrl(serverUrl)}/api/audio/${musicId}?notranscode=true`;
 }
@@ -40,11 +63,74 @@ export function albumArtUrl(serverUrl: string, cover?: string | null) {
   return `${normalizeServerUrl(serverUrl)}${cover.startsWith('/') ? '' : '/'}${cover}`;
 }
 
-export async function fetchMobileLibrary(serverUrl: string) {
+export async function fetchAuthSession(serverUrl: string, sessionCookie?: string | null) {
+  const endpoint = `${normalizeServerUrl(serverUrl)}/api/auth/session`;
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    credentials: 'omit',
+    headers: withCookie(sessionCookie),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Session request failed (${response.status})`);
+  }
+
+  return (await response.json()) as OceanWaveAuthSession;
+}
+
+export async function loginWithPassword(serverUrl: string, password: string) {
+  const endpoint = `${normalizeServerUrl(serverUrl)}/api/auth/login`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'omit',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+
+  const sessionCookie = extractSessionCookie(response);
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message = typeof payload?.message === 'string'
+      ? payload.message
+      : `Login request failed (${response.status})`;
+    throw new Error(message);
+  }
+
+  return {
+    session: payload as OceanWaveAuthSession,
+    sessionCookie,
+  };
+}
+
+export async function logoutSession(serverUrl: string, sessionCookie?: string | null) {
+  const endpoint = `${normalizeServerUrl(serverUrl)}/api/auth/logout`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'omit',
+    headers: {
+      'Content-Type': 'application/json',
+      ...withCookie(sessionCookie),
+    },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Logout request failed (${response.status})`);
+  }
+
+  return (await response.json()) as OceanWaveAuthSession;
+}
+
+export async function fetchMobileLibrary(serverUrl: string, sessionCookie?: string | null) {
   const endpoint = `${normalizeServerUrl(serverUrl)}/graphql`;
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    credentials: 'omit',
+    headers: {
+      'Content-Type': 'application/json',
+      ...withCookie(sessionCookie),
+    },
     body: JSON.stringify({ query: libraryQuery }),
   });
 

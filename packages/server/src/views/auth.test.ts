@@ -49,11 +49,16 @@ describe('auth http flow', () => {
         expect(logout.status).toBe(303);
         expect(logout.headers.location).toBe('/');
 
-        const legacyApiLogin = await request(app)
+        const apiLogin = await request(app)
             .post('/api/auth/login')
             .send({ password: 'secret' });
 
-        expect(legacyApiLogin.status).toBe(404);
+        expect(apiLogin.status).toBe(200);
+        expect(apiLogin.body).toEqual({
+            mode: 'open',
+            authRequired: false,
+            authenticated: false
+        });
     });
 
     it('serves a server-owned login page and gates protected html routes in password mode', async () => {
@@ -126,15 +131,38 @@ describe('auth http flow', () => {
         expect(postLogoutHome.body.code).toBe('UNAUTHORIZED');
     });
 
-    it('keeps session and logout api routes while removing the legacy login alias', async () => {
+    it('supports json login for mobile clients and keeps logout api routes', async () => {
         const app = createApp(passwordAuthConfig);
         const agent = request.agent(app);
 
-        const legacyApiLogin = await agent
+        const wrongApiLogin = await agent
+            .post('/api/auth/login')
+            .send({ password: 'wrong' });
+
+        expect(wrongApiLogin.status).toBe(401);
+        expect(wrongApiLogin.body).toEqual({
+            code: 'UNAUTHORIZED',
+            message: 'Invalid password'
+        });
+
+        const apiLogin = await agent
             .post('/api/auth/login')
             .send({ password: 'secret' });
 
-        expect(legacyApiLogin.status).toBe(404);
+        expect(apiLogin.status).toBe(200);
+        expect(apiLogin.body).toEqual({
+            mode: 'password',
+            authRequired: true,
+            authenticated: true
+        });
+        expect(apiLogin.headers['set-cookie']?.[0]).toContain(AUTH_SESSION_COOKIE_NAME);
+
+        const authenticatedGraphql = await agent
+            .post('/graphql')
+            .send({ query: 'query { __typename }' });
+
+        expect(authenticatedGraphql.status).toBe(200);
+        expect(authenticatedGraphql.body.data.__typename).toBe('Query');
 
         const login = await agent
             .post('/login')
