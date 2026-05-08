@@ -33,6 +33,7 @@ import { brand } from './src/config/brand';
 import { playLibraryFrom, prepareTrackPlayer } from './src/player/trackPlayer';
 
 const SEEK_STEP_SECONDS = 15;
+type BrowseFilter = 'all' | 'favorites' | 'recent';
 
 function formatDuration(duration?: number | null) {
   if (!duration) return '--:--';
@@ -59,6 +60,8 @@ function App() {
   const canControlPlayback = Boolean(activeTrack);
   const [serverUrl, setServerUrl] = useState('');
   const [password, setPassword] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [browseFilter, setBrowseFilter] = useState<BrowseFilter>('all');
   const [sessionCookie, setSessionCookie] = useState<string | null>(null);
   const [authSession, setAuthSession] = useState<OceanWaveAuthSession | null>(null);
   const [library, setLibrary] = useState<OceanWaveMusic[]>([]);
@@ -69,7 +72,21 @@ function App() {
   const previousServerUrlRef = useRef<string | null>(null);
   const isAuthenticated = authSession ? !authSession.authRequired || authSession.authenticated : false;
   const activeTrackId = activeTrack?.id ? String(activeTrack.id) : undefined;
-  const queueLabel = library.length ? `${library.length.toLocaleString()} tracks loaded` : 'Build a queue from this server';
+  const visibleLibrary = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const filteredByMode = browseFilter === 'favorites'
+      ? library.filter(item => item.isLiked)
+      : browseFilter === 'recent'
+        ? [...library].sort((first, second) => Number(new Date(second.createdAt ?? 0)) - Number(new Date(first.createdAt ?? 0))).slice(0, 50)
+        : library;
+
+    if (!normalizedQuery) return filteredByMode;
+
+    return filteredByMode.filter(item => [item.name, item.artist?.name, item.album?.name]
+      .filter(Boolean)
+      .some(value => value?.toLowerCase().includes(normalizedQuery)));
+  }, [browseFilter, library, searchQuery]);
+  const queueLabel = library.length ? `${visibleLibrary.length.toLocaleString()} of ${library.length.toLocaleString()} tracks` : 'Build a queue from this server';
   const progressDuration = progress.duration || activeTrack?.duration || 0;
   const progressRatio = progressDuration > 0 ? Math.min(progress.position / progressDuration, 1) : 0;
 
@@ -83,6 +100,8 @@ function App() {
     setAuthSession(null);
     setSessionCookie(null);
     setLibrary([]);
+    setSearchQuery('');
+    setBrowseFilter('all');
     TrackPlayer.reset().catch(error => setMessage(error instanceof Error ? error.message : String(error)));
   }, [normalizedServerUrl]);
 
@@ -148,6 +167,8 @@ function App() {
       setAuthSession(nextSession);
       setSessionCookie(null);
       setLibrary([]);
+      setSearchQuery('');
+      setBrowseFilter('all');
       await TrackPlayer.reset();
       setMessage('로그아웃 완료. 모바일 세션을 비웠어요.');
     } catch (error) {
@@ -188,14 +209,14 @@ function App() {
 
   const playTrack = useCallback(
     async (index: number) => {
-      if (!library.length) return;
+      if (!visibleLibrary.length) return;
       try {
-        await playLibraryFrom(normalizedServerUrl, library, index, sessionCookie);
+        await playLibraryFrom(normalizedServerUrl, visibleLibrary, index, sessionCookie);
       } catch (error) {
         setMessage(error instanceof Error ? error.message : String(error));
       }
     },
-    [library, normalizedServerUrl, sessionCookie],
+    [normalizedServerUrl, sessionCookie, visibleLibrary],
   );
 
   const togglePlayback = useCallback(async () => {
@@ -347,8 +368,29 @@ function App() {
           <Text style={styles.queueMeta}>{queueLabel}</Text>
         </View>
 
+        <View style={styles.browsePanel}>
+          <TextInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={setSearchQuery}
+            placeholder="Search queue candidates"
+            placeholderTextColor="#71717a"
+            style={styles.searchInput}
+            value={searchQuery}
+          />
+          <View style={styles.filterRow}>
+            {(['all', 'favorites', 'recent'] as BrowseFilter[]).map(filter => (
+              <Pressable key={filter} onPress={() => setBrowseFilter(filter)} style={[styles.filterChip, browseFilter === filter && styles.filterChipActive]}>
+                <Text style={[styles.filterText, browseFilter === filter && styles.filterTextActive]}>
+                  {filter === 'all' ? 'All' : filter === 'favorites' ? 'Favorites' : 'Recent'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
         <FlatList
-          data={library}
+          data={visibleLibrary}
           keyExtractor={item => String(item.id)}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={<Text style={styles.empty}>웹 서버를 확인한 뒤 큐를 만들어 주세요.</Text>}
@@ -414,6 +456,13 @@ const styles = StyleSheet.create({
   queueHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
   queueTitle: { color: brand.text, fontSize: 18, fontWeight: '800' },
   queueMeta: { flex: 1, textAlign: 'right', color: brand.muted, fontSize: 12 },
+  browsePanel: { gap: 10 },
+  searchInput: { minHeight: 42, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#09090b', borderWidth: 1, borderColor: brand.border },
+  filterRow: { flexDirection: 'row', gap: 8 },
+  filterChip: { minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 13, backgroundColor: '#18181b' },
+  filterChipActive: { backgroundColor: brand.primary },
+  filterText: { color: brand.muted, fontSize: 12, fontWeight: '800' },
+  filterTextActive: { color: brand.background },
   listContent: { gap: 8, paddingBottom: 28 },
   empty: { paddingVertical: 28, textAlign: 'center', color: brand.muted },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: '#09090b', borderWidth: 1, borderColor: '#18181b' },

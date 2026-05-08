@@ -104,6 +104,7 @@ The mobile shell exposes the first native playback surface:
 - tappable progress bar
 - queue list with the active track highlighted
 - `Open web` entry point back to the connected server for the full Ocean Wave experience
+- lightweight queue candidate filters: search, favorites, and recently added tracks
 
 Queue playback still comes from the loaded server library in this MVP. Durable queue restore and real-device notification/lock-screen verification remain follow-up tasks.
 
