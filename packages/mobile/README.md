@@ -108,6 +108,19 @@ The mobile shell exposes the first native playback surface:
 
 Queue playback still comes from the loaded server library in this MVP. Durable queue restore and real-device notification/lock-screen verification remain follow-up tasks.
 
+## Deep links
+
+The Android app handles Ocean Wave playback links from the web app:
+
+- `oceanwave://play/music/:id?server=<encoded-server-origin>`
+- `oceanwave://play/playlist/:id?server=<encoded-server-origin>`
+
+When a link includes `server`, the app switches to that server URL, checks the session, asks for login when needed, then builds and starts the requested queue. Local ADB validation example:
+
+```bash
+adb shell am start -W -a android.intent.action.VIEW -d "oceanwave://play/playlist/7?server=http%3A%2F%2F10.0.2.2%3A3000" com.baealex.oceanwave
+```
+
 ## CI debug APK artifact
 
 Pull requests that touch mobile or workflow paths run the `android mobile assemble`

@@ -23,6 +23,7 @@ import TrackPlayer, {
 import {
   fetchAuthSession,
   fetchMobileLibrary,
+  fetchMobileMusic,
   fetchMobilePlaylist,
   fetchMobilePlaylists,
   loginWithPassword,
@@ -33,6 +34,7 @@ import {
   OceanWavePlaylist,
 } from './src/api/oceanWaveClient';
 import { brand } from './src/config/brand';
+import { parseOceanWaveDeepLink, type OceanWaveDeepLinkRequest } from './src/deeplink/oceanWaveDeepLink';
 import { playLibraryFrom, prepareTrackPlayer } from './src/player/trackPlayer';
 
 const SEEK_STEP_SECONDS = 15;
@@ -70,11 +72,13 @@ function App() {
   const [library, setLibrary] = useState<OceanWaveMusic[]>([]);
   const [playlists, setPlaylists] = useState<OceanWavePlaylist[]>([]);
   const [selectedPlaylistName, setSelectedPlaylistName] = useState<string | null>(null);
+  const [pendingDeepLink, setPendingDeepLink] = useState<OceanWaveDeepLinkRequest | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('서버 연결을 확인한 뒤 백그라운드 재생 테스트를 시작할 수 있어요.');
 
   const normalizedServerUrl = useMemo(() => normalizeServerUrl(serverUrl), [serverUrl]);
   const previousServerUrlRef = useRef<string | null>(null);
+  const handleDeepLinkUrlRef = useRef<(url: string | null) => void>(() => undefined);
   const isAuthenticated = authSession ? !authSession.authRequired || authSession.authenticated : false;
   const activeTrackId = activeTrack?.id ? String(activeTrack.id) : undefined;
   const visibleLibrary = useMemo(() => {
@@ -267,6 +271,101 @@ function App() {
     },
     [normalizedServerUrl, sessionCookie, visibleLibrary],
   );
+
+  const runDeepLink = useCallback(async (request: OceanWaveDeepLinkRequest) => {
+    setPendingDeepLink(null);
+    setIsLoading(true);
+
+    try {
+      if (request.target === 'music') {
+        const music = await fetchMobileMusic(normalizedServerUrl, request.id, sessionCookie);
+        if (!music) {
+          setMessage('요청한 음악을 찾을 수 없습니다.');
+          return;
+        }
+
+        setSelectedPlaylistName(null);
+        setSearchQuery('');
+        setBrowseFilter('all');
+        setLibrary([music]);
+        await playLibraryFrom(normalizedServerUrl, [music], 0, sessionCookie);
+        setMessage(`${music.name} 재생을 시작했어요.`);
+        return;
+      }
+
+      const playlist = await fetchMobilePlaylist(normalizedServerUrl, request.id, sessionCookie);
+      const nextMusics = playlist?.musics ?? [];
+      if (!playlist || nextMusics.length === 0) {
+        setMessage('요청한 플레이리스트를 찾을 수 없거나 비어 있습니다.');
+        return;
+      }
+
+      setSelectedPlaylistName(playlist.name);
+      setSearchQuery('');
+      setBrowseFilter('all');
+      setLibrary(nextMusics);
+      await playLibraryFrom(normalizedServerUrl, nextMusics, 0, sessionCookie);
+      setMessage(`${playlist.name} 플레이리스트 재생을 시작했어요.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [normalizedServerUrl, sessionCookie]);
+
+  const handleDeepLinkUrl = useCallback((url: string | null) => {
+    if (!url) return;
+
+    const request = parseOceanWaveDeepLink(url);
+    if (!request) return;
+
+    setPendingDeepLink(request);
+
+    if (request.serverUrl && request.serverUrl !== normalizedServerUrl) {
+      setAuthSession(null);
+      setSessionCookie(null);
+      setLibrary([]);
+      setPlaylists([]);
+      setSelectedPlaylistName(null);
+      setSearchQuery('');
+      setBrowseFilter('all');
+      setServerUrl(request.serverUrl);
+      setMessage('앱 재생 요청을 받았어요. 서버 연결을 확인하는 중입니다.');
+      return;
+    }
+
+    if (!normalizedServerUrl) {
+      setMessage('앱 재생 요청을 받았어요. 먼저 서버 주소를 입력해 주세요.');
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setMessage('앱 재생 요청을 받았어요. 서버 인증을 확인해 주세요.');
+    }
+  }, [isAuthenticated, normalizedServerUrl]);
+
+  useEffect(() => {
+    handleDeepLinkUrlRef.current = handleDeepLinkUrl;
+  }, [handleDeepLinkUrl]);
+
+  useEffect(() => {
+    Linking.getInitialURL()
+      .then(url => handleDeepLinkUrlRef.current(url))
+      .catch(error => setMessage(error instanceof Error ? error.message : String(error)));
+
+    const subscription = Linking.addEventListener('url', event => handleDeepLinkUrlRef.current(event.url));
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!pendingDeepLink || !normalizedServerUrl || authSession || isLoading) return;
+    checkSession().catch(error => setMessage(error instanceof Error ? error.message : String(error)));
+  }, [authSession, checkSession, isLoading, normalizedServerUrl, pendingDeepLink]);
+
+  useEffect(() => {
+    if (!pendingDeepLink || !normalizedServerUrl || !isAuthenticated || isLoading) return;
+    runDeepLink(pendingDeepLink).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
+  }, [isAuthenticated, isLoading, normalizedServerUrl, pendingDeepLink, runDeepLink]);
 
   const togglePlayback = useCallback(async () => {
     if (!canControlPlayback) return;

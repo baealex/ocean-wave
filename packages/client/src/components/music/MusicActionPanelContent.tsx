@@ -9,6 +9,7 @@ import * as Icon from '~/icon';
 import { panel } from '~/modules/panel';
 import { toast } from '~/modules/toast';
 import { makePlayTime } from '~/modules/time';
+import { openMobilePlayLink } from '~/modules/mobile-deeplink';
 import { MusicListener, PlaylistListener } from '~/socket';
 
 import { musicStore } from '~/store/music';
@@ -85,6 +86,14 @@ export default function MusicActionPanelContent({
                     icon: <Icon.Play />,
                     text: 'Add to Queue',
                     onClick: () => queueStore.add(music.id)
+                },
+                {
+                    icon: <Icon.Smartphone />,
+                    text: 'Play in Android app',
+                    onClick: () => {
+                        openMobilePlayLink('music', music.id);
+                        panel.close();
+                    }
                 },
                 {
                     icon: <Icon.List />,

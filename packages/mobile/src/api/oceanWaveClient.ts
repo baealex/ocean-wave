@@ -44,6 +44,21 @@ const libraryQuery = `
 `;
 
 
+
+const musicQuery = `
+  query MobileMusic($id: ID!) {
+    music(id: $id) {
+      id
+      name
+      duration
+      isLiked
+      createdAt
+      artist { id name }
+      album { id name cover }
+    }
+  }
+`;
+
 const playlistsQuery = `
   query MobilePlaylists {
     allPlaylist {
@@ -164,6 +179,31 @@ export async function logoutSession(serverUrl: string, sessionCookie?: string | 
   return (await response.json()) as OceanWaveAuthSession;
 }
 
+
+
+export async function fetchMobileMusic(serverUrl: string, musicId: number, sessionCookie?: string | null) {
+  const endpoint = `${normalizeServerUrl(serverUrl)}/graphql`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'omit',
+    headers: {
+      'Content-Type': 'application/json',
+      ...withCookie(sessionCookie),
+    },
+    body: JSON.stringify({ query: musicQuery, variables: { id: String(musicId) } }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Music request failed (${response.status})`);
+  }
+
+  const payload = (await response.json()) as GraphQLResponse<{ music: OceanWaveMusic | null }>;
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map(error => error.message).join('\n'));
+  }
+
+  return payload.data?.music ?? null;
+}
 
 export async function fetchMobilePlaylists(serverUrl: string, sessionCookie?: string | null) {
   const endpoint = `${normalizeServerUrl(serverUrl)}/graphql`;

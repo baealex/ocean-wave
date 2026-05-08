@@ -22,6 +22,7 @@ export {
     Repeat,
     Search,
     Settings,
+    Smartphone,
     Shuffle,
     SkipBack,
     SkipForward,
