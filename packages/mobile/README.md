@@ -108,6 +108,12 @@ The mobile shell exposes the first native playback surface:
 
 Queue playback still comes from the loaded server library in this MVP. Durable queue restore and real-device notification/lock-screen verification remain follow-up tasks.
 
+## Network resilience
+
+Mobile server requests use a 10 second timeout and retry transient network/server failures once. Login and logout are not retried to avoid duplicating session actions. User-facing errors point to the most likely setup issue: server URL, same Wi-Fi, password/session state, or audio stream failure.
+
+Album artwork falls back to the server-hosted `/default-artwork.jpg` when a track has no cover.
+
 ## Deep links
 
 The Android app handles Ocean Wave playback links from the web app:

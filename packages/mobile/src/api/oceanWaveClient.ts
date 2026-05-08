@@ -29,6 +29,61 @@ type GraphQLResponse<T> = {
   errors?: Array<{ message: string }>;
 };
 
+const NETWORK_TIMEOUT_MS = 10_000;
+const NETWORK_RETRY_DELAY_MS = 600;
+
+type FetchOptions = RequestInit & { retry?: boolean };
+
+function sleep(ms: number) {
+  return new Promise<void>(resolve => setTimeout(() => resolve(), ms));
+}
+
+function createNetworkError(error: unknown, endpoint: string) {
+  if (error instanceof Error && error.name === 'AbortError') {
+    return new Error(`서버 응답이 지연되고 있어요. 같은 Wi-Fi인지 확인해 주세요. (${endpoint})`);
+  }
+
+  return new Error(error instanceof Error
+    ? `서버에 연결할 수 없습니다. 같은 Wi-Fi 또는 서버 주소를 확인해 주세요. (${error.message})`
+    : '서버에 연결할 수 없습니다. 같은 Wi-Fi 또는 서버 주소를 확인해 주세요.');
+}
+
+async function fetchWithTimeout(endpoint: string, options: FetchOptions = {}) {
+  const { retry = true, ...fetchOptions } = options;
+  const attempts = retry ? 2 : 1;
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(endpoint, {
+        ...fetchOptions,
+        signal: controller.signal,
+      });
+
+      if (response.status >= 500 && attempt + 1 < attempts) {
+        await sleep(NETWORK_RETRY_DELAY_MS);
+        continue;
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 >= attempts) {
+        throw createNetworkError(error, endpoint);
+      }
+      await sleep(NETWORK_RETRY_DELAY_MS);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  throw createNetworkError(lastError, endpoint);
+}
+
+
 const libraryQuery = `
   query MobileLibrary {
     allMusics {
@@ -115,14 +170,14 @@ export function audioStreamUrl(serverUrl: string, musicId: number) {
 }
 
 export function albumArtUrl(serverUrl: string, cover?: string | null) {
-  if (!cover) return undefined;
+  if (!cover) return `${normalizeServerUrl(serverUrl)}/default-artwork.jpg`;
   if (/^https?:\/\//i.test(cover)) return cover;
   return `${normalizeServerUrl(serverUrl)}${cover.startsWith('/') ? '' : '/'}${cover}`;
 }
 
 export async function fetchAuthSession(serverUrl: string, sessionCookie?: string | null) {
   const endpoint = `${normalizeServerUrl(serverUrl)}/api/auth/session`;
-  const response = await fetch(endpoint, {
+  const response = await fetchWithTimeout(endpoint, {
     method: 'GET',
     credentials: 'omit',
     headers: withCookie(sessionCookie),
@@ -137,9 +192,10 @@ export async function fetchAuthSession(serverUrl: string, sessionCookie?: string
 
 export async function loginWithPassword(serverUrl: string, password: string) {
   const endpoint = `${normalizeServerUrl(serverUrl)}/api/auth/login`;
-  const response = await fetch(endpoint, {
+  const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     credentials: 'omit',
+    retry: false,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password }),
   });
@@ -162,9 +218,10 @@ export async function loginWithPassword(serverUrl: string, password: string) {
 
 export async function logoutSession(serverUrl: string, sessionCookie?: string | null) {
   const endpoint = `${normalizeServerUrl(serverUrl)}/api/auth/logout`;
-  const response = await fetch(endpoint, {
+  const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     credentials: 'omit',
+    retry: false,
     headers: {
       'Content-Type': 'application/json',
       ...withCookie(sessionCookie),
@@ -183,7 +240,7 @@ export async function logoutSession(serverUrl: string, sessionCookie?: string | 
 
 export async function fetchMobileMusic(serverUrl: string, musicId: number, sessionCookie?: string | null) {
   const endpoint = `${normalizeServerUrl(serverUrl)}/graphql`;
-  const response = await fetch(endpoint, {
+  const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     credentials: 'omit',
     headers: {
@@ -207,7 +264,7 @@ export async function fetchMobileMusic(serverUrl: string, musicId: number, sessi
 
 export async function fetchMobilePlaylists(serverUrl: string, sessionCookie?: string | null) {
   const endpoint = `${normalizeServerUrl(serverUrl)}/graphql`;
-  const response = await fetch(endpoint, {
+  const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     credentials: 'omit',
     headers: {
@@ -231,7 +288,7 @@ export async function fetchMobilePlaylists(serverUrl: string, sessionCookie?: st
 
 export async function fetchMobilePlaylist(serverUrl: string, playlistId: number, sessionCookie?: string | null) {
   const endpoint = `${normalizeServerUrl(serverUrl)}/graphql`;
-  const response = await fetch(endpoint, {
+  const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     credentials: 'omit',
     headers: {
@@ -255,7 +312,7 @@ export async function fetchMobilePlaylist(serverUrl: string, playlistId: number,
 
 export async function fetchMobileLibrary(serverUrl: string, sessionCookie?: string | null) {
   const endpoint = `${normalizeServerUrl(serverUrl)}/graphql`;
-  const response = await fetch(endpoint, {
+  const response = await fetchWithTimeout(endpoint, {
     method: 'POST',
     credentials: 'omit',
     headers: {
