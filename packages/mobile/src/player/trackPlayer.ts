@@ -9,6 +9,11 @@ import { albumArtUrl, audioStreamUrl, OceanWaveMusic } from '../api/oceanWaveCli
 
 let isPrepared = false;
 
+function fallbackText(value: string | undefined | null, fallback: string) {
+  const normalized = value?.trim();
+  return normalized || fallback;
+}
+
 export async function prepareTrackPlayer() {
   if (isPrepared) return;
 
@@ -46,9 +51,9 @@ export function toTrack(serverUrl: string, music: OceanWaveMusic, sessionCookie?
   return {
     id: String(music.id),
     url: audioStreamUrl(serverUrl, music.id),
-    title: music.name,
-    artist: music.artist?.name ?? 'Unknown Artist',
-    album: music.album?.name ?? undefined,
+    title: fallbackText(music.name, `Track ${music.id}`),
+    artist: fallbackText(music.artist?.name, 'Unknown Artist'),
+    album: fallbackText(music.album?.name, 'Unknown Album'),
     duration: music.duration ?? undefined,
     artwork: albumArtUrl(serverUrl, music.album?.cover),
     headers: sessionCookie ? { Cookie: sessionCookie } : undefined,
