@@ -14,10 +14,12 @@ import {
   View,
 } from 'react-native';
 import TrackPlayer, {
+  Event,
   State,
   useActiveTrack,
   usePlaybackState,
   useProgress,
+  useTrackPlayerEvents,
 } from 'react-native-track-player';
 
 import {
@@ -119,6 +121,10 @@ function App() {
   useEffect(() => {
     prepareTrackPlayer().catch(error => setMessage(error instanceof Error ? error.message : String(error)));
   }, []);
+
+  useTrackPlayerEvents([Event.PlaybackError], event => {
+    setMessage(`오디오 스트림을 재생할 수 없습니다. 서버 연결이나 인증 상태를 확인해 주세요. (${event.message})`);
+  });
 
   const requireServerUrl = useCallback(() => {
     if (normalizedServerUrl) return true;
