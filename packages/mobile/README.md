@@ -93,6 +93,18 @@ The companion app uses the server JSON auth routes:
 
 For the current MVP, the Android app keeps the captured `ocean-wave.sid` cookie in memory and sends it through explicit `Cookie` headers for GraphQL and audio stream requests. Mobile `fetch` calls use `credentials: omit` so the native cookie jar does not become a second, implicit session store. Durable secure storage is intentionally left for the next auth-hardening pass.
 
+## Player controls
+
+The mobile shell exposes the first native playback surface:
+
+- current track title/artist
+- play/pause, previous/next
+- ±15 second seek controls
+- tappable progress bar
+- queue list with the active track highlighted
+
+Queue playback still comes from the loaded server library in this MVP. Durable queue restore and real-device notification/lock-screen verification remain follow-up tasks.
+
 ## CI debug APK artifact
 
 Pull requests that touch mobile or workflow paths run the `android mobile assemble`

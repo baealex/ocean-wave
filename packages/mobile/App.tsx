@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  GestureResponderEvent,
   Pressable,
   SafeAreaView,
   StatusBar,
@@ -11,7 +12,12 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import TrackPlayer, { State, usePlaybackState } from 'react-native-track-player';
+import TrackPlayer, {
+  State,
+  useActiveTrack,
+  usePlaybackState,
+  useProgress,
+} from 'react-native-track-player';
 
 import {
   fetchAuthSession,
@@ -25,6 +31,8 @@ import {
 import { brand } from './src/config/brand';
 import { playLibraryFrom, prepareTrackPlayer } from './src/player/trackPlayer';
 
+const SEEK_STEP_SECONDS = 15;
+
 function formatDuration(duration?: number | null) {
   if (!duration) return '--:--';
   const minutes = Math.floor(duration / 60);
@@ -36,10 +44,18 @@ function getPlaybackStateValue(playbackState: ReturnType<typeof usePlaybackState
   return 'state' in playbackState ? playbackState.state : playbackState;
 }
 
+function isSameTrack(item: OceanWaveMusic, activeTrackId?: string) {
+  return activeTrackId === String(item.id);
+}
+
 function App() {
   const playbackState = usePlaybackState();
   const playbackValue = getPlaybackStateValue(playbackState);
+  const activeTrack = useActiveTrack();
+  const progress = useProgress(500);
+  const [progressWidth, setProgressWidth] = useState(1);
   const isPlaying = playbackValue === State.Playing;
+  const canControlPlayback = Boolean(activeTrack);
   const [serverUrl, setServerUrl] = useState('');
   const [password, setPassword] = useState('');
   const [sessionCookie, setSessionCookie] = useState<string | null>(null);
@@ -51,6 +67,10 @@ function App() {
   const normalizedServerUrl = useMemo(() => normalizeServerUrl(serverUrl), [serverUrl]);
   const previousServerUrlRef = useRef<string | null>(null);
   const isAuthenticated = authSession ? !authSession.authRequired || authSession.authenticated : false;
+  const activeTrackId = activeTrack?.id ? String(activeTrack.id) : undefined;
+  const queueLabel = library.length ? `${library.length.toLocaleString()} tracks loaded` : 'Load a library to build the queue';
+  const progressDuration = progress.duration || activeTrack?.duration || 0;
+  const progressRatio = progressDuration > 0 ? Math.min(progress.position / progressDuration, 1) : 0;
 
   useEffect(() => {
     if (previousServerUrlRef.current === null) {
@@ -168,12 +188,35 @@ function App() {
   );
 
   const togglePlayback = useCallback(async () => {
+    if (!canControlPlayback) return;
     if (isPlaying) {
       await TrackPlayer.pause();
       return;
     }
     await TrackPlayer.play();
-  }, [isPlaying]);
+  }, [canControlPlayback, isPlaying]);
+
+  const skipPrevious = useCallback(async () => {
+    if (!canControlPlayback) return;
+    await TrackPlayer.skipToPrevious().catch(() => TrackPlayer.seekTo(0));
+  }, [canControlPlayback]);
+
+  const skipNext = useCallback(async () => {
+    if (!canControlPlayback) return;
+    await TrackPlayer.skipToNext().catch(() => undefined);
+  }, [canControlPlayback]);
+
+  const seekBy = useCallback(async (seconds: number) => {
+    if (!canControlPlayback) return;
+    const nextPosition = Math.max(0, Math.min(progress.position + seconds, progressDuration || progress.position + seconds));
+    await TrackPlayer.seekTo(nextPosition);
+  }, [canControlPlayback, progress.position, progressDuration]);
+
+  const seekToTouch = useCallback(async (event: GestureResponderEvent) => {
+    if (!canControlPlayback || !progressDuration) return;
+    const ratio = Math.max(0, Math.min(event.nativeEvent.locationX / progressWidth, 1));
+    await TrackPlayer.seekTo(ratio * progressDuration);
+  }, [canControlPlayback, progressDuration, progressWidth]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -237,14 +280,52 @@ function App() {
           </Pressable>
         </View>
 
-        <View style={styles.playerBar}>
-          <View>
-            <Text style={styles.kicker}>PLAYER</Text>
-            <Text style={styles.playerText}>{isPlaying ? 'Playing in background-ready mode' : 'Ready'}</Text>
+        <View style={styles.playerCard}>
+          <View style={styles.nowPlayingHeader}>
+            <View style={styles.nowPlayingText}>
+              <Text style={styles.kicker}>NOW PLAYING</Text>
+              <Text numberOfLines={1} style={styles.playerTitle}>{activeTrack?.title ?? 'No track selected'}</Text>
+              <Text numberOfLines={1} style={styles.playerMeta}>{activeTrack?.artist ?? queueLabel}</Text>
+            </View>
+            <Text style={[styles.playbackPill, isPlaying && styles.playbackPillActive]}>{isPlaying ? 'ON AIR' : 'READY'}</Text>
           </View>
-          <Pressable onPress={togglePlayback} style={styles.playButton}>
-            <Text style={styles.playButtonText}>{isPlaying ? 'Pause' : 'Play'}</Text>
+
+          <Pressable
+            disabled={!canControlPlayback}
+            onLayout={event => setProgressWidth(Math.max(event.nativeEvent.layout.width, 1))}
+            onPress={seekToTouch}
+            style={[styles.progressTrack, !canControlPlayback && styles.disabledButton]}
+          >
+            <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
           </Pressable>
+
+          <View style={styles.timeRow}>
+            <Text style={styles.timeText}>{formatDuration(progress.position)}</Text>
+            <Text style={styles.timeText}>{formatDuration(progressDuration)}</Text>
+          </View>
+
+          <View style={styles.controlRow}>
+            <Pressable disabled={!canControlPlayback} onPress={() => seekBy(-SEEK_STEP_SECONDS)} style={[styles.controlButton, !canControlPlayback && styles.disabledButton]}>
+              <Text style={styles.controlText}>-15</Text>
+            </Pressable>
+            <Pressable disabled={!canControlPlayback} onPress={skipPrevious} style={[styles.controlButton, !canControlPlayback && styles.disabledButton]}>
+              <Text style={styles.controlText}>Prev</Text>
+            </Pressable>
+            <Pressable disabled={!canControlPlayback} onPress={togglePlayback} style={[styles.playButton, !canControlPlayback && styles.disabledButton]}>
+              <Text style={styles.playButtonText}>{isPlaying ? 'Pause' : 'Play'}</Text>
+            </Pressable>
+            <Pressable disabled={!canControlPlayback} onPress={skipNext} style={[styles.controlButton, !canControlPlayback && styles.disabledButton]}>
+              <Text style={styles.controlText}>Next</Text>
+            </Pressable>
+            <Pressable disabled={!canControlPlayback} onPress={() => seekBy(SEEK_STEP_SECONDS)} style={[styles.controlButton, !canControlPlayback && styles.disabledButton]}>
+              <Text style={styles.controlText}>+15</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.queueHeader}>
+          <Text style={styles.queueTitle}>Queue</Text>
+          <Text style={styles.queueMeta}>{queueLabel}</Text>
         </View>
 
         <FlatList
@@ -252,15 +333,18 @@ function App() {
           keyExtractor={item => String(item.id)}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={<Text style={styles.empty}>아직 불러온 음악이 없습니다.</Text>}
-          renderItem={({ item, index }) => (
-            <Pressable onPress={() => playTrack(index)} style={styles.row}>
-              <View style={styles.rowMain}>
-                <Text numberOfLines={1} style={styles.songTitle}>{item.name}</Text>
-                <Text numberOfLines={1} style={styles.songMeta}>{item.artist?.name ?? 'Unknown Artist'} · {item.album?.name ?? 'Unknown Album'}</Text>
-              </View>
-              <Text style={styles.duration}>{formatDuration(item.duration)}</Text>
-            </Pressable>
-          )}
+          renderItem={({ item, index }) => {
+            const active = isSameTrack(item, activeTrackId);
+            return (
+              <Pressable onPress={() => playTrack(index)} style={[styles.row, active && styles.activeRow]}>
+                <View style={styles.rowMain}>
+                  <Text numberOfLines={1} style={[styles.songTitle, active && styles.activeText]}>{item.name}</Text>
+                  <Text numberOfLines={1} style={styles.songMeta}>{item.artist?.name ?? 'Unknown Artist'} · {item.album?.name ?? 'Unknown Album'}</Text>
+                </View>
+                <Text style={styles.duration}>{formatDuration(item.duration)}</Text>
+              </Pressable>
+            );
+          }}
         />
       </View>
     </SafeAreaView>
@@ -269,10 +353,10 @@ function App() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: brand.background },
-  container: { flex: 1, gap: 16, padding: 20, backgroundColor: brand.background },
+  container: { flex: 1, gap: 14, padding: 20, backgroundColor: brand.background },
   header: { gap: 8, paddingTop: 12 },
   kicker: { color: brand.primary, fontSize: 11, fontWeight: '700', letterSpacing: 1.2 },
-  title: { color: brand.text, fontSize: 32, fontWeight: '800', letterSpacing: -1.2 },
+  title: { color: brand.text, fontSize: 30, fontWeight: '800', letterSpacing: -1.2 },
   description: { color: brand.muted, fontSize: 15, lineHeight: 22 },
   card: { gap: 10, padding: 14, borderRadius: 22, backgroundColor: brand.surface, borderWidth: 1, borderColor: brand.border },
   label: { color: brand.text, fontSize: 13, fontWeight: '700' },
@@ -287,15 +371,32 @@ const styles = StyleSheet.create({
   wideButtonText: { color: brand.background, fontSize: 14, fontWeight: '800' },
   disabledButton: { opacity: 0.42 },
   status: { flex: 1, color: brand.muted, fontSize: 12, lineHeight: 18 },
-  playerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: 14, borderRadius: 20, backgroundColor: brand.surfaceRaised },
-  playerText: { marginTop: 4, color: brand.text, fontSize: 14, fontWeight: '700' },
-  playButton: { alignItems: 'center', justifyContent: 'center', minHeight: 42, minWidth: 74, borderRadius: 999, backgroundColor: brand.primary },
-  playButtonText: { color: brand.background, fontSize: 14, fontWeight: '800' },
+  playerCard: { gap: 12, padding: 14, borderRadius: 22, backgroundColor: brand.surfaceRaised, borderWidth: 1, borderColor: brand.border },
+  nowPlayingHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  nowPlayingText: { flex: 1, minWidth: 0 },
+  playerTitle: { marginTop: 5, color: brand.text, fontSize: 18, fontWeight: '800' },
+  playerMeta: { marginTop: 3, color: brand.muted, fontSize: 13 },
+  playbackPill: { overflow: 'hidden', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, color: '#a1a1aa', backgroundColor: '#18181b', fontSize: 10, fontWeight: '800', letterSpacing: 0.9 },
+  playbackPillActive: { color: brand.background, backgroundColor: brand.primary },
+  progressTrack: { height: 16, justifyContent: 'center', borderRadius: 999, backgroundColor: '#18181b' },
+  progressFill: { height: 6, borderRadius: 999, backgroundColor: brand.primary },
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  timeText: { color: '#71717a', fontSize: 11, fontVariant: ['tabular-nums'] },
+  controlRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  controlButton: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 999, backgroundColor: '#18181b' },
+  controlText: { color: brand.text, fontSize: 12, fontWeight: '800' },
+  playButton: { flex: 1.2, alignItems: 'center', justifyContent: 'center', minHeight: 44, borderRadius: 999, backgroundColor: brand.primary },
+  playButtonText: { color: brand.background, fontSize: 14, fontWeight: '900' },
+  queueHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
+  queueTitle: { color: brand.text, fontSize: 18, fontWeight: '800' },
+  queueMeta: { flex: 1, textAlign: 'right', color: brand.muted, fontSize: 12 },
   listContent: { gap: 8, paddingBottom: 28 },
   empty: { paddingVertical: 28, textAlign: 'center', color: brand.muted },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: '#09090b', borderWidth: 1, borderColor: '#18181b' },
+  activeRow: { borderColor: '#2f4f3a', backgroundColor: '#0d1610' },
   rowMain: { flex: 1, minWidth: 0, gap: 4 },
   songTitle: { color: brand.text, fontSize: 15, fontWeight: '700' },
+  activeText: { color: brand.primary },
   songMeta: { color: brand.muted, fontSize: 12 },
   duration: { color: '#71717a', fontSize: 12, fontVariant: ['tabular-nums'] },
 });
