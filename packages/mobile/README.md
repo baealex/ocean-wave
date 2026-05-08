@@ -95,6 +95,13 @@ job. The job builds the debug APK and uploads it as a GitHub Actions artifact:
 This debug APK is for development validation only. It is not release-signed and
 should not be treated as a production build.
 
+## Android branding
+
+- App label: `Ocean Wave`
+- React Native app registry name: `OceanWave`
+- Android application ID / namespace: `com.baealex.oceanwave`
+- Launcher icons are generated from `packages/client/public/brand-logo.svg` so the companion app uses the same primary app mark as the web product.
+
 ## Patched native dependency
 
 `react-native-track-player@4.1.2` is patched through pnpm in
