@@ -91,7 +91,9 @@ export default function MusicActionPanelContent({
                     icon: <Icon.Smartphone />,
                     text: 'Play in Android app',
                     onClick: () => {
-                        openMobilePlayLink('music', music.id);
+                        openMobilePlayLink('music', music.id, {
+                            onFallback: () => toast('Android app이 열리지 않으면 웹 큐로 계속 재생할 수 있어요.')
+                        });
                         panel.close();
                     }
                 },
