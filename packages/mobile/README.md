@@ -10,6 +10,7 @@ lock-screen controls, and a small queue/player surface.
 
 - Server connection
 - Queue/player surface
+- Opening the connected Ocean Wave web app for full browsing and management
 - Background playback, notification controls, and lock-screen controls through `react-native-track-player`
 
 ## Out of scope for mobile MVP
@@ -102,6 +103,7 @@ The mobile shell exposes the first native playback surface:
 - ±15 second seek controls
 - tappable progress bar
 - queue list with the active track highlighted
+- `Open web` entry point back to the connected server for the full Ocean Wave experience
 
 Queue playback still comes from the loaded server library in this MVP. Durable queue restore and real-device notification/lock-screen verification remain follow-up tasks.
 
