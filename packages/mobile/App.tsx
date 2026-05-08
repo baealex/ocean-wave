@@ -23,11 +23,14 @@ import TrackPlayer, {
 import {
   fetchAuthSession,
   fetchMobileLibrary,
+  fetchMobilePlaylist,
+  fetchMobilePlaylists,
   loginWithPassword,
   logoutSession,
   normalizeServerUrl,
   OceanWaveAuthSession,
   OceanWaveMusic,
+  OceanWavePlaylist,
 } from './src/api/oceanWaveClient';
 import { brand } from './src/config/brand';
 import { playLibraryFrom, prepareTrackPlayer } from './src/player/trackPlayer';
@@ -65,6 +68,8 @@ function App() {
   const [sessionCookie, setSessionCookie] = useState<string | null>(null);
   const [authSession, setAuthSession] = useState<OceanWaveAuthSession | null>(null);
   const [library, setLibrary] = useState<OceanWaveMusic[]>([]);
+  const [playlists, setPlaylists] = useState<OceanWavePlaylist[]>([]);
+  const [selectedPlaylistName, setSelectedPlaylistName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('서버 연결을 확인한 뒤 백그라운드 재생 테스트를 시작할 수 있어요.');
 
@@ -100,6 +105,8 @@ function App() {
     setAuthSession(null);
     setSessionCookie(null);
     setLibrary([]);
+    setPlaylists([]);
+    setSelectedPlaylistName(null);
     setSearchQuery('');
     setBrowseFilter('all');
     TrackPlayer.reset().catch(error => setMessage(error instanceof Error ? error.message : String(error)));
@@ -167,6 +174,8 @@ function App() {
       setAuthSession(nextSession);
       setSessionCookie(null);
       setLibrary([]);
+      setPlaylists([]);
+      setSelectedPlaylistName(null);
       setSearchQuery('');
       setBrowseFilter('all');
       await TrackPlayer.reset();
@@ -198,8 +207,48 @@ function App() {
     setIsLoading(true);
     try {
       const nextLibrary = await fetchMobileLibrary(normalizedServerUrl, sessionCookie);
+      setSelectedPlaylistName(null);
       setLibrary(nextLibrary);
       setMessage(`${nextLibrary.length.toLocaleString()}곡을 불러왔어요.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, normalizedServerUrl, requireServerUrl, sessionCookie]);
+
+  const loadPlaylists = useCallback(async () => {
+    if (!requireServerUrl()) return;
+    if (!isAuthenticated) {
+      Alert.alert('인증 필요', '먼저 서버 연결 상태를 확인하고 로그인해 주세요.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const nextPlaylists = await fetchMobilePlaylists(normalizedServerUrl, sessionCookie);
+      setPlaylists(nextPlaylists);
+      setMessage(`${nextPlaylists.length.toLocaleString()}개 플레이리스트를 불러왔어요.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, normalizedServerUrl, requireServerUrl, sessionCookie]);
+
+  const openPlaylist = useCallback(async (playlistId: number) => {
+    if (!requireServerUrl()) return;
+    if (!isAuthenticated) return;
+
+    setIsLoading(true);
+    try {
+      const playlist = await fetchMobilePlaylist(normalizedServerUrl, playlistId, sessionCookie);
+      const nextMusics = playlist?.musics ?? [];
+      setSelectedPlaylistName(playlist?.name ?? null);
+      setLibrary(nextMusics);
+      setSearchQuery('');
+      setBrowseFilter('all');
+      setMessage(playlist ? `${playlist.name} 큐를 만들었어요.` : '플레이리스트를 찾을 수 없습니다.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -315,9 +364,14 @@ function App() {
             ) : null}
           </View>
 
-          <Pressable disabled={isLoading || !isAuthenticated} onPress={loadLibrary} style={[styles.wideButton, !isAuthenticated && styles.disabledButton]}>
-            <Text style={styles.wideButtonText}>Build queue</Text>
-          </Pressable>
+          <View style={styles.queueActionRow}>
+            <Pressable disabled={isLoading || !isAuthenticated} onPress={loadLibrary} style={[styles.wideButton, styles.splitButton, !isAuthenticated && styles.disabledButton]}>
+              <Text style={styles.wideButtonText}>Build queue</Text>
+            </Pressable>
+            <Pressable disabled={isLoading || !isAuthenticated} onPress={loadPlaylists} style={[styles.secondaryWideButton, styles.splitButton, !isAuthenticated && styles.disabledButton]}>
+              <Text style={styles.secondaryWideButtonText}>Playlists</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.playerCard}>
@@ -364,9 +418,23 @@ function App() {
         </View>
 
         <View style={styles.queueHeader}>
-          <Text style={styles.queueTitle}>Phone Queue</Text>
+          <Text style={styles.queueTitle}>{selectedPlaylistName ?? 'Phone Queue'}</Text>
           <Text style={styles.queueMeta}>{queueLabel}</Text>
         </View>
+
+        {playlists.length ? (
+          <View style={styles.playlistPanel}>
+            <Text style={styles.panelLabel}>Playlists</Text>
+            <View style={styles.playlistGrid}>
+              {playlists.map(playlist => (
+                <Pressable key={playlist.id} disabled={isLoading} onPress={() => openPlaylist(playlist.id)} style={styles.playlistChip}>
+                  <Text numberOfLines={1} style={styles.playlistName}>{playlist.name}</Text>
+                  <Text style={styles.playlistMeta}>{playlist.musicCount.toLocaleString()} tracks</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.browsePanel}>
           <TextInput
@@ -433,8 +501,12 @@ const styles = StyleSheet.create({
   webButtonText: { color: brand.text, fontSize: 12, fontWeight: '800' },
   secondaryButton: { minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 12, backgroundColor: '#27272a' },
   secondaryButtonText: { color: brand.text, fontSize: 12, fontWeight: '700' },
+  queueActionRow: { flexDirection: 'row', gap: 10 },
   wideButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: brand.primary },
+  splitButton: { flex: 1 },
   wideButtonText: { color: brand.background, fontSize: 14, fontWeight: '800' },
+  secondaryWideButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#18181b', borderWidth: 1, borderColor: brand.border },
+  secondaryWideButtonText: { color: brand.text, fontSize: 14, fontWeight: '800' },
   disabledButton: { opacity: 0.42 },
   status: { flex: 1, color: brand.muted, fontSize: 12, lineHeight: 18 },
   playerCard: { gap: 12, padding: 14, borderRadius: 22, backgroundColor: brand.surfaceRaised, borderWidth: 1, borderColor: brand.border },
@@ -456,6 +528,12 @@ const styles = StyleSheet.create({
   queueHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
   queueTitle: { color: brand.text, fontSize: 18, fontWeight: '800' },
   queueMeta: { flex: 1, textAlign: 'right', color: brand.muted, fontSize: 12 },
+  playlistPanel: { gap: 8 },
+  panelLabel: { color: brand.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  playlistGrid: { gap: 8 },
+  playlistChip: { gap: 3, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#09090b', borderWidth: 1, borderColor: '#18181b' },
+  playlistName: { color: brand.text, fontSize: 13, fontWeight: '800' },
+  playlistMeta: { color: brand.muted, fontSize: 11 },
   browsePanel: { gap: 10 },
   searchInput: { minHeight: 42, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#09090b', borderWidth: 1, borderColor: brand.border },
   filterRow: { flexDirection: 'row', gap: 8 },

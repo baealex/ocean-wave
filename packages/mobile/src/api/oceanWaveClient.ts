@@ -16,6 +16,14 @@ export type OceanWaveMusic = {
   album?: { id: number; name: string; cover?: string | null } | null;
 };
 
+
+export type OceanWavePlaylist = {
+  id: number;
+  name: string;
+  musicCount: number;
+  musics?: OceanWaveMusic[];
+};
+
 type GraphQLResponse<T> = {
   data?: T;
   errors?: Array<{ message: string }>;
@@ -31,6 +39,36 @@ const libraryQuery = `
       createdAt
       artist { id name }
       album { id name cover }
+    }
+  }
+`;
+
+
+const playlistsQuery = `
+  query MobilePlaylists {
+    allPlaylist {
+      id
+      name
+      musicCount
+    }
+  }
+`;
+
+const playlistDetailQuery = `
+  query MobilePlaylist($id: ID!) {
+    playlist(id: $id) {
+      id
+      name
+      musicCount
+      musics {
+        id
+        name
+        duration
+        isLiked
+        createdAt
+        artist { id name }
+        album { id name cover }
+      }
     }
   }
 `;
@@ -124,6 +162,55 @@ export async function logoutSession(serverUrl: string, sessionCookie?: string | 
   }
 
   return (await response.json()) as OceanWaveAuthSession;
+}
+
+
+export async function fetchMobilePlaylists(serverUrl: string, sessionCookie?: string | null) {
+  const endpoint = `${normalizeServerUrl(serverUrl)}/graphql`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'omit',
+    headers: {
+      'Content-Type': 'application/json',
+      ...withCookie(sessionCookie),
+    },
+    body: JSON.stringify({ query: playlistsQuery }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Playlist request failed (${response.status})`);
+  }
+
+  const payload = (await response.json()) as GraphQLResponse<{ allPlaylist: OceanWavePlaylist[] }>;
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map(error => error.message).join('\n'));
+  }
+
+  return payload.data?.allPlaylist ?? [];
+}
+
+export async function fetchMobilePlaylist(serverUrl: string, playlistId: number, sessionCookie?: string | null) {
+  const endpoint = `${normalizeServerUrl(serverUrl)}/graphql`;
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'omit',
+    headers: {
+      'Content-Type': 'application/json',
+      ...withCookie(sessionCookie),
+    },
+    body: JSON.stringify({ query: playlistDetailQuery, variables: { id: String(playlistId) } }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Playlist detail request failed (${response.status})`);
+  }
+
+  const payload = (await response.json()) as GraphQLResponse<{ playlist: OceanWavePlaylist | null }>;
+  if (payload.errors?.length) {
+    throw new Error(payload.errors.map(error => error.message).join('\n'));
+  }
+
+  return payload.data?.playlist ?? null;
 }
 
 export async function fetchMobileLibrary(serverUrl: string, sessionCookie?: string | null) {
