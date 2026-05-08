@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   GestureResponderEvent,
+  Linking,
   Pressable,
   SafeAreaView,
   StatusBar,
@@ -68,7 +69,7 @@ function App() {
   const previousServerUrlRef = useRef<string | null>(null);
   const isAuthenticated = authSession ? !authSession.authRequired || authSession.authenticated : false;
   const activeTrackId = activeTrack?.id ? String(activeTrack.id) : undefined;
-  const queueLabel = library.length ? `${library.length.toLocaleString()} tracks loaded` : 'Load a library to build the queue';
+  const queueLabel = library.length ? `${library.length.toLocaleString()} tracks loaded` : 'Build a queue from this server';
   const progressDuration = progress.duration || activeTrack?.duration || 0;
   const progressRatio = progressDuration > 0 ? Math.min(progress.position / progressDuration, 1) : 0;
 
@@ -156,6 +157,16 @@ function App() {
     }
   }, [normalizedServerUrl, requireServerUrl, sessionCookie]);
 
+  const openWebApp = useCallback(async () => {
+    if (!requireServerUrl()) return;
+
+    try {
+      await Linking.openURL(normalizedServerUrl);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [normalizedServerUrl, requireServerUrl]);
+
   const loadLibrary = useCallback(async () => {
     if (!requireServerUrl()) return;
     if (!isAuthenticated) {
@@ -224,14 +235,22 @@ function App() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.kicker}>OCEAN WAVE MOBILE</Text>
-          <Text style={styles.title}>Companion player.</Text>
+          <Text style={styles.title}>Your phone keeps the music moving.</Text>
           <Text style={styles.description}>
-            서버 인증과 백그라운드 재생을 먼저 검증하는 작은 Android 플레이어입니다.
+            탐색과 관리는 웹에서, Android 앱은 현재 재생과 큐를 가볍게 이어받습니다.
           </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Server URL</Text>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderText}>
+              <Text style={styles.label}>Server URL</Text>
+              <Text style={styles.helperText}>웹 본체에 연결하면 앱은 백그라운드 재생과 큐 제어만 담당합니다.</Text>
+            </View>
+            <Pressable disabled={!normalizedServerUrl} onPress={openWebApp} style={[styles.webButton, !normalizedServerUrl && styles.disabledButton]}>
+              <Text style={styles.webButtonText}>Open web</Text>
+            </Pressable>
+          </View>
           <View style={styles.serverRow}>
             <TextInput
               autoCapitalize="none"
@@ -276,7 +295,7 @@ function App() {
           </View>
 
           <Pressable disabled={isLoading || !isAuthenticated} onPress={loadLibrary} style={[styles.wideButton, !isAuthenticated && styles.disabledButton]}>
-            <Text style={styles.wideButtonText}>Load library</Text>
+            <Text style={styles.wideButtonText}>Build queue</Text>
           </Pressable>
         </View>
 
@@ -324,7 +343,7 @@ function App() {
         </View>
 
         <View style={styles.queueHeader}>
-          <Text style={styles.queueTitle}>Queue</Text>
+          <Text style={styles.queueTitle}>Phone Queue</Text>
           <Text style={styles.queueMeta}>{queueLabel}</Text>
         </View>
 
@@ -332,7 +351,7 @@ function App() {
           data={library}
           keyExtractor={item => String(item.id)}
           contentContainerStyle={styles.listContent}
-          ListEmptyComponent={<Text style={styles.empty}>아직 불러온 음악이 없습니다.</Text>}
+          ListEmptyComponent={<Text style={styles.empty}>웹 서버를 확인한 뒤 큐를 만들어 주세요.</Text>}
           renderItem={({ item, index }) => {
             const active = isSameTrack(item, activeTrackId);
             return (
@@ -359,12 +378,17 @@ const styles = StyleSheet.create({
   title: { color: brand.text, fontSize: 30, fontWeight: '800', letterSpacing: -1.2 },
   description: { color: brand.muted, fontSize: 15, lineHeight: 22 },
   card: { gap: 10, padding: 14, borderRadius: 22, backgroundColor: brand.surface, borderWidth: 1, borderColor: brand.border },
+  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  cardHeaderText: { flex: 1, minWidth: 0, gap: 4 },
   label: { color: brand.text, fontSize: 13, fontWeight: '700' },
+  helperText: { color: brand.muted, fontSize: 12, lineHeight: 17 },
   serverRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   input: { flex: 1, minHeight: 46, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#111113', borderWidth: 1, borderColor: brand.border },
   primaryButton: { minHeight: 46, minWidth: 72, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: brand.primary },
   primaryButtonText: { color: brand.background, fontSize: 14, fontWeight: '800' },
+  webButton: { minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 12, backgroundColor: '#18181b', borderWidth: 1, borderColor: brand.border },
+  webButtonText: { color: brand.text, fontSize: 12, fontWeight: '800' },
   secondaryButton: { minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 12, backgroundColor: '#27272a' },
   secondaryButtonText: { color: brand.text, fontSize: 12, fontWeight: '700' },
   wideButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: brand.primary },
