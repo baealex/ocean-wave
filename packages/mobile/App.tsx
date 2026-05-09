@@ -57,6 +57,9 @@ function OceanWaveMobileApp() {
     clearPendingTrackId,
     pendingTrackId,
     pendingTrack,
+    deleteSelectedOfflinePlaylist,
+    offlinePlaylists,
+    offlineSaveProgress,
     playTrack,
     playlists,
     resetQueueState,
@@ -68,6 +71,7 @@ function OceanWaveMobileApp() {
     setSearchQuery,
     setSelectedPlaylistId,
     setSelectedPlaylistName,
+    saveSelectedPlaylistOffline,
     visibleLibrary,
   } = usePlaylistLibrary({ setIsLoading, setMessage, setScreen });
 
@@ -95,6 +99,9 @@ function OceanWaveMobileApp() {
       title: pendingTrack.name,
     }
     : activeTrack;
+  const isSelectedPlaylistOffline = Boolean(
+    selectedPlaylistId && offlinePlaylists.some(playlist => playlist.serverUrl === normalizedServerUrl && playlist.playlistId === selectedPlaylistId),
+  );
 
   useEffect(() => {
     if (pendingTrackId && activeTrackId === pendingTrackId) {
@@ -152,7 +159,10 @@ function OceanWaveMobileApp() {
       const nextProfile = await upsertProfile({ ...profile, authSession: nextSession });
       setSelectedProfileId(nextProfile.id);
 
-      if (nextSession.authRequired && !nextSession.authenticated) {
+      if (nextSession.authRequired && !nextSession.authenticated && !profile.sessionCookie) {
+        const loadedOfflineContent = await loadServerContent(nextProfile);
+        if (loadedOfflineContent) return;
+
         setServerName(nextProfile.name);
         setServerUrl(nextProfile.url);
         setPassword('');
@@ -164,7 +174,9 @@ function OceanWaveMobileApp() {
 
       await loadServerContent(nextProfile);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
+      await loadServerContent(profile).catch(() => {
+        setMessage(error instanceof Error ? error.message : String(error));
+      });
     } finally {
       setIsLoading(false);
     }
@@ -253,6 +265,14 @@ function OceanWaveMobileApp() {
   const handleOpenPlaylist = useCallback((playlistId: number) => openPlaylist(selectedProfile, isAuthenticated, playlistId), [isAuthenticated, openPlaylist, selectedProfile]);
 
   const handlePlayTrack = useCallback((index: number) => playTrack(selectedProfile, index), [playTrack, selectedProfile]);
+  const handleToggleOffline = useCallback(() => {
+    if (isSelectedPlaylistOffline) {
+      deleteSelectedOfflinePlaylist(selectedProfile).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
+      return;
+    }
+
+    saveSelectedPlaylistOffline(selectedProfile).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
+  }, [deleteSelectedOfflinePlaylist, isSelectedPlaylistOffline, saveSelectedPlaylistOffline, selectedProfile]);
 
   const renderNavBar = (title: string) => <NavBar onBack={handleMobileBack} title={title} />;
 
@@ -292,6 +312,8 @@ function OceanWaveMobileApp() {
       displayedActiveTrackId={displayedActiveTrackId}
       isLoading={isLoading}
       isPlaying={isPlaying}
+      isOfflineSaving={Boolean(offlineSaveProgress)}
+      isSelectedPlaylistOffline={isSelectedPlaylistOffline}
       onBack={handleMobileBack}
       onCreatePlaylist={openPlaylistCreator}
       onNext={skipNext}
@@ -302,6 +324,8 @@ function OceanWaveMobileApp() {
       onSearchQueryChange={setSearchQuery}
       onSeek={seekToTouch}
       onTogglePlayback={togglePlayback}
+      onToggleOffline={handleToggleOffline}
+      offlineSaveProgress={offlineSaveProgress}
       playlistName={selectedPlaylistName}
       playlists={playlists}
       progressRatio={progressRatio}

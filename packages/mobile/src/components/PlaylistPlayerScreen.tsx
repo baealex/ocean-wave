@@ -4,6 +4,7 @@ import type { Track } from 'react-native-track-player';
 
 import { albumArtUrl, OceanWaveMusic, OceanWavePlaylist } from '../api/oceanWaveClient';
 import { brand } from '../config/brand';
+import { SaveOfflinePlaylistProgress } from '../offline/offlinePlaylists';
 import { formatDuration } from '../utils/time';
 import { CachedArtwork } from './CachedArtwork';
 import { MiniPlayer } from './MiniPlayer';
@@ -15,7 +16,10 @@ type PlaylistPlayerScreenProps = {
   displayedActiveTrackId?: string;
   displayedMiniTrack?: Track | { artist?: string; artwork?: string; title?: string };
   isLoading: boolean;
+  isOfflineSaving: boolean;
   isPlaying: boolean;
+  isSelectedPlaylistOffline: boolean;
+  offlineSaveProgress?: SaveOfflinePlaylistProgress | null;
   playlistName?: string | null;
   playlists: OceanWavePlaylist[];
   progressRatio: number;
@@ -35,6 +39,7 @@ type PlaylistPlayerScreenProps = {
   onSearchQueryChange: (value: string) => void;
   onSeek: (event: GestureResponderEvent) => void;
   onTogglePlayback: () => void;
+  onToggleOffline: () => void;
 };
 
 export function PlaylistPlayerScreen({
@@ -43,7 +48,10 @@ export function PlaylistPlayerScreen({
   displayedActiveTrackId,
   displayedMiniTrack,
   isLoading,
+  isOfflineSaving,
   isPlaying,
+  isSelectedPlaylistOffline,
+  offlineSaveProgress,
   playlistName,
   playlists,
   progressRatio,
@@ -63,7 +71,12 @@ export function PlaylistPlayerScreen({
   onSearchQueryChange,
   onSeek,
   onTogglePlayback,
+  onToggleOffline,
 }: PlaylistPlayerScreenProps) {
+  const offlineButtonLabel = isOfflineSaving
+    ? `${offlineSaveProgress?.completed ?? 0}/${offlineSaveProgress?.total ?? 0}`
+    : isSelectedPlaylistOffline ? 'Downloaded' : 'Download';
+
   return (
     <View style={styles.playerPage}>
       <NavBar onBack={onBack} title={selectedProfileName ?? 'Ocean Wave'} />
@@ -93,6 +106,9 @@ export function PlaylistPlayerScreen({
         <>
           <View style={styles.playlistActionPanel}>
             <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={onSearchQueryChange} placeholder="Search in playlist" placeholderTextColor="#71717a" style={styles.searchInput} value={searchQuery} />
+            <Pressable accessibilityLabel={isSelectedPlaylistOffline ? 'Remove offline saved playlist' : 'Save playlist for offline playback'} disabled={isLoading || isOfflineSaving || !visibleLibrary.length} onPress={onToggleOffline} style={[styles.offlineButton, (isLoading || isOfflineSaving || !visibleLibrary.length) && styles.disabledButton, isSelectedPlaylistOffline && styles.offlineButtonSaved]}>
+              <Text style={[styles.offlineButtonText, isSelectedPlaylistOffline && styles.offlineButtonTextSaved]}>{offlineButtonLabel}</Text>
+            </Pressable>
           </View>
 
           <FlatList
@@ -165,8 +181,12 @@ const styles = StyleSheet.create({
   emptyPlaylistBody: { color: brand.muted, fontSize: 13, lineHeight: 20 },
   emptyPlaylistButton: { alignSelf: 'flex-start', minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 14, backgroundColor: 'rgba(139,92,246,0.16)' },
   emptyPlaylistButtonText: { color: brand.primary, fontSize: 12, fontWeight: '900' },
-  playlistActionPanel: { gap: 10 },
-  searchInput: { minHeight: 42, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#09090b', borderWidth: 1, borderColor: brand.border },
+  playlistActionPanel: { flexDirection: 'row', gap: 8 },
+  searchInput: { flex: 1, minHeight: 42, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#09090b', borderWidth: 1, borderColor: brand.border },
+  offlineButton: { minWidth: 112, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, paddingHorizontal: 12, backgroundColor: 'rgba(139,92,246,0.16)', borderWidth: 1, borderColor: 'rgba(139,92,246,0.32)' },
+  offlineButtonSaved: { backgroundColor: 'rgba(16,185,129,0.14)', borderColor: 'rgba(16,185,129,0.34)' },
+  offlineButtonText: { color: brand.primary, fontSize: 12, fontWeight: '900' },
+  offlineButtonTextSaved: { color: '#34d399' },
   listContent: { gap: 8, paddingBottom: 108 },
   empty: { paddingVertical: 36, textAlign: 'center', color: brand.muted },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#09090b', borderWidth: 1, borderColor: '#18181b' },

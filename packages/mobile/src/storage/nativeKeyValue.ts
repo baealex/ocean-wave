@@ -2,6 +2,8 @@ import { NativeModules } from 'react-native';
 
 type OceanWaveStorageModule = {
   cacheRemoteImage?(url: string, cookie?: string | null): Promise<string>;
+  deleteLocalFile?(fileUri: string): Promise<boolean>;
+  downloadRemoteFile?(url: string, fileName: string, cookie?: string | null): Promise<string>;
   getString(key: string): Promise<string | null>;
   setString(key: string, value: string): Promise<boolean>;
   removeString(key: string): Promise<boolean>;
@@ -49,5 +51,23 @@ export async function cacheRemoteImage(url: string, cookie?: string | null) {
     return await nativeStorage.cacheRemoteImage(url, cookie);
   } catch {
     return url;
+  }
+}
+
+export async function downloadRemoteFile(url: string, fileName: string, cookie?: string | null) {
+  if (!nativeStorage?.downloadRemoteFile) {
+    throw new Error('Offline downloads require the native storage module.');
+  }
+
+  return nativeStorage.downloadRemoteFile(url, fileName, cookie);
+}
+
+export async function deleteLocalFile(fileUri: string) {
+  if (!nativeStorage?.deleteLocalFile) return false;
+
+  try {
+    return await nativeStorage.deleteLocalFile(fileUri);
+  } catch {
+    return false;
   }
 }
