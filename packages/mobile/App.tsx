@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  albumArtUrl,
   fetchAuthSession,
   loginWithPassword,
   normalizeServerUrl,
@@ -51,14 +52,13 @@ function OceanWaveMobileApp() {
   const [message, setMessage] = useState('Choose a server to start listening.');
 
   const {
-    library,
     loadServerContent,
     openPlaylist,
+    clearPendingTrackId,
     pendingTrackId,
-    playSelectedPlaylist,
+    pendingTrack,
     playTrack,
     playlists,
-    queueLabel,
     resetQueueState,
     searchQuery,
     selectedPlaylistId,
@@ -87,7 +87,20 @@ function OceanWaveMobileApp() {
   const authSession = selectedProfile?.authSession ?? null;
   const isAuthenticated = authSession ? !authSession.authRequired || authSession.authenticated : false;
   const activeTrackId = activeTrack?.id ? String(activeTrack.id) : undefined;
-  const displayedActiveTrackId = activeTrackId ?? pendingTrackId ?? undefined;
+  const displayedActiveTrackId = pendingTrackId ?? activeTrackId ?? undefined;
+  const displayedMiniTrack = pendingTrack
+    ? {
+      artist: pendingTrack.artist?.name ?? 'Unknown Artist',
+      artwork: albumArtUrl(normalizedServerUrl, pendingTrack.album?.cover),
+      title: pendingTrack.name,
+    }
+    : activeTrack;
+
+  useEffect(() => {
+    if (pendingTrackId && activeTrackId === pendingTrackId) {
+      clearPendingTrackId();
+    }
+  }, [activeTrackId, clearPendingTrackId, pendingTrackId]);
 
   useOceanWaveDeepLinks({
     normalizedServerUrl,
@@ -241,10 +254,6 @@ function OceanWaveMobileApp() {
 
   const handlePlayTrack = useCallback((index: number) => playTrack(selectedProfile, index), [playTrack, selectedProfile]);
 
-
-
-  const handlePlaySelectedPlaylist = useCallback(() => playSelectedPlaylist(selectedProfile), [playSelectedPlaylist, selectedProfile]);
-
   const renderNavBar = (title: string) => <NavBar onBack={handleMobileBack} title={title} />;
 
 
@@ -278,16 +287,15 @@ function OceanWaveMobileApp() {
   const renderPlayer = () => (
     <PlaylistPlayerScreen
       activeTrack={activeTrack}
+      displayedMiniTrack={displayedMiniTrack}
       canControlPlayback={canControlPlayback}
       displayedActiveTrackId={displayedActiveTrackId}
       isLoading={isLoading}
       isPlaying={isPlaying}
-      library={library}
       onBack={handleMobileBack}
       onCreatePlaylist={openPlaylistCreator}
       onNext={skipNext}
       onOpenPlaylist={handleOpenPlaylist}
-      onPlayPlaylist={handlePlaySelectedPlaylist}
       onPlayTrack={handlePlayTrack}
       onPrevious={skipPrevious}
       onProgressLayout={setProgressWidth}
@@ -297,10 +305,11 @@ function OceanWaveMobileApp() {
       playlistName={selectedPlaylistName}
       playlists={playlists}
       progressRatio={progressRatio}
-      queueLabel={queueLabel}
       searchQuery={searchQuery}
       selectedPlaylistId={selectedPlaylistId}
       selectedProfileName={selectedProfile?.name}
+      serverUrl={normalizedServerUrl}
+      sessionCookie={selectedProfile?.sessionCookie}
       visibleLibrary={visibleLibrary}
     />
   );

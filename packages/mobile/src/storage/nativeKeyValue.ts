@@ -1,6 +1,7 @@
 import { NativeModules } from 'react-native';
 
 type OceanWaveStorageModule = {
+  cacheRemoteImage?(url: string, cookie?: string | null): Promise<string>;
   getString(key: string): Promise<string | null>;
   setString(key: string, value: string): Promise<boolean>;
   removeString(key: string): Promise<boolean>;
@@ -38,5 +39,15 @@ export async function removeStoredString(key: string) {
     await nativeStorage.removeString(key);
   } catch {
     // Keep storage best-effort. A failed cleanup should not block navigation.
+  }
+}
+
+export async function cacheRemoteImage(url: string, cookie?: string | null) {
+  if (!nativeStorage?.cacheRemoteImage) return url;
+
+  try {
+    return await nativeStorage.cacheRemoteImage(url, cookie);
+  } catch {
+    return url;
   }
 }

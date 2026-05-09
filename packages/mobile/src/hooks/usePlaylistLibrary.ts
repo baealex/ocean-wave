@@ -24,6 +24,7 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UseP
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<number | null>(null);
   const [selectedPlaylistName, setSelectedPlaylistName] = useState<string | null>(null);
   const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
+  const [pendingTrack, setPendingTrack] = useState<OceanWaveMusic | null>(null);
 
   const visibleLibrary = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -34,21 +35,21 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UseP
       .some(value => value?.toLowerCase().includes(normalizedQuery)));
   }, [library, searchQuery]);
 
-  const queueLabel = selectedPlaylistName
-    ? (library.length ? `${library.length.toLocaleString()} tracks · plays in order` : 'This playlist is empty')
-    : (playlists.length ? `${playlists.length.toLocaleString()} playlists available` : 'No playlists yet');
-
   const resetQueueState = useCallback(() => {
     setLibrary([]);
     setPlaylists([]);
     setSelectedPlaylistId(null);
     setSelectedPlaylistName(null);
+    setPendingTrack(null);
+    setPendingTrackId(null);
     setSearchQuery('');
   }, []);
 
   const loadServerContent = useCallback(async (profile: ServerProfile) => {
     setIsLoading(true);
     setMessage('Loading playlists…');
+    setPendingTrack(null);
+    setPendingTrackId(null);
     try {
       const nextPlaylists = await fetchMobilePlaylists(profile.url, profile.sessionCookie).catch(() => []);
       const focusedPlaylist = nextPlaylists.find(playlist => playlist.id === selectedPlaylistId) ?? nextPlaylists[0];
@@ -82,52 +83,59 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UseP
   const openPlaylist = useCallback(async (profile: ServerProfile | null, isAuthenticated: boolean, playlistId: number) => {
     if (!profile || !isAuthenticated) return;
 
+    const pendingPlaylist = playlists.find(playlist => playlist.id === playlistId);
     setIsLoading(true);
+    setSelectedPlaylistId(playlistId);
+    setSelectedPlaylistName(pendingPlaylist?.name ?? null);
+    setPendingTrack(null);
+    setPendingTrackId(null);
+    setLibrary([]);
+    setSearchQuery('');
     try {
       const playlist = await fetchMobilePlaylist(profile.url, playlistId, profile.sessionCookie);
       const nextMusics = playlist?.musics ?? [];
       setSelectedPlaylistId(playlist?.id ?? playlistId);
       setSelectedPlaylistName(playlist?.name ?? null);
       setLibrary(nextMusics);
-      setSearchQuery('');
       setMessage(playlist ? `${playlist.name} is now your queue.` : 'Playlist not found.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setIsLoading(false);
     }
-  }, [setIsLoading, setMessage]);
+  }, [playlists, setIsLoading, setMessage]);
 
   const playTrack = useCallback(async (profile: ServerProfile | null, index: number) => {
     if (!profile || !visibleLibrary.length) return;
     const selectedMusic = visibleLibrary[index];
     if (!selectedMusic) return;
     setPendingTrackId(String(selectedMusic.id));
+    setPendingTrack(selectedMusic);
     setMessage(`Starting ${selectedMusic.name}…`);
     try {
       await playLibraryFrom(profile.url, visibleLibrary, index, profile.sessionCookie);
       setMessage(`Playing ${selectedMusic.name}.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
       setPendingTrackId(null);
+      setPendingTrack(null);
+      setMessage(error instanceof Error ? error.message : String(error));
     }
   }, [setMessage, visibleLibrary]);
 
-  const playSelectedPlaylist = useCallback((profile: ServerProfile | null) => {
-    if (!visibleLibrary.length) return;
-    playTrack(profile, 0).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
-  }, [playTrack, setMessage, visibleLibrary.length]);
+  const clearPendingTrackId = useCallback(() => {
+    setPendingTrackId(null);
+    setPendingTrack(null);
+  }, []);
 
   return {
     library,
     loadServerContent,
     openPlaylist,
+    clearPendingTrackId,
     pendingTrackId,
-    playSelectedPlaylist,
+    pendingTrack,
     playTrack,
     playlists,
-    queueLabel,
     resetQueueState,
     searchQuery,
     selectedPlaylistId,
