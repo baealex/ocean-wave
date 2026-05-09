@@ -10,8 +10,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   fetchAuthSession,
-  fetchMobileMusic,
-  fetchMobilePlaylist,
   loginWithPassword,
   normalizeServerUrl,
 } from './src/api/oceanWaveClient';
@@ -26,11 +24,10 @@ import {
   getBundlerServerUrl,
   ServerProfile,
 } from './src/app/serverProfiles';
-import { parseOceanWaveDeepLink, type OceanWaveDeepLinkRequest } from './src/deeplink/oceanWaveDeepLink';
-import { playLibraryFrom } from './src/player/trackPlayer';
 import { useTrackPlaybackControls } from './src/hooks/useTrackPlaybackControls';
 import { useServerProfiles } from './src/hooks/useServerProfiles';
 import { MobileScreen, usePlaylistLibrary } from './src/hooks/usePlaylistLibrary';
+import { useOceanWaveDeepLinks } from './src/hooks/useOceanWaveDeepLinks';
 
 
 function OceanWaveMobileApp() {
@@ -50,7 +47,6 @@ function OceanWaveMobileApp() {
   const [serverName, setServerName] = useState('');
   const [serverUrl, setServerUrl] = useState(() => getBundlerServerUrl() || DEMO_SERVER_URL);
   const [password, setPassword] = useState('');
-  const [pendingDeepLink, setPendingDeepLink] = useState<OceanWaveDeepLinkRequest | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('Choose a server to start listening.');
 
@@ -75,7 +71,6 @@ function OceanWaveMobileApp() {
     visibleLibrary,
   } = usePlaylistLibrary({ setIsLoading, setMessage, setScreen });
 
-  const handleDeepLinkUrlRef = useRef<(url: string | null) => void>(() => undefined);
   const didAutoConnectLastProfileRef = useRef(false);
 
   const {
@@ -94,6 +89,20 @@ function OceanWaveMobileApp() {
   const activeTrackId = activeTrack?.id ? String(activeTrack.id) : undefined;
   const displayedActiveTrackId = activeTrackId ?? pendingTrackId ?? undefined;
 
+  useOceanWaveDeepLinks({
+    normalizedServerUrl,
+    profiles,
+    setLibrary,
+    setMessage,
+    setPlaylists,
+    setScreen,
+    setSelectedPlaylistId,
+    setSelectedPlaylistName,
+    setSelectedProfileId,
+    setServerName,
+    setServerUrl,
+    upsertProfile,
+  });
 
 
   const handleMobileBack = useCallback(() => {
@@ -232,82 +241,7 @@ function OceanWaveMobileApp() {
 
   const handlePlayTrack = useCallback((index: number) => playTrack(selectedProfile, index), [playTrack, selectedProfile]);
 
-  const runDeepLink = useCallback(async (request: OceanWaveDeepLinkRequest) => {
-    setPendingDeepLink(null);
-    const requestServerUrl = normalizeServerUrl(request.serverUrl ?? normalizedServerUrl);
-    const profile = profiles.find(item => item.url === requestServerUrl) ?? createProfile('Shared Server', requestServerUrl);
-    const savedProfile = await upsertProfile(profile);
-    setSelectedProfileId(savedProfile.id);
 
-    try {
-      const session = await fetchAuthSession(savedProfile.url, savedProfile.sessionCookie);
-      const authedProfile = await upsertProfile({ ...savedProfile, authSession: session });
-      if (session.authRequired && !session.authenticated) {
-        setServerName(authedProfile.name);
-        setServerUrl(authedProfile.url);
-        setScreen('addServer');
-        setMessage('Password required for this shared server.');
-        return;
-      }
-
-      if (request.target === 'music') {
-        const music = await fetchMobileMusic(authedProfile.url, request.id, authedProfile.sessionCookie);
-        if (!music) {
-          setMessage('Requested track not found.');
-          return;
-        }
-        setLibrary([music]);
-        setPlaylists([]);
-        setSelectedPlaylistId(null);
-        setSelectedPlaylistName(null);
-        setScreen('player');
-        await playLibraryFrom(authedProfile.url, [music], 0, authedProfile.sessionCookie);
-        setMessage(`${music.name} playback started.`);
-        return;
-      }
-
-      const playlist = await fetchMobilePlaylist(authedProfile.url, request.id, authedProfile.sessionCookie);
-      const nextMusics = playlist?.musics ?? [];
-      if (!playlist || nextMusics.length === 0) {
-        setMessage('Requested playlist was not found or is empty.');
-        return;
-      }
-
-      setLibrary(nextMusics);
-      setSelectedPlaylistId(playlist.id);
-      setSelectedPlaylistName(playlist.name);
-      setScreen('player');
-      await playLibraryFrom(authedProfile.url, nextMusics, 0, authedProfile.sessionCookie);
-      setMessage(`${playlist.name} playlist playback started.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    }
-  }, [normalizedServerUrl, profiles, setLibrary, setPlaylists, setSelectedPlaylistId, setSelectedPlaylistName, setSelectedProfileId, upsertProfile]);
-
-  const handleDeepLinkUrl = useCallback((url: string | null) => {
-    if (!url) return;
-    const request = parseOceanWaveDeepLink(url);
-    if (!request) return;
-    setPendingDeepLink(request);
-  }, []);
-
-  useEffect(() => {
-    handleDeepLinkUrlRef.current = handleDeepLinkUrl;
-  }, [handleDeepLinkUrl]);
-
-  useEffect(() => {
-    Linking.getInitialURL()
-      .then(url => handleDeepLinkUrlRef.current(url))
-      .catch(error => setMessage(error instanceof Error ? error.message : String(error)));
-
-    const subscription = Linking.addEventListener('url', event => handleDeepLinkUrlRef.current(event.url));
-    return () => subscription.remove();
-  }, []);
-
-  useEffect(() => {
-    if (!pendingDeepLink) return;
-    runDeepLink(pendingDeepLink).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
-  }, [pendingDeepLink, runDeepLink]);
 
   const handlePlaySelectedPlaylist = useCallback(() => playSelectedPlaylist(selectedProfile), [playSelectedPlaylist, selectedProfile]);
 
