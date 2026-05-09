@@ -26,18 +26,13 @@ import { ServerListScreen } from './src/components/ServerListScreen';
 import {
   createProfile,
   DEMO_SERVER_URL,
-  getBuiltInProfiles,
   getBundlerServerUrl,
-  LAST_PROFILE_ID_STORAGE_KEY,
-  normalizeProfiles,
-  readProfilesPayload,
   ServerProfile,
-  SERVER_PROFILES_STORAGE_KEY,
 } from './src/app/serverProfiles';
 import { parseOceanWaveDeepLink, type OceanWaveDeepLinkRequest } from './src/deeplink/oceanWaveDeepLink';
-import { getStoredString, setStoredString } from './src/storage/nativeKeyValue';
 import { playLibraryFrom, prepareTrackPlayer } from './src/player/trackPlayer';
 import { useTrackPlaybackControls } from './src/hooks/useTrackPlaybackControls';
+import { useServerProfiles } from './src/hooks/useServerProfiles';
 
 type Screen = 'servers' | 'addServer' | 'player';
 
@@ -56,8 +51,6 @@ function OceanWaveMobileApp() {
   } = useTrackPlaybackControls();
 
   const [screen, setScreen] = useState<Screen>('servers');
-  const [profiles, setProfiles] = useState<ServerProfile[]>(getBuiltInProfiles);
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [serverName, setServerName] = useState('');
   const [serverUrl, setServerUrl] = useState(() => getBundlerServerUrl() || DEMO_SERVER_URL);
   const [password, setPassword] = useState('');
@@ -69,19 +62,11 @@ function OceanWaveMobileApp() {
   const [selectedPlaylistName, setSelectedPlaylistName] = useState<string | null>(null);
   const [pendingDeepLink, setPendingDeepLink] = useState<OceanWaveDeepLinkRequest | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [hasLoadedSavedProfiles, setHasLoadedSavedProfiles] = useState(false);
   const [message, setMessage] = useState('Choose a server to start listening.');
   const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
 
   const handleDeepLinkUrlRef = useRef<(url: string | null) => void>(() => undefined);
   const didAutoConnectLastProfileRef = useRef(false);
-  const selectedProfile = useMemo(() => profiles.find(profile => profile.id === selectedProfileId) ?? null, [profiles, selectedProfileId]);
-  const normalizedServerUrl = selectedProfile?.url ?? normalizeServerUrl(serverUrl);
-  const authSession = selectedProfile?.authSession ?? null;
-  const isAuthenticated = authSession ? !authSession.authRequired || authSession.authenticated : false;
-  const activeTrackId = activeTrack?.id ? String(activeTrack.id) : undefined;
-  const displayedActiveTrackId = activeTrackId ?? pendingTrackId ?? undefined;
-
   const visibleLibrary = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (!normalizedQuery) return library;
@@ -95,59 +80,6 @@ function OceanWaveMobileApp() {
     ? (library.length ? `${library.length.toLocaleString()} tracks · plays in order` : 'This playlist is empty')
     : (playlists.length ? `${playlists.length.toLocaleString()} playlists available` : 'No playlists yet');
 
-  const persistProfiles = useCallback((nextProfiles: ServerProfile[]) => {
-    setStoredString(SERVER_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles.filter(profile => !profile.isDemo))).catch(() => undefined);
-  }, []);
-
-  const persistLastProfileId = useCallback((profileId: string | null) => {
-    if (!profileId) return;
-    setStoredString(LAST_PROFILE_ID_STORAGE_KEY, profileId).catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    Promise.all([
-      getStoredString(SERVER_PROFILES_STORAGE_KEY),
-      getStoredString(LAST_PROFILE_ID_STORAGE_KEY),
-    ])
-      .then(([profilesPayload, lastProfileId]) => {
-        if (!isMounted) return;
-        const nextProfiles = readProfilesPayload(profilesPayload);
-        setProfiles(nextProfiles);
-        if (lastProfileId && nextProfiles.some(profile => profile.id === lastProfileId)) {
-          setSelectedProfileId(lastProfileId);
-        }
-        setHasLoadedSavedProfiles(true);
-      })
-      .catch(() => {
-        if (!isMounted) return;
-        setProfiles(getBuiltInProfiles());
-        setHasLoadedSavedProfiles(true);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!hasLoadedSavedProfiles) return;
-    persistProfiles(profiles);
-  }, [hasLoadedSavedProfiles, persistProfiles, profiles]);
-
-  const upsertProfile = useCallback(async (profile: ServerProfile) => {
-    const normalizedProfile = { ...profile, url: normalizeServerUrl(profile.url) };
-    setProfiles(currentProfiles => {
-      const nextProfiles = normalizeProfiles(currentProfiles.some(item => item.id === normalizedProfile.id)
-        ? currentProfiles.map(item => item.id === normalizedProfile.id ? normalizedProfile : item)
-        : [normalizedProfile, ...currentProfiles]);
-      persistProfiles(nextProfiles);
-      persistLastProfileId(normalizedProfile.id);
-      return nextProfiles;
-    });
-    return normalizedProfile;
-  }, [persistLastProfileId, persistProfiles]);
 
   const resetQueueState = useCallback(() => {
     setLibrary([]);
@@ -157,17 +89,22 @@ function OceanWaveMobileApp() {
     setSearchQuery('');
   }, []);
 
-  const deleteProfile = useCallback((profileId: string) => {
-    setProfiles(currentProfiles => {
-      const nextProfiles = normalizeProfiles(currentProfiles.filter(profile => profile.id !== profileId));
-      persistProfiles(nextProfiles);
-      return nextProfiles;
-    });
-    if (selectedProfileId === profileId) {
-      setSelectedProfileId(null);
-      resetQueueState();
-    }
-  }, [persistProfiles, resetQueueState, selectedProfileId]);
+  const {
+    deleteProfile,
+    hasLoadedSavedProfiles,
+    profiles,
+    selectedProfile,
+    selectedProfileId,
+    setSelectedProfileId,
+    upsertProfile,
+  } = useServerProfiles({ onDeleteSelected: resetQueueState });
+
+  const normalizedServerUrl = selectedProfile?.url ?? normalizeServerUrl(serverUrl);
+  const authSession = selectedProfile?.authSession ?? null;
+  const isAuthenticated = authSession ? !authSession.authRequired || authSession.authenticated : false;
+  const activeTrackId = activeTrack?.id ? String(activeTrack.id) : undefined;
+  const displayedActiveTrackId = activeTrackId ?? pendingTrackId ?? undefined;
+
 
   const loadServerContent = useCallback(async (profile: ServerProfile) => {
     setIsLoading(true);
@@ -230,7 +167,6 @@ function OceanWaveMobileApp() {
   const connectProfile = useCallback(async (profile: ServerProfile) => {
     setIsLoading(true);
     setSelectedProfileId(profile.id);
-    persistLastProfileId(profile.id);
     setMessage(`Connecting to ${profile.name}…`);
     try {
       const nextSession = await fetchAuthSession(profile.url, profile.sessionCookie);
@@ -253,7 +189,7 @@ function OceanWaveMobileApp() {
     } finally {
       setIsLoading(false);
     }
-  }, [loadServerContent, persistLastProfileId, resetQueueState, upsertProfile]);
+  }, [loadServerContent, resetQueueState, setSelectedProfileId, upsertProfile]);
 
   useEffect(() => {
     if (!hasLoadedSavedProfiles || didAutoConnectLastProfileRef.current || screen !== 'servers') return;
@@ -303,7 +239,7 @@ function OceanWaveMobileApp() {
     } finally {
       setIsLoading(false);
     }
-  }, [loadServerContent, password, selectedProfileId, serverName, serverUrl, upsertProfile]);
+  }, [loadServerContent, password, selectedProfileId, serverName, serverUrl, setSelectedProfileId, upsertProfile]);
 
   const openAddServer = useCallback(() => {
     setSelectedProfileId(null);
@@ -312,7 +248,7 @@ function OceanWaveMobileApp() {
     setPassword('');
     setScreen('addServer');
     setMessage('Add an Ocean Wave server.');
-  }, []);
+  }, [setSelectedProfileId]);
 
   const openWebApp = useCallback(async () => {
     if (!selectedProfile?.url) return;
@@ -420,7 +356,7 @@ function OceanWaveMobileApp() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [normalizedServerUrl, profiles, upsertProfile]);
+  }, [normalizedServerUrl, profiles, setSelectedProfileId, upsertProfile]);
 
   const handleDeepLinkUrl = useCallback((url: string | null) => {
     if (!url) return;
