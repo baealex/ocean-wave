@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GestureResponderEvent } from 'react-native';
 import {
-  ActivityIndicator,
   Alert,
   BackHandler,
   FlatList,
@@ -32,6 +31,7 @@ import {
   OceanWavePlaylist,
 } from './src/api/oceanWaveClient';
 import { brand } from './src/config/brand';
+import { AddServerScreen } from './src/components/AddServerScreen';
 import { MiniPlayer } from './src/components/MiniPlayer';
 import { ServerListScreen } from './src/components/ServerListScreen';
 import {
@@ -523,26 +523,18 @@ function OceanWaveMobileApp() {
 
 
   const renderAddServer = () => (
-    <View style={styles.fullPage}>
-      {renderNavBar('Add Server')}
-      <View style={styles.header}>
-        <Text style={styles.kicker}>SERVER</Text>
-        <Text style={styles.title}>Add your library</Text>
-        <Text style={styles.description}>Connect once. If the server needs a password, this app saves the authenticated session.</Text>
-      </View>
-      <View style={styles.card}>
-        <Text style={styles.label}>Name</Text>
-        <TextInput onChangeText={setServerName} placeholder="My Ocean Wave" placeholderTextColor="#71717a" style={styles.input} value={serverName} />
-        <Text style={styles.label}>Server URL</Text>
-        <TextInput autoCapitalize="none" autoCorrect={false} inputMode="url" onChangeText={setServerUrl} placeholder="http://192.168.0.10:44100" placeholderTextColor="#71717a" style={styles.input} value={serverUrl} />
-        <Text style={styles.label}>Password</Text>
-        <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setPassword} placeholder="Only if required" placeholderTextColor="#71717a" secureTextEntry style={styles.input} value={password} />
-        <Pressable disabled={isLoading} onPress={saveServer} style={styles.wideButton}>
-          {isLoading ? <ActivityIndicator color={brand.background} /> : <Text style={styles.wideButtonText}>Save and connect</Text>}
-        </Pressable>
-        <Text style={styles.status}>{message}</Text>
-      </View>
-    </View>
+    <AddServerScreen
+      header={renderNavBar('Add Server')}
+      isLoading={isLoading}
+      message={message}
+      onChangePassword={setPassword}
+      onChangeServerName={setServerName}
+      onChangeServerUrl={setServerUrl}
+      onSave={saveServer}
+      password={password}
+      serverName={serverName}
+      serverUrl={serverUrl}
+    />
   );
 
   const renderPlayer = () => (
@@ -655,12 +647,8 @@ function OceanWaveMobileApp() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: brand.background },
   container: { flex: 1, backgroundColor: brand.background },
-  fullPage: { flex: 1, gap: 18, padding: 20, backgroundColor: brand.background },
   playerPage: { flex: 1, gap: 12, paddingHorizontal: 16, paddingTop: 4, backgroundColor: brand.background },
-  header: { gap: 8, paddingTop: 10 },
-  title: { color: brand.text, fontSize: 32, fontWeight: '900', letterSpacing: -1.4 },
   kicker: { color: brand.primary, fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
-  description: { color: brand.muted, fontSize: 15, lineHeight: 22 },
   navBar: { flexDirection: 'row', alignItems: 'center', minHeight: 60, paddingHorizontal: 0, paddingTop: 4, paddingBottom: 4 },
   navIconButton: { alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: 24 },
   backIconFrame: { alignItems: 'center', justifyContent: 'center', width: 28, height: 28 },
@@ -668,13 +656,8 @@ const styles = StyleSheet.create({
   navTitle: { flex: 1, textAlign: 'center', color: brand.text, fontSize: 17, fontWeight: '800', paddingHorizontal: 8 },
   playerHeader: { gap: 4, paddingHorizontal: 2 },
   playerHeading: { color: brand.text, fontSize: 28, fontWeight: '900', letterSpacing: -1 },
-  card: { gap: 12, padding: 14, borderRadius: 22, backgroundColor: brand.surface, borderWidth: 1, borderColor: brand.border },
-  label: { color: brand.text, fontSize: 13, fontWeight: '800' },
-  input: { minHeight: 48, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#111113', borderWidth: 1, borderColor: brand.border, fontSize: 15 },
-  wideButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: brand.primary },
-  wideButtonText: { color: brand.background, fontSize: 14, fontWeight: '900' },
+  description: { color: brand.muted, fontSize: 15, lineHeight: 22 },
   disabledButton: { opacity: 0.42 },
-  status: { color: brand.muted, fontSize: 13, lineHeight: 19 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   playlistPanel: { gap: 8 },
   panelLabel: { color: brand.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
