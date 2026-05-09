@@ -6,7 +6,6 @@ import {
   FlatList,
   GestureResponderEvent,
   Linking,
-  NativeModules,
   Pressable,
   ScrollView,
   StatusBar,
@@ -29,37 +28,27 @@ import {
   fetchMobilePlaylists,
   loginWithPassword,
   normalizeServerUrl,
-  OceanWaveAuthSession,
   OceanWaveMusic,
   OceanWavePlaylist,
 } from './src/api/oceanWaveClient';
 import { brand } from './src/config/brand';
+import {
+  createProfile,
+  DEMO_SERVER_URL,
+  getBuiltInProfiles,
+  getBundlerServerUrl,
+  LAST_PROFILE_ID_STORAGE_KEY,
+  normalizeProfiles,
+  readProfilesPayload,
+  ServerProfile,
+  SERVER_PROFILES_STORAGE_KEY,
+} from './src/app/serverProfiles';
 import { parseOceanWaveDeepLink, type OceanWaveDeepLinkRequest } from './src/deeplink/oceanWaveDeepLink';
 import { getStoredString, setStoredString } from './src/storage/nativeKeyValue';
 import { playLibraryFrom, prepareTrackPlayer } from './src/player/trackPlayer';
-
-const DEFAULT_SERVER_PORT = '44100';
-const DEMO_SERVER_URL = 'https://demo-ocean-wave.baejino.com';
-const SERVER_PROFILES_STORAGE_KEY = 'ocean-wave.serverProfiles.v1';
-const LAST_PROFILE_ID_STORAGE_KEY = 'ocean-wave.lastProfileId.v1';
+import { formatDuration } from './src/utils/time';
 
 type Screen = 'servers' | 'addServer' | 'player';
-
-type ServerProfile = {
-  id: string;
-  name: string;
-  url: string;
-  sessionCookie?: string | null;
-  authSession?: OceanWaveAuthSession | null;
-  isDemo?: boolean;
-};
-
-function formatDuration(duration?: number | null) {
-  if (!duration) return '--:--';
-  const minutes = Math.floor(duration / 60);
-  const seconds = Math.floor(duration % 60).toString().padStart(2, '0');
-  return `${minutes}:${seconds}`;
-}
 
 function getPlaybackStateValue(playbackState: ReturnType<typeof usePlaybackState>) {
   return 'state' in playbackState ? playbackState.state : playbackState;
@@ -67,73 +56,6 @@ function getPlaybackStateValue(playbackState: ReturnType<typeof usePlaybackState
 
 function isSameTrack(item: OceanWaveMusic, activeTrackId?: string) {
   return activeTrackId === String(item.id);
-}
-
-function getBundlerServerUrl() {
-  const scriptUrl = NativeModules.SourceCode?.scriptURL;
-  if (typeof scriptUrl !== 'string') return '';
-
-  const host = scriptUrl.match(/^[a-z]+:\/\/([^:/]+)/i)?.[1];
-  return host ? `http://${host}:${DEFAULT_SERVER_PORT}` : '';
-}
-
-function createProfile(name: string, url: string, partial: Partial<ServerProfile> = {}): ServerProfile {
-  return {
-    id: partial.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    name: name.trim() || 'Ocean Wave Server',
-    url: normalizeServerUrl(url),
-    sessionCookie: partial.sessionCookie ?? null,
-    authSession: partial.authSession ?? null,
-    isDemo: partial.isDemo,
-  };
-}
-
-function getBuiltInProfiles() {
-  const localDemoUrl = getBundlerServerUrl();
-  const profiles = [createProfile('Demo Ocean Wave', DEMO_SERVER_URL, { id: 'demo-ocean-wave', isDemo: true })];
-  if (localDemoUrl && localDemoUrl !== DEMO_SERVER_URL) {
-    profiles.push(createProfile('Local Demo', localDemoUrl, { id: 'local-demo', isDemo: true }));
-  }
-  return profiles;
-}
-
-function normalizeProfiles(profiles: ServerProfile[]) {
-  const builtIns = getBuiltInProfiles();
-  const byId = new Map<string, ServerProfile>();
-
-  for (const profile of builtIns) {
-    byId.set(profile.id, profile);
-  }
-
-  for (const profile of profiles) {
-    if (!profile?.id || !profile.url) continue;
-    if (profile.isDemo) continue;
-    byId.set(profile.id, {
-      id: profile.id,
-      name: profile.name?.trim() || 'Ocean Wave Server',
-      url: normalizeServerUrl(profile.url),
-      sessionCookie: profile.sessionCookie ?? null,
-      authSession: profile.authSession ?? null,
-      isDemo: false,
-    });
-  }
-
-  return Array.from(byId.values());
-}
-
-function readProfilesPayload(payload: string | null) {
-  if (!payload) return getBuiltInProfiles();
-
-  try {
-    const parsed = JSON.parse(payload) as ServerProfile[];
-    return normalizeProfiles(Array.isArray(parsed) ? parsed : []);
-  } catch {
-    return getBuiltInProfiles();
-  }
-}
-
-function getInitialProfiles() {
-  return getBuiltInProfiles();
 }
 
 function OceanWaveMobileApp() {
@@ -146,7 +68,7 @@ function OceanWaveMobileApp() {
   const [progressWidth, setProgressWidth] = useState(1);
 
   const [screen, setScreen] = useState<Screen>('servers');
-  const [profiles, setProfiles] = useState<ServerProfile[]>(getInitialProfiles);
+  const [profiles, setProfiles] = useState<ServerProfile[]>(getBuiltInProfiles);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [serverName, setServerName] = useState('');
   const [serverUrl, setServerUrl] = useState(() => getBundlerServerUrl() || DEMO_SERVER_URL);
