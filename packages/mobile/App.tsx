@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { GestureResponderEvent } from 'react-native';
 import {
   Alert,
   BackHandler,
@@ -9,12 +8,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import TrackPlayer, {
-  State,
-  useActiveTrack,
-  usePlaybackState,
-  useProgress,
-} from 'react-native-track-player';
 import {
   fetchAuthSession,
   fetchMobileMusic,
@@ -44,22 +37,23 @@ import {
 import { parseOceanWaveDeepLink, type OceanWaveDeepLinkRequest } from './src/deeplink/oceanWaveDeepLink';
 import { getStoredString, setStoredString } from './src/storage/nativeKeyValue';
 import { playLibraryFrom, prepareTrackPlayer } from './src/player/trackPlayer';
+import { useTrackPlaybackControls } from './src/hooks/useTrackPlaybackControls';
 
 type Screen = 'servers' | 'addServer' | 'player';
 
-function getPlaybackStateValue(playbackState: ReturnType<typeof usePlaybackState>) {
-  return 'state' in playbackState ? playbackState.state : playbackState;
-}
-
 
 function OceanWaveMobileApp() {
-  const playbackState = usePlaybackState();
-  const playbackValue = getPlaybackStateValue(playbackState);
-  const activeTrack = useActiveTrack();
-  const progress = useProgress(500);
-  const isPlaying = playbackValue === State.Playing;
-  const canControlPlayback = Boolean(activeTrack);
-  const [progressWidth, setProgressWidth] = useState(1);
+  const {
+    activeTrack,
+    canControlPlayback,
+    isPlaying,
+    progressRatio,
+    seekToTouch,
+    setProgressWidth,
+    skipNext,
+    skipPrevious,
+    togglePlayback,
+  } = useTrackPlaybackControls();
 
   const [screen, setScreen] = useState<Screen>('servers');
   const [profiles, setProfiles] = useState<ServerProfile[]>(getBuiltInProfiles);
@@ -87,8 +81,6 @@ function OceanWaveMobileApp() {
   const isAuthenticated = authSession ? !authSession.authRequired || authSession.authenticated : false;
   const activeTrackId = activeTrack?.id ? String(activeTrack.id) : undefined;
   const displayedActiveTrackId = activeTrackId ?? pendingTrackId ?? undefined;
-  const progressDuration = progress.duration || activeTrack?.duration || 0;
-  const progressRatio = progressDuration > 0 ? Math.min(progress.position / progressDuration, 1) : 0;
 
   const visibleLibrary = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -454,32 +446,6 @@ function OceanWaveMobileApp() {
     if (!pendingDeepLink) return;
     runDeepLink(pendingDeepLink).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
   }, [pendingDeepLink, runDeepLink]);
-
-  const togglePlayback = useCallback(async () => {
-    if (!canControlPlayback) return;
-    if (isPlaying) {
-      await TrackPlayer.pause();
-      return;
-    }
-    await TrackPlayer.play();
-  }, [canControlPlayback, isPlaying]);
-
-  const skipPrevious = useCallback(async () => {
-    if (!canControlPlayback) return;
-    await TrackPlayer.skipToPrevious().catch(() => TrackPlayer.seekTo(0));
-  }, [canControlPlayback]);
-
-  const skipNext = useCallback(async () => {
-    if (!canControlPlayback) return;
-    await TrackPlayer.skipToNext().catch(() => undefined);
-  }, [canControlPlayback]);
-
-  const seekToTouch = useCallback(async (event: GestureResponderEvent) => {
-    if (!canControlPlayback || !progressDuration) return;
-    const ratio = Math.max(0, Math.min(event.nativeEvent.locationX / progressWidth, 1));
-    await TrackPlayer.seekTo(ratio * progressDuration);
-  }, [canControlPlayback, progressDuration, progressWidth]);
-
 
   const playSelectedPlaylist = useCallback(() => {
     if (!visibleLibrary.length) return;
