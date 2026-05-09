@@ -9,7 +9,6 @@ import * as Icon from '~/icon';
 import { panel } from '~/modules/panel';
 import { toast } from '~/modules/toast';
 import { makePlayTime } from '~/modules/time';
-import { openMobilePlayLink } from '~/modules/mobile-deeplink';
 import { MusicListener, PlaylistListener } from '~/socket';
 
 import { musicStore } from '~/store/music';
@@ -86,16 +85,6 @@ export default function MusicActionPanelContent({
                     icon: <Icon.Play />,
                     text: 'Add to Queue',
                     onClick: () => queueStore.add(music.id)
-                },
-                {
-                    icon: <Icon.Smartphone />,
-                    text: 'Play in Android app',
-                    onClick: () => {
-                        openMobilePlayLink('music', music.id, {
-                            onFallback: () => toast('Android app이 열리지 않으면 웹 큐로 계속 재생할 수 있어요.')
-                        });
-                        panel.close();
-                    }
                 },
                 {
                     icon: <Icon.List />,

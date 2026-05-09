@@ -2,34 +2,32 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   FlatList,
   GestureResponderEvent,
   Linking,
+  NativeModules,
   Pressable,
-  SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import TrackPlayer, {
-  Event,
   State,
   useActiveTrack,
   usePlaybackState,
   useProgress,
-  useTrackPlayerEvents,
 } from 'react-native-track-player';
-
 import {
   fetchAuthSession,
-  fetchMobileLibrary,
   fetchMobileMusic,
   fetchMobilePlaylist,
   fetchMobilePlaylists,
   loginWithPassword,
-  logoutSession,
   normalizeServerUrl,
   OceanWaveAuthSession,
   OceanWaveMusic,
@@ -37,10 +35,24 @@ import {
 } from './src/api/oceanWaveClient';
 import { brand } from './src/config/brand';
 import { parseOceanWaveDeepLink, type OceanWaveDeepLinkRequest } from './src/deeplink/oceanWaveDeepLink';
+import { getStoredString, setStoredString } from './src/storage/nativeKeyValue';
 import { playLibraryFrom, prepareTrackPlayer } from './src/player/trackPlayer';
 
-const SEEK_STEP_SECONDS = 15;
-type BrowseFilter = 'all' | 'favorites' | 'recent';
+const DEFAULT_SERVER_PORT = '44100';
+const DEMO_SERVER_URL = 'https://demo-ocean-wave.baejino.com';
+const SERVER_PROFILES_STORAGE_KEY = 'ocean-wave.serverProfiles.v1';
+const LAST_PROFILE_ID_STORAGE_KEY = 'ocean-wave.lastProfileId.v1';
+
+type Screen = 'servers' | 'addServer' | 'player';
+
+type ServerProfile = {
+  id: string;
+  name: string;
+  url: string;
+  sessionCookie?: string | null;
+  authSession?: OceanWaveAuthSession | null;
+  isDemo?: boolean;
+};
 
 function formatDuration(duration?: number | null) {
   if (!duration) return '--:--';
@@ -57,298 +69,457 @@ function isSameTrack(item: OceanWaveMusic, activeTrackId?: string) {
   return activeTrackId === String(item.id);
 }
 
-function App() {
+function getBundlerServerUrl() {
+  const scriptUrl = NativeModules.SourceCode?.scriptURL;
+  if (typeof scriptUrl !== 'string') return '';
+
+  const host = scriptUrl.match(/^[a-z]+:\/\/([^:/]+)/i)?.[1];
+  return host ? `http://${host}:${DEFAULT_SERVER_PORT}` : '';
+}
+
+function createProfile(name: string, url: string, partial: Partial<ServerProfile> = {}): ServerProfile {
+  return {
+    id: partial.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    name: name.trim() || 'Ocean Wave Server',
+    url: normalizeServerUrl(url),
+    sessionCookie: partial.sessionCookie ?? null,
+    authSession: partial.authSession ?? null,
+    isDemo: partial.isDemo,
+  };
+}
+
+function getBuiltInProfiles() {
+  const localDemoUrl = getBundlerServerUrl();
+  const profiles = [createProfile('Demo Ocean Wave', DEMO_SERVER_URL, { id: 'demo-ocean-wave', isDemo: true })];
+  if (localDemoUrl && localDemoUrl !== DEMO_SERVER_URL) {
+    profiles.push(createProfile('Local Demo', localDemoUrl, { id: 'local-demo', isDemo: true }));
+  }
+  return profiles;
+}
+
+function normalizeProfiles(profiles: ServerProfile[]) {
+  const builtIns = getBuiltInProfiles();
+  const byId = new Map<string, ServerProfile>();
+
+  for (const profile of builtIns) {
+    byId.set(profile.id, profile);
+  }
+
+  for (const profile of profiles) {
+    if (!profile?.id || !profile.url) continue;
+    if (profile.isDemo) continue;
+    byId.set(profile.id, {
+      id: profile.id,
+      name: profile.name?.trim() || 'Ocean Wave Server',
+      url: normalizeServerUrl(profile.url),
+      sessionCookie: profile.sessionCookie ?? null,
+      authSession: profile.authSession ?? null,
+      isDemo: false,
+    });
+  }
+
+  return Array.from(byId.values());
+}
+
+function readProfilesPayload(payload: string | null) {
+  if (!payload) return getBuiltInProfiles();
+
+  try {
+    const parsed = JSON.parse(payload) as ServerProfile[];
+    return normalizeProfiles(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return getBuiltInProfiles();
+  }
+}
+
+function getInitialProfiles() {
+  return getBuiltInProfiles();
+}
+
+function OceanWaveMobileApp() {
   const playbackState = usePlaybackState();
   const playbackValue = getPlaybackStateValue(playbackState);
   const activeTrack = useActiveTrack();
   const progress = useProgress(500);
-  const [progressWidth, setProgressWidth] = useState(1);
   const isPlaying = playbackValue === State.Playing;
   const canControlPlayback = Boolean(activeTrack);
-  const [serverUrl, setServerUrl] = useState('');
+  const [progressWidth, setProgressWidth] = useState(1);
+
+  const [screen, setScreen] = useState<Screen>('servers');
+  const [profiles, setProfiles] = useState<ServerProfile[]>(getInitialProfiles);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [serverName, setServerName] = useState('');
+  const [serverUrl, setServerUrl] = useState(() => getBundlerServerUrl() || DEMO_SERVER_URL);
   const [password, setPassword] = useState('');
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [browseFilter, setBrowseFilter] = useState<BrowseFilter>('all');
-  const [sessionCookie, setSessionCookie] = useState<string | null>(null);
-  const [authSession, setAuthSession] = useState<OceanWaveAuthSession | null>(null);
   const [library, setLibrary] = useState<OceanWaveMusic[]>([]);
   const [playlists, setPlaylists] = useState<OceanWavePlaylist[]>([]);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<number | null>(null);
   const [selectedPlaylistName, setSelectedPlaylistName] = useState<string | null>(null);
   const [pendingDeepLink, setPendingDeepLink] = useState<OceanWaveDeepLinkRequest | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState('서버 연결을 확인한 뒤 백그라운드 재생 테스트를 시작할 수 있어요.');
+  const [hasLoadedSavedProfiles, setHasLoadedSavedProfiles] = useState(false);
+  const [message, setMessage] = useState('Choose a server to start listening.');
+  const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
 
-  const normalizedServerUrl = useMemo(() => normalizeServerUrl(serverUrl), [serverUrl]);
-  const previousServerUrlRef = useRef<string | null>(null);
   const handleDeepLinkUrlRef = useRef<(url: string | null) => void>(() => undefined);
+  const didAutoConnectLastProfileRef = useRef(false);
+  const selectedProfile = useMemo(() => profiles.find(profile => profile.id === selectedProfileId) ?? null, [profiles, selectedProfileId]);
+  const normalizedServerUrl = selectedProfile?.url ?? normalizeServerUrl(serverUrl);
+  const authSession = selectedProfile?.authSession ?? null;
   const isAuthenticated = authSession ? !authSession.authRequired || authSession.authenticated : false;
   const activeTrackId = activeTrack?.id ? String(activeTrack.id) : undefined;
-  const visibleLibrary = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-    const filteredByMode = browseFilter === 'favorites'
-      ? library.filter(item => item.isLiked)
-      : browseFilter === 'recent'
-        ? [...library].sort((first, second) => Number(new Date(second.createdAt ?? 0)) - Number(new Date(first.createdAt ?? 0))).slice(0, 50)
-        : library;
-
-    if (!normalizedQuery) return filteredByMode;
-
-    return filteredByMode.filter(item => [item.name, item.artist?.name, item.album?.name]
-      .filter(Boolean)
-      .some(value => value?.toLowerCase().includes(normalizedQuery)));
-  }, [browseFilter, library, searchQuery]);
-  const queueLabel = library.length ? `${visibleLibrary.length.toLocaleString()} of ${library.length.toLocaleString()} tracks` : 'Build a queue from this server';
+  const displayedActiveTrackId = activeTrackId ?? pendingTrackId ?? undefined;
   const progressDuration = progress.duration || activeTrack?.duration || 0;
   const progressRatio = progressDuration > 0 ? Math.min(progress.position / progressDuration, 1) : 0;
 
-  useEffect(() => {
-    if (previousServerUrlRef.current === null) {
-      previousServerUrlRef.current = normalizedServerUrl;
-      return;
-    }
+  const visibleLibrary = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return library;
 
-    previousServerUrlRef.current = normalizedServerUrl;
-    setAuthSession(null);
-    setSessionCookie(null);
-    setLibrary([]);
-    setPlaylists([]);
-    setSelectedPlaylistName(null);
-    setSearchQuery('');
-    setBrowseFilter('all');
-    TrackPlayer.reset().catch(error => setMessage(error instanceof Error ? error.message : String(error)));
-  }, [normalizedServerUrl]);
+    return library.filter(item => [item.name, item.artist?.name, item.album?.name]
+      .filter(Boolean)
+      .some(value => value?.toLowerCase().includes(normalizedQuery)));
+  }, [library, searchQuery]);
 
-  useEffect(() => {
-    prepareTrackPlayer().catch(error => setMessage(error instanceof Error ? error.message : String(error)));
+  const queueLabel = selectedPlaylistName
+    ? (library.length ? `${library.length.toLocaleString()} tracks · plays in order` : 'This playlist is empty')
+    : (playlists.length ? `${playlists.length.toLocaleString()} playlists available` : 'No playlists yet');
+
+  const persistProfiles = useCallback((nextProfiles: ServerProfile[]) => {
+    setStoredString(SERVER_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles.filter(profile => !profile.isDemo))).catch(() => undefined);
   }, []);
 
-  useTrackPlayerEvents([Event.PlaybackError], event => {
-    setMessage(`오디오 스트림을 재생할 수 없습니다. 서버 연결이나 인증 상태를 확인해 주세요. (${event.message})`);
-  });
+  const persistLastProfileId = useCallback((profileId: string | null) => {
+    if (!profileId) return;
+    setStoredString(LAST_PROFILE_ID_STORAGE_KEY, profileId).catch(() => undefined);
+  }, []);
 
-  const requireServerUrl = useCallback(() => {
-    if (normalizedServerUrl) return true;
-    Alert.alert('서버 주소 필요', '예: http://192.168.0.10:3000');
-    return false;
-  }, [normalizedServerUrl]);
+  useEffect(() => {
+    let isMounted = true;
 
-  const checkSession = useCallback(async () => {
-    if (!requireServerUrl()) return;
+    Promise.all([
+      getStoredString(SERVER_PROFILES_STORAGE_KEY),
+      getStoredString(LAST_PROFILE_ID_STORAGE_KEY),
+    ])
+      .then(([profilesPayload, lastProfileId]) => {
+        if (!isMounted) return;
+        const nextProfiles = readProfilesPayload(profilesPayload);
+        setProfiles(nextProfiles);
+        if (lastProfileId && nextProfiles.some(profile => profile.id === lastProfileId)) {
+          setSelectedProfileId(lastProfileId);
+        }
+        setHasLoadedSavedProfiles(true);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setProfiles(getBuiltInProfiles());
+        setHasLoadedSavedProfiles(true);
+      });
 
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedSavedProfiles) return;
+    persistProfiles(profiles);
+  }, [hasLoadedSavedProfiles, persistProfiles, profiles]);
+
+  const upsertProfile = useCallback(async (profile: ServerProfile) => {
+    const normalizedProfile = { ...profile, url: normalizeServerUrl(profile.url) };
+    setProfiles(currentProfiles => {
+      const nextProfiles = normalizeProfiles(currentProfiles.some(item => item.id === normalizedProfile.id)
+        ? currentProfiles.map(item => item.id === normalizedProfile.id ? normalizedProfile : item)
+        : [normalizedProfile, ...currentProfiles]);
+      persistProfiles(nextProfiles);
+      persistLastProfileId(normalizedProfile.id);
+      return nextProfiles;
+    });
+    return normalizedProfile;
+  }, [persistLastProfileId, persistProfiles]);
+
+  const resetQueueState = useCallback(() => {
+    setLibrary([]);
+    setPlaylists([]);
+    setSelectedPlaylistId(null);
+    setSelectedPlaylistName(null);
+    setSearchQuery('');
+  }, []);
+
+  const deleteProfile = useCallback((profileId: string) => {
+    setProfiles(currentProfiles => {
+      const nextProfiles = normalizeProfiles(currentProfiles.filter(profile => profile.id !== profileId));
+      persistProfiles(nextProfiles);
+      return nextProfiles;
+    });
+    if (selectedProfileId === profileId) {
+      setSelectedProfileId(null);
+      resetQueueState();
+    }
+  }, [persistProfiles, resetQueueState, selectedProfileId]);
+
+  const loadServerContent = useCallback(async (profile: ServerProfile) => {
     setIsLoading(true);
+    setMessage('Loading playlists…');
     try {
-      const nextSession = await fetchAuthSession(normalizedServerUrl, sessionCookie);
-      setAuthSession(nextSession);
-      setMessage(nextSession.authRequired
-        ? nextSession.authenticated
-          ? '인증된 서버 세션입니다.'
-          : '비밀번호 인증이 필요한 서버입니다.'
-        : '인증 없이 사용할 수 있는 서버입니다.');
-    } catch (error) {
-      setAuthSession(null);
-      setSessionCookie(null);
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [normalizedServerUrl, requireServerUrl, sessionCookie]);
+      const nextPlaylists = await fetchMobilePlaylists(profile.url, profile.sessionCookie).catch(() => []);
+      const focusedPlaylist = nextPlaylists.find(playlist => playlist.id === selectedPlaylistId) ?? nextPlaylists[0];
 
-  const login = useCallback(async () => {
-    if (!requireServerUrl()) return;
-    if (!password.trim()) {
-      Alert.alert('비밀번호 필요', '서버 비밀번호를 입력해 주세요.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const result = await loginWithPassword(normalizedServerUrl, password);
-      setAuthSession(result.session);
-      setSessionCookie(result.sessionCookie);
-      setPassword('');
-      setMessage('로그인 완료. 이제 라이브러리를 불러올 수 있어요.');
-    } catch (error) {
-      setSessionCookie(null);
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [normalizedServerUrl, password, requireServerUrl]);
-
-  const logout = useCallback(async () => {
-    if (!requireServerUrl()) return;
-
-    setIsLoading(true);
-    try {
-      const nextSession = await logoutSession(normalizedServerUrl, sessionCookie);
-      setAuthSession(nextSession);
-      setSessionCookie(null);
-      setLibrary([]);
-      setPlaylists([]);
-      setSelectedPlaylistName(null);
-      setSearchQuery('');
-      setBrowseFilter('all');
-      await TrackPlayer.reset();
-      setMessage('로그아웃 완료. 모바일 세션을 비웠어요.');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [normalizedServerUrl, requireServerUrl, sessionCookie]);
-
-  const openWebApp = useCallback(async () => {
-    if (!requireServerUrl()) return;
-
-    try {
-      await Linking.openURL(normalizedServerUrl);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    }
-  }, [normalizedServerUrl, requireServerUrl]);
-
-  const loadLibrary = useCallback(async () => {
-    if (!requireServerUrl()) return;
-    if (!isAuthenticated) {
-      Alert.alert('인증 필요', '먼저 서버 연결 상태를 확인하고 로그인해 주세요.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const nextLibrary = await fetchMobileLibrary(normalizedServerUrl, sessionCookie);
-      setSelectedPlaylistName(null);
-      setLibrary(nextLibrary);
-      setMessage(`${nextLibrary.length.toLocaleString()}곡을 불러왔어요.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isAuthenticated, normalizedServerUrl, requireServerUrl, sessionCookie]);
-
-  const loadPlaylists = useCallback(async () => {
-    if (!requireServerUrl()) return;
-    if (!isAuthenticated) {
-      Alert.alert('인증 필요', '먼저 서버 연결 상태를 확인하고 로그인해 주세요.');
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const nextPlaylists = await fetchMobilePlaylists(normalizedServerUrl, sessionCookie);
       setPlaylists(nextPlaylists);
-      setMessage(`${nextPlaylists.length.toLocaleString()}개 플레이리스트를 불러왔어요.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isAuthenticated, normalizedServerUrl, requireServerUrl, sessionCookie]);
-
-  const openPlaylist = useCallback(async (playlistId: number) => {
-    if (!requireServerUrl()) return;
-    if (!isAuthenticated) return;
-
-    setIsLoading(true);
-    try {
-      const playlist = await fetchMobilePlaylist(normalizedServerUrl, playlistId, sessionCookie);
-      const nextMusics = playlist?.musics ?? [];
-      setSelectedPlaylistName(playlist?.name ?? null);
-      setLibrary(nextMusics);
       setSearchQuery('');
-      setBrowseFilter('all');
-      setMessage(playlist ? `${playlist.name} 큐를 만들었어요.` : '플레이리스트를 찾을 수 없습니다.');
+      setScreen('player');
+      prepareTrackPlayer().catch(() => undefined);
+
+      if (!focusedPlaylist) {
+        setLibrary([]);
+        setSelectedPlaylistId(null);
+        setSelectedPlaylistName(null);
+        setMessage('No playlists yet. Create one in the web app first.');
+        return;
+      }
+
+      const playlist = await fetchMobilePlaylist(profile.url, focusedPlaylist.id, profile.sessionCookie);
+      const nextMusics = playlist?.musics ?? [];
+      setLibrary(nextMusics);
+      setSelectedPlaylistId(focusedPlaylist.id);
+      setSelectedPlaylistName(playlist?.name ?? focusedPlaylist.name);
+      setMessage(`${playlist?.name ?? focusedPlaylist.name} ready.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, normalizedServerUrl, requireServerUrl, sessionCookie]);
+  }, [selectedPlaylistId]);
 
-  const playTrack = useCallback(
-    async (index: number) => {
-      if (!visibleLibrary.length) return;
-      try {
-        await playLibraryFrom(normalizedServerUrl, visibleLibrary, index, sessionCookie);
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : String(error));
+  const handleMobileBack = useCallback(() => {
+    if (screen === 'addServer') {
+      setScreen('servers');
+      return true;
+    }
+
+    if (screen === 'player') {
+      if (searchQuery.trim()) {
+        setSearchQuery('');
+        return true;
       }
-    },
-    [normalizedServerUrl, sessionCookie, visibleLibrary],
-  );
 
-  const runDeepLink = useCallback(async (request: OceanWaveDeepLinkRequest) => {
-    setPendingDeepLink(null);
+
+      setScreen('servers');
+      return true;
+    }
+
+    return false;
+  }, [screen, searchQuery]);
+
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', handleMobileBack);
+    return () => subscription.remove();
+  }, [handleMobileBack]);
+
+  const connectProfile = useCallback(async (profile: ServerProfile) => {
     setIsLoading(true);
-
+    setSelectedProfileId(profile.id);
+    persistLastProfileId(profile.id);
+    setMessage(`Connecting to ${profile.name}…`);
     try {
-      if (request.target === 'music') {
-        const music = await fetchMobileMusic(normalizedServerUrl, request.id, sessionCookie);
-        if (!music) {
-          setMessage('요청한 음악을 찾을 수 없습니다.');
+      const nextSession = await fetchAuthSession(profile.url, profile.sessionCookie);
+      const nextProfile = await upsertProfile({ ...profile, authSession: nextSession });
+      setSelectedProfileId(nextProfile.id);
+
+      if (nextSession.authRequired && !nextSession.authenticated) {
+        setServerName(nextProfile.name);
+        setServerUrl(nextProfile.url);
+        setPassword('');
+        resetQueueState();
+        setScreen('addServer');
+        setMessage('Password required. Sign in once to save this server.');
+        return;
+      }
+
+      await loadServerContent(nextProfile);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadServerContent, persistLastProfileId, resetQueueState, upsertProfile]);
+
+  useEffect(() => {
+    if (!hasLoadedSavedProfiles || didAutoConnectLastProfileRef.current || screen !== 'servers') return;
+    if (!selectedProfileId) return;
+
+    const lastProfile = profiles.find(profile => profile.id === selectedProfileId);
+    if (!lastProfile) return;
+
+    didAutoConnectLastProfileRef.current = true;
+    connectProfile(lastProfile).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
+  }, [connectProfile, hasLoadedSavedProfiles, profiles, screen, selectedProfileId]);
+
+  const saveServer = useCallback(async () => {
+    const normalizedUrl = normalizeServerUrl(serverUrl);
+    if (!normalizedUrl) {
+      Alert.alert('Server URL required', `Example: ${getBundlerServerUrl() || DEMO_SERVER_URL}`);
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage('Checking server…');
+    try {
+      let nextProfile = createProfile(serverName, normalizedUrl, { id: selectedProfileId ?? undefined });
+      const session = await fetchAuthSession(normalizedUrl, null);
+
+      if (session.authRequired && !session.authenticated) {
+        if (!password.trim()) {
+          nextProfile = { ...nextProfile, authSession: session };
+          await upsertProfile(nextProfile);
+          setSelectedProfileId(nextProfile.id);
+          setMessage('Password required.');
           return;
         }
 
-        setSelectedPlaylistName(null);
-        setSearchQuery('');
-        setBrowseFilter('all');
-        setLibrary([music]);
-        await playLibraryFrom(normalizedServerUrl, [music], 0, sessionCookie);
-        setMessage(`${music.name} 재생을 시작했어요.`);
-        return;
+        const result = await loginWithPassword(normalizedUrl, password);
+        nextProfile = { ...nextProfile, sessionCookie: result.sessionCookie, authSession: result.session };
+      } else {
+        nextProfile = { ...nextProfile, authSession: session };
       }
 
-      const playlist = await fetchMobilePlaylist(normalizedServerUrl, request.id, sessionCookie);
-      const nextMusics = playlist?.musics ?? [];
-      if (!playlist || nextMusics.length === 0) {
-        setMessage('요청한 플레이리스트를 찾을 수 없거나 비어 있습니다.');
-        return;
-      }
-
-      setSelectedPlaylistName(playlist.name);
-      setSearchQuery('');
-      setBrowseFilter('all');
-      setLibrary(nextMusics);
-      await playLibraryFrom(normalizedServerUrl, nextMusics, 0, sessionCookie);
-      setMessage(`${playlist.name} 플레이리스트 재생을 시작했어요.`);
+      await upsertProfile(nextProfile);
+      setSelectedProfileId(nextProfile.id);
+      setPassword('');
+      await loadServerContent(nextProfile);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setIsLoading(false);
     }
-  }, [normalizedServerUrl, sessionCookie]);
+  }, [loadServerContent, password, selectedProfileId, serverName, serverUrl, upsertProfile]);
+
+  const openAddServer = useCallback(() => {
+    setSelectedProfileId(null);
+    setServerName('');
+    setServerUrl(getBundlerServerUrl() || DEMO_SERVER_URL);
+    setPassword('');
+    setScreen('addServer');
+    setMessage('Add an Ocean Wave server.');
+  }, []);
+
+  const openWebApp = useCallback(async () => {
+    if (!selectedProfile?.url) return;
+    try {
+      await Linking.openURL(selectedProfile.url);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [selectedProfile]);
+
+  const openPlaylistCreator = useCallback(() => {
+    if (!selectedProfile?.url) return;
+    Alert.alert(
+      'Open web app?',
+      'Playlist creation opens in the web app.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Open web', onPress: openWebApp },
+      ],
+    );
+  }, [openWebApp, selectedProfile]);
+
+  const openPlaylist = useCallback(async (playlistId: number) => {
+    if (!selectedProfile || !isAuthenticated) return;
+
+    setIsLoading(true);
+    try {
+      const playlist = await fetchMobilePlaylist(selectedProfile.url, playlistId, selectedProfile.sessionCookie);
+      const nextMusics = playlist?.musics ?? [];
+      setSelectedPlaylistId(playlist?.id ?? playlistId);
+      setSelectedPlaylistName(playlist?.name ?? null);
+      setLibrary(nextMusics);
+      setSearchQuery('');
+        setMessage(playlist ? `${playlist.name} is now your queue.` : 'Playlist not found.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, selectedProfile]);
+
+  const playTrack = useCallback(async (index: number) => {
+    if (!selectedProfile || !visibleLibrary.length) return;
+    const selectedMusic = visibleLibrary[index];
+    if (!selectedMusic) return;
+    setPendingTrackId(String(selectedMusic.id));
+    setMessage(`Starting ${selectedMusic.name}…`);
+    try {
+      await playLibraryFrom(selectedProfile.url, visibleLibrary, index, selectedProfile.sessionCookie);
+      setMessage(`Playing ${selectedMusic.name}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPendingTrackId(null);
+    }
+  }, [selectedProfile, visibleLibrary]);
+
+  const runDeepLink = useCallback(async (request: OceanWaveDeepLinkRequest) => {
+    setPendingDeepLink(null);
+    const requestServerUrl = normalizeServerUrl(request.serverUrl ?? normalizedServerUrl);
+    const profile = profiles.find(item => item.url === requestServerUrl) ?? createProfile('Shared Server', requestServerUrl);
+    const savedProfile = await upsertProfile(profile);
+    setSelectedProfileId(savedProfile.id);
+
+    try {
+      const session = await fetchAuthSession(savedProfile.url, savedProfile.sessionCookie);
+      const authedProfile = await upsertProfile({ ...savedProfile, authSession: session });
+      if (session.authRequired && !session.authenticated) {
+        setServerName(authedProfile.name);
+        setServerUrl(authedProfile.url);
+        setScreen('addServer');
+        setMessage('Password required for this shared server.');
+        return;
+      }
+
+      if (request.target === 'music') {
+        const music = await fetchMobileMusic(authedProfile.url, request.id, authedProfile.sessionCookie);
+        if (!music) {
+          setMessage('Requested track not found.');
+          return;
+        }
+        setLibrary([music]);
+        setPlaylists([]);
+        setSelectedPlaylistId(null);
+        setSelectedPlaylistName(null);
+        setScreen('player');
+        await playLibraryFrom(authedProfile.url, [music], 0, authedProfile.sessionCookie);
+        setMessage(`${music.name} playback started.`);
+        return;
+      }
+
+      const playlist = await fetchMobilePlaylist(authedProfile.url, request.id, authedProfile.sessionCookie);
+      const nextMusics = playlist?.musics ?? [];
+      if (!playlist || nextMusics.length === 0) {
+        setMessage('Requested playlist was not found or is empty.');
+        return;
+      }
+
+      setLibrary(nextMusics);
+      setSelectedPlaylistId(playlist.id);
+      setSelectedPlaylistName(playlist.name);
+      setScreen('player');
+      await playLibraryFrom(authedProfile.url, nextMusics, 0, authedProfile.sessionCookie);
+      setMessage(`${playlist.name} playlist playback started.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [normalizedServerUrl, profiles, upsertProfile]);
 
   const handleDeepLinkUrl = useCallback((url: string | null) => {
     if (!url) return;
-
     const request = parseOceanWaveDeepLink(url);
     if (!request) return;
-
     setPendingDeepLink(request);
-
-    if (request.serverUrl && request.serverUrl !== normalizedServerUrl) {
-      setAuthSession(null);
-      setSessionCookie(null);
-      setLibrary([]);
-      setPlaylists([]);
-      setSelectedPlaylistName(null);
-      setSearchQuery('');
-      setBrowseFilter('all');
-      setServerUrl(request.serverUrl);
-      setMessage('앱 재생 요청을 받았어요. 서버 연결을 확인하는 중입니다.');
-      return;
-    }
-
-    if (!normalizedServerUrl) {
-      setMessage('앱 재생 요청을 받았어요. 먼저 서버 주소를 입력해 주세요.');
-      return;
-    }
-
-    if (!isAuthenticated) {
-      setMessage('앱 재생 요청을 받았어요. 서버 인증을 확인해 주세요.');
-    }
-  }, [isAuthenticated, normalizedServerUrl]);
+  }, []);
 
   useEffect(() => {
     handleDeepLinkUrlRef.current = handleDeepLinkUrl;
@@ -364,14 +535,9 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!pendingDeepLink || !normalizedServerUrl || authSession || isLoading) return;
-    checkSession().catch(error => setMessage(error instanceof Error ? error.message : String(error)));
-  }, [authSession, checkSession, isLoading, normalizedServerUrl, pendingDeepLink]);
-
-  useEffect(() => {
-    if (!pendingDeepLink || !normalizedServerUrl || !isAuthenticated || isLoading) return;
+    if (!pendingDeepLink) return;
     runDeepLink(pendingDeepLink).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
-  }, [isAuthenticated, isLoading, normalizedServerUrl, pendingDeepLink, runDeepLink]);
+  }, [pendingDeepLink, runDeepLink]);
 
   const togglePlayback = useCallback(async () => {
     if (!canControlPlayback) return;
@@ -392,194 +558,255 @@ function App() {
     await TrackPlayer.skipToNext().catch(() => undefined);
   }, [canControlPlayback]);
 
-  const seekBy = useCallback(async (seconds: number) => {
-    if (!canControlPlayback) return;
-    const nextPosition = Math.max(0, Math.min(progress.position + seconds, progressDuration || progress.position + seconds));
-    await TrackPlayer.seekTo(nextPosition);
-  }, [canControlPlayback, progress.position, progressDuration]);
-
   const seekToTouch = useCallback(async (event: GestureResponderEvent) => {
     if (!canControlPlayback || !progressDuration) return;
     const ratio = Math.max(0, Math.min(event.nativeEvent.locationX / progressWidth, 1));
     await TrackPlayer.seekTo(ratio * progressDuration);
   }, [canControlPlayback, progressDuration, progressWidth]);
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={brand.background} />
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.kicker}>OCEAN WAVE MOBILE</Text>
-          <Text style={styles.title}>Your phone keeps the music moving.</Text>
-          <Text style={styles.description}>
-            탐색과 관리는 웹에서, Android 앱은 현재 재생과 큐를 가볍게 이어받습니다.
-          </Text>
+
+  const renderBackIcon = () => (
+    <View style={styles.backIconFrame}>
+      <View style={styles.backIconStroke} />
+    </View>
+  );
+
+  const renderWebAction = () => (
+    <View style={styles.webActionPill}>
+      <Text style={styles.webActionText}>Web</Text>
+    </View>
+  );
+
+  const renderPlusIcon = () => (
+    <View style={styles.plusIcon}>
+      <View style={styles.plusHorizontal} />
+      <View style={styles.plusVertical} />
+    </View>
+  );
+
+  const renderTrashIcon = () => (
+    <View style={styles.trashIcon}>
+      <View style={styles.trashLid} />
+      <View style={styles.trashCan} />
+    </View>
+  );
+
+  const renderChevronIcon = () => (
+    <View style={styles.chevronIcon}>
+      <View style={styles.chevronStroke} />
+    </View>
+  );
+
+  const playSelectedPlaylist = useCallback(() => {
+    if (!visibleLibrary.length) return;
+    playTrack(0).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
+  }, [playTrack, visibleLibrary.length]);
+
+  const renderNavBar = (title: string, rightAction?: { label: string; onPress: () => void }) => (
+    <View style={styles.navBar}>
+      <Pressable accessibilityLabel="Go back" hitSlop={8} onPress={handleMobileBack} style={styles.navIconButton}>
+        {renderBackIcon()}
+      </Pressable>
+      <Text numberOfLines={1} style={styles.navTitle}>{title}</Text>
+      {rightAction ? (
+        <Pressable accessibilityLabel={rightAction.label} hitSlop={8} onPress={rightAction.onPress} style={styles.navIconButton}>
+          {renderWebAction()}
+        </Pressable>
+      ) : (
+        <View style={styles.navIconButton} />
+      )}
+    </View>
+  );
+
+  const renderMiniPlayer = () => (
+    <View style={styles.miniPlayer}>
+      <Pressable
+        disabled={!canControlPlayback}
+        onLayout={event => setProgressWidth(Math.max(event.nativeEvent.layout.width, 1))}
+        onPress={seekToTouch}
+        style={styles.miniProgress}
+      >
+        <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
+      </Pressable>
+      <View style={styles.miniPlayerRow}>
+        <View style={styles.miniMeta}>
+          <Text numberOfLines={1} style={styles.miniTitle}>{activeTrack?.title ?? 'No track selected'}</Text>
+          <Text numberOfLines={1} style={styles.miniSubtitle}>{activeTrack ? `${activeTrack.artist ?? 'Unknown Artist'} · ${selectedPlaylistName ?? 'Playlist'}` : (selectedPlaylistName ? 'Tap Play playlist or choose a track' : 'Choose a playlist')}</Text>
         </View>
+        <Pressable accessibilityLabel="Previous track" disabled={!canControlPlayback} onPress={skipPrevious} style={[styles.iconButton, !canControlPlayback && styles.disabledButton]}>
+          <Text style={styles.transportIconText}>⏮</Text>
+        </Pressable>
+        <Pressable accessibilityLabel={isPlaying ? 'Pause' : 'Play'} disabled={!canControlPlayback} onPress={togglePlayback} style={[styles.playCircle, !canControlPlayback && styles.disabledButton]}>
+          <Text style={styles.playIconText}>{isPlaying ? 'Ⅱ' : '▶'}</Text>
+        </Pressable>
+        <Pressable accessibilityLabel="Next track" disabled={!canControlPlayback} onPress={skipNext} style={[styles.iconButton, !canControlPlayback && styles.disabledButton]}>
+          <Text style={styles.transportIconText}>⏭</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderText}>
-              <Text style={styles.label}>Server URL</Text>
-              <Text style={styles.helperText}>웹 본체에 연결하면 앱은 백그라운드 재생과 큐 제어만 담당합니다.</Text>
+  const renderServerList = () => (
+    <View style={styles.fullPage}>
+      <View style={styles.header}>
+        <Text style={styles.kicker}>OCEAN WAVE</Text>
+        <Text style={styles.title}>Choose a server</Text>
+        <Text style={styles.description}>Pick a saved server, try the local demo, or add your own library.</Text>
+      </View>
+
+      <View style={styles.serverList}>
+        {profiles.map(profile => (
+          <Pressable key={profile.id} disabled={isLoading} onPress={() => connectProfile(profile)} style={styles.serverCard}>
+            <View style={styles.serverAvatar}><Text style={styles.serverAvatarText}>{profile.isDemo ? 'D' : profile.name.slice(0, 1).toUpperCase()}</Text></View>
+            <View style={styles.serverCardText}>
+              <Text numberOfLines={1} style={styles.serverTitle}>{profile.name}</Text>
+              <Text numberOfLines={1} style={styles.serverUrl}>{profile.url}</Text>
             </View>
-            <Pressable disabled={!normalizedServerUrl} onPress={openWebApp} style={[styles.webButton, !normalizedServerUrl && styles.disabledButton]}>
-              <Text style={styles.webButtonText}>Open web</Text>
-            </Pressable>
-          </View>
-          <View style={styles.serverRow}>
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              inputMode="url"
-              onChangeText={setServerUrl}
-              placeholder="http://192.168.0.10:3000"
-              placeholderTextColor="#71717a"
-              style={styles.input}
-              value={serverUrl}
-            />
-            <Pressable disabled={isLoading} onPress={checkSession} style={styles.primaryButton}>
-              {isLoading ? <ActivityIndicator color={brand.background} /> : <Text style={styles.primaryButtonText}>Check</Text>}
-            </Pressable>
-          </View>
-
-          {authSession?.authRequired && !authSession.authenticated ? (
-            <View style={styles.serverRow}>
-              <TextInput
-                autoCapitalize="none"
-                autoCorrect={false}
-                onChangeText={setPassword}
-                placeholder="Server password"
-                placeholderTextColor="#71717a"
-                secureTextEntry
-                style={styles.input}
-                value={password}
-              />
-              <Pressable disabled={isLoading} onPress={login} style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Login</Text>
-              </Pressable>
-            </View>
-          ) : null}
-
-          <View style={styles.actionRow}>
-            <Text style={styles.status}>{message}</Text>
-            {isAuthenticated ? (
-              <Pressable disabled={isLoading} onPress={logout} style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Logout</Text>
+            {!profile.isDemo ? (
+              <Pressable
+                hitSlop={10}
+                onPress={event => {
+                  event.stopPropagation();
+                  Alert.alert('Delete server?', profile.name, [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: () => deleteProfile(profile.id) },
+                  ]);
+                }}
+                style={styles.deleteButton}
+              >
+                {renderTrashIcon()}
               </Pressable>
             ) : null}
-          </View>
-
-          <View style={styles.queueActionRow}>
-            <Pressable disabled={isLoading || !isAuthenticated} onPress={loadLibrary} style={[styles.wideButton, styles.splitButton, !isAuthenticated && styles.disabledButton]}>
-              <Text style={styles.wideButtonText}>Build queue</Text>
-            </Pressable>
-            <Pressable disabled={isLoading || !isAuthenticated} onPress={loadPlaylists} style={[styles.secondaryWideButton, styles.splitButton, !isAuthenticated && styles.disabledButton]}>
-              <Text style={styles.secondaryWideButtonText}>Playlists</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={styles.playerCard}>
-          <View style={styles.nowPlayingHeader}>
-            <View style={styles.nowPlayingText}>
-              <Text style={styles.kicker}>NOW PLAYING</Text>
-              <Text numberOfLines={1} style={styles.playerTitle}>{activeTrack?.title ?? 'No track selected'}</Text>
-              <Text numberOfLines={1} style={styles.playerMeta}>{activeTrack?.artist ?? queueLabel}</Text>
-            </View>
-            <Text style={[styles.playbackPill, isPlaying && styles.playbackPillActive]}>{isPlaying ? 'ON AIR' : 'READY'}</Text>
-          </View>
-
-          <Pressable
-            disabled={!canControlPlayback}
-            onLayout={event => setProgressWidth(Math.max(event.nativeEvent.layout.width, 1))}
-            onPress={seekToTouch}
-            style={[styles.progressTrack, !canControlPlayback && styles.disabledButton]}
-          >
-            <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
+            {renderChevronIcon()}
           </Pressable>
-
-          <View style={styles.timeRow}>
-            <Text style={styles.timeText}>{formatDuration(progress.position)}</Text>
-            <Text style={styles.timeText}>{formatDuration(progressDuration)}</Text>
+        ))}
+        <Pressable disabled={isLoading} onPress={openAddServer} style={[styles.serverCard, styles.addServerCard]}>
+          <View style={styles.addIcon}>{renderPlusIcon()}</View>
+          <View style={styles.serverCardText}>
+            <Text style={styles.serverTitle}>Add server</Text>
+            <Text style={styles.serverUrl}>Save a personal Ocean Wave server.</Text>
           </View>
+        </Pressable>
+      </View>
+      {isLoading ? <ActivityIndicator color={brand.primary} /> : null}
+      <Text style={styles.status}>{message}</Text>
+    </View>
+  );
 
-          <View style={styles.controlRow}>
-            <Pressable disabled={!canControlPlayback} onPress={() => seekBy(-SEEK_STEP_SECONDS)} style={[styles.controlButton, !canControlPlayback && styles.disabledButton]}>
-              <Text style={styles.controlText}>-15</Text>
-            </Pressable>
-            <Pressable disabled={!canControlPlayback} onPress={skipPrevious} style={[styles.controlButton, !canControlPlayback && styles.disabledButton]}>
-              <Text style={styles.controlText}>Prev</Text>
-            </Pressable>
-            <Pressable disabled={!canControlPlayback} onPress={togglePlayback} style={[styles.playButton, !canControlPlayback && styles.disabledButton]}>
-              <Text style={styles.playButtonText}>{isPlaying ? 'Pause' : 'Play'}</Text>
-            </Pressable>
-            <Pressable disabled={!canControlPlayback} onPress={skipNext} style={[styles.controlButton, !canControlPlayback && styles.disabledButton]}>
-              <Text style={styles.controlText}>Next</Text>
-            </Pressable>
-            <Pressable disabled={!canControlPlayback} onPress={() => seekBy(SEEK_STEP_SECONDS)} style={[styles.controlButton, !canControlPlayback && styles.disabledButton]}>
-              <Text style={styles.controlText}>+15</Text>
-            </Pressable>
+  const renderAddServer = () => (
+    <View style={styles.fullPage}>
+      {renderNavBar('Add Server')}
+      <View style={styles.header}>
+        <Text style={styles.kicker}>SERVER</Text>
+        <Text style={styles.title}>Add your library</Text>
+        <Text style={styles.description}>Connect once. If the server needs a password, this app saves the authenticated session.</Text>
+      </View>
+      <View style={styles.card}>
+        <Text style={styles.label}>Name</Text>
+        <TextInput onChangeText={setServerName} placeholder="My Ocean Wave" placeholderTextColor="#71717a" style={styles.input} value={serverName} />
+        <Text style={styles.label}>Server URL</Text>
+        <TextInput autoCapitalize="none" autoCorrect={false} inputMode="url" onChangeText={setServerUrl} placeholder="http://192.168.0.10:44100" placeholderTextColor="#71717a" style={styles.input} value={serverUrl} />
+        <Text style={styles.label}>Password</Text>
+        <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setPassword} placeholder="Only if required" placeholderTextColor="#71717a" secureTextEntry style={styles.input} value={password} />
+        <Pressable disabled={isLoading} onPress={saveServer} style={styles.wideButton}>
+          {isLoading ? <ActivityIndicator color={brand.background} /> : <Text style={styles.wideButtonText}>Save and connect</Text>}
+        </Pressable>
+        <Text style={styles.status}>{message}</Text>
+      </View>
+    </View>
+  );
+
+  const renderPlayer = () => (
+    <View style={styles.playerPage}>
+      {renderNavBar(selectedProfile?.name ?? 'Ocean Wave')}
+
+      <View style={styles.playerHeader}>
+        <Text style={styles.kicker}>{selectedPlaylistName ? 'PLAYLIST' : 'PLAYLISTS'}</Text>
+        <Text style={styles.playerHeading}>{selectedPlaylistName ?? 'Choose a playlist'}</Text>
+        <Text style={styles.description}>{queueLabel}</Text>
+      </View>
+
+
+      {playlists.length ? (
+        <View style={styles.playlistPanel}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.panelLabel}>{selectedPlaylistName ? 'Switch queue' : 'Choose queue'}</Text>
           </View>
-        </View>
-
-        <View style={styles.queueHeader}>
-          <Text style={styles.queueTitle}>{selectedPlaylistName ?? 'Phone Queue'}</Text>
-          <Text style={styles.queueMeta}>{queueLabel}</Text>
-        </View>
-
-        {playlists.length ? (
-          <View style={styles.playlistPanel}>
-            <Text style={styles.panelLabel}>Playlists</Text>
-            <View style={styles.playlistGrid}>
-              {playlists.map(playlist => (
-                <Pressable key={playlist.id} disabled={isLoading} onPress={() => openPlaylist(playlist.id)} style={styles.playlistChip}>
-                  <Text numberOfLines={1} style={styles.playlistName}>{playlist.name}</Text>
-                  <Text style={styles.playlistMeta}>{playlist.musicCount.toLocaleString()} tracks</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : null}
-
-        <View style={styles.browsePanel}>
-          <TextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            onChangeText={setSearchQuery}
-            placeholder="Search queue candidates"
-            placeholderTextColor="#71717a"
-            style={styles.searchInput}
-            value={searchQuery}
-          />
-          <View style={styles.filterRow}>
-            {(['all', 'favorites', 'recent'] as BrowseFilter[]).map(filter => (
-              <Pressable key={filter} onPress={() => setBrowseFilter(filter)} style={[styles.filterChip, browseFilter === filter && styles.filterChipActive]}>
-                <Text style={[styles.filterText, browseFilter === filter && styles.filterTextActive]}>
-                  {filter === 'all' ? 'All' : filter === 'favorites' ? 'Favorites' : 'Recent'}
-                </Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.playlistRail}>
+            <Pressable disabled={!selectedProfile} onPress={openPlaylistCreator} style={[styles.playlistChip, styles.addPlaylistChip]}>
+              <View style={styles.addPlaylistIcon}>
+                <View style={styles.addPlaylistHorizontal} />
+                <View style={styles.addPlaylistVertical} />
+              </View>
+              <Text style={styles.playlistName}>New playlist</Text>
+              <Text style={styles.playlistMeta}>Opens web</Text>
+            </Pressable>
+            {playlists.map(playlist => (
+              <Pressable key={playlist.id} disabled={isLoading} onPress={() => openPlaylist(playlist.id)} style={[styles.playlistChip, selectedPlaylistId === playlist.id && styles.playlistChipActive]}>
+                <Text numberOfLines={1} style={styles.playlistName}>{playlist.name}</Text>
+                <Text style={styles.playlistMeta}>{playlist.musicCount.toLocaleString()} tracks</Text>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         </View>
+      ) : null}
 
-        <FlatList
-          data={visibleLibrary}
-          keyExtractor={item => String(item.id)}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={<Text style={styles.empty}>웹 서버를 확인한 뒤 큐를 만들어 주세요.</Text>}
-          renderItem={({ item, index }) => {
-            const active = isSameTrack(item, activeTrackId);
-            return (
-              <Pressable onPress={() => playTrack(index)} style={[styles.row, active && styles.activeRow]}>
-                <View style={styles.rowMain}>
-                  <Text numberOfLines={1} style={[styles.songTitle, active && styles.activeText]}>{item.name}</Text>
-                  <Text numberOfLines={1} style={styles.songMeta}>{item.artist?.name ?? 'Unknown Artist'} · {item.album?.name ?? 'Unknown Album'}</Text>
-                </View>
-                <Text style={styles.duration}>{formatDuration(item.duration)}</Text>
-              </Pressable>
-            );
-          }}
-        />
+      {selectedPlaylistName ? (
+        <>
+          <View style={styles.playlistActionPanel}>
+            <Pressable disabled={!library.length} onPress={playSelectedPlaylist} style={[styles.playPlaylistButton, !library.length && styles.disabledButton]}>
+              <Text style={styles.playPlaylistIcon}>▶</Text>
+              <View style={styles.playPlaylistTextBlock}>
+                <Text style={styles.playPlaylistTitle}>Play playlist</Text>
+                <Text style={styles.playPlaylistSubtitle}>Starts from the first track and continues in order</Text>
+              </View>
+            </Pressable>
+            <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={setSearchQuery} placeholder="Search in playlist" placeholderTextColor="#71717a" style={styles.searchInput} value={searchQuery} />
+          </View>
+
+          <FlatList
+            data={visibleLibrary}
+            keyExtractor={item => String(item.id)}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={<Text style={styles.empty}>{isLoading ? 'Loading…' : 'No songs in this playlist.'}</Text>}
+            renderItem={({ item, index }) => {
+              const active = isSameTrack(item, displayedActiveTrackId);
+              return (
+                <Pressable onPress={() => playTrack(index)} style={[styles.row, active && styles.activeRow]}>
+                  <View style={[styles.queueNumber, active && styles.queueNumberActive]}>
+                    <Text style={[styles.queueNumberText, active && styles.queueNumberTextActive]}>{active ? '♪' : index + 1}</Text>
+                  </View>
+                  <View style={styles.rowMain}>
+                    <View style={styles.songTitleRow}>
+                      <Text numberOfLines={1} style={[styles.songTitle, active && styles.activeText]}>{item.name}</Text>
+                      {active ? <Text style={styles.nowBadge}>NOW</Text> : null}
+                    </View>
+                    <Text numberOfLines={1} style={styles.songMeta}>{item.artist?.name ?? 'Unknown Artist'} · {item.album?.name ?? 'Unknown Album'}</Text>
+                  </View>
+                  <Text style={styles.duration}>{formatDuration(item.duration)}</Text>
+                </Pressable>
+              );
+            }}
+          />
+        </>
+      ) : (
+        <View style={styles.emptyPlaylistState}>
+          <Text style={styles.emptyPlaylistTitle}>Choose a playlist</Text>
+          <Text style={styles.emptyPlaylistBody}>Create a playlist on the web, then come back here to play it.</Text>
+          <Pressable disabled={!selectedProfile} onPress={openPlaylistCreator} style={styles.emptyPlaylistButton}>
+            <Text style={styles.emptyPlaylistButtonText}>Open web</Text>
+          </Pressable>
+        </View>
+      )}
+      {renderMiniPlayer()}
+    </View>
+  );
+
+  return (
+    <SafeAreaView edges={['top', 'bottom']} style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor={brand.background} />
+      <View style={styles.container}>
+        {screen === 'servers' ? renderServerList() : screen === 'addServer' ? renderAddServer() : renderPlayer()}
       </View>
     </SafeAreaView>
   );
@@ -587,74 +814,118 @@ function App() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: brand.background },
-  container: { flex: 1, gap: 14, padding: 20, backgroundColor: brand.background },
-  header: { gap: 8, paddingTop: 12 },
-  kicker: { color: brand.primary, fontSize: 11, fontWeight: '700', letterSpacing: 1.2 },
-  title: { color: brand.text, fontSize: 30, fontWeight: '800', letterSpacing: -1.2 },
+  container: { flex: 1, backgroundColor: brand.background },
+  fullPage: { flex: 1, gap: 18, padding: 20, backgroundColor: brand.background },
+  playerPage: { flex: 1, gap: 12, paddingHorizontal: 16, paddingTop: 4, backgroundColor: brand.background },
+  header: { gap: 8, paddingTop: 10 },
+  kicker: { color: brand.primary, fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
+  title: { color: brand.text, fontSize: 32, fontWeight: '900', letterSpacing: -1.4 },
   description: { color: brand.muted, fontSize: 15, lineHeight: 22 },
-  card: { gap: 10, padding: 14, borderRadius: 22, backgroundColor: brand.surface, borderWidth: 1, borderColor: brand.border },
-  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
-  cardHeaderText: { flex: 1, minWidth: 0, gap: 4 },
-  label: { color: brand.text, fontSize: 13, fontWeight: '700' },
-  helperText: { color: brand.muted, fontSize: 12, lineHeight: 17 },
-  serverRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  input: { flex: 1, minHeight: 46, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#111113', borderWidth: 1, borderColor: brand.border },
-  primaryButton: { minHeight: 46, minWidth: 72, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: brand.primary },
-  primaryButtonText: { color: brand.background, fontSize: 14, fontWeight: '800' },
-  webButton: { minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 12, backgroundColor: '#18181b', borderWidth: 1, borderColor: brand.border },
-  webButtonText: { color: brand.text, fontSize: 12, fontWeight: '800' },
-  secondaryButton: { minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 12, backgroundColor: '#27272a' },
-  secondaryButtonText: { color: brand.text, fontSize: 12, fontWeight: '700' },
-  queueActionRow: { flexDirection: 'row', gap: 10 },
-  wideButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: brand.primary },
-  splitButton: { flex: 1 },
-  wideButtonText: { color: brand.background, fontSize: 14, fontWeight: '800' },
-  secondaryWideButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: '#18181b', borderWidth: 1, borderColor: brand.border },
-  secondaryWideButtonText: { color: brand.text, fontSize: 14, fontWeight: '800' },
+  serverList: { gap: 10 },
+  serverCard: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 74, padding: 14, borderRadius: 20, backgroundColor: brand.surfaceRaised, borderWidth: 1, borderColor: brand.border },
+  addServerCard: { borderStyle: 'dashed', backgroundColor: brand.surface },
+  serverAvatar: { alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(139,92,246,0.16)' },
+  serverAvatarText: { color: brand.primary, fontSize: 16, fontWeight: '900' },
+  addIcon: { alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: 14, backgroundColor: brand.primary },
+  plusIcon: { alignItems: 'center', justifyContent: 'center', width: 20, height: 20 },
+  plusHorizontal: { position: 'absolute', width: 18, height: 3, borderRadius: 999, backgroundColor: brand.background },
+  plusVertical: { position: 'absolute', width: 3, height: 18, borderRadius: 999, backgroundColor: brand.background },
+  serverCardText: { flex: 1, minWidth: 0, gap: 3 },
+  serverTitle: { color: brand.text, fontSize: 16, fontWeight: '800' },
+  serverUrl: { color: brand.muted, fontSize: 12 },
+  deleteButton: { alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: 20, backgroundColor: '#27272a' },
+  trashIcon: { alignItems: 'center', width: 18, height: 20 },
+  trashLid: { width: 14, height: 3, borderRadius: 2, backgroundColor: brand.muted },
+  trashCan: { marginTop: 2, width: 13, height: 14, borderWidth: 2, borderTopWidth: 0, borderColor: brand.muted, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
+  chevronIcon: { alignItems: 'center', justifyContent: 'center', width: 24, height: 40 },
+  chevronStroke: { width: 10, height: 10, borderTopWidth: 2, borderRightWidth: 2, borderColor: brand.muted, transform: [{ rotate: '45deg' }] },
+  navBar: { flexDirection: 'row', alignItems: 'center', minHeight: 60, paddingHorizontal: 0, paddingTop: 4, paddingBottom: 4 },
+  navIconButton: { alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: 24 },
+  backIconFrame: { alignItems: 'center', justifyContent: 'center', width: 28, height: 28 },
+  backIconStroke: { width: 13, height: 13, borderLeftWidth: 2.5, borderBottomWidth: 2.5, borderColor: brand.text, transform: [{ rotate: '45deg' }] },
+  webActionPill: { alignItems: 'center', justifyContent: 'center', minWidth: 44, height: 32, borderRadius: 999, backgroundColor: 'rgba(139,92,246,0.14)' },
+  webActionText: { color: brand.primary, fontSize: 13, fontWeight: '900' },
+  navTitle: { flex: 1, textAlign: 'center', color: brand.text, fontSize: 17, fontWeight: '800', paddingHorizontal: 8 },
+  playerHeader: { gap: 4, paddingHorizontal: 2 },
+  playerHeading: { color: brand.text, fontSize: 28, fontWeight: '900', letterSpacing: -1 },
+  card: { gap: 12, padding: 14, borderRadius: 22, backgroundColor: brand.surface, borderWidth: 1, borderColor: brand.border },
+  label: { color: brand.text, fontSize: 13, fontWeight: '800' },
+  input: { minHeight: 48, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#111113', borderWidth: 1, borderColor: brand.border, fontSize: 15 },
+  wideButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: brand.primary },
+  wideButtonText: { color: brand.background, fontSize: 14, fontWeight: '900' },
   disabledButton: { opacity: 0.42 },
-  status: { flex: 1, color: brand.muted, fontSize: 12, lineHeight: 18 },
-  playerCard: { gap: 12, padding: 14, borderRadius: 22, backgroundColor: brand.surfaceRaised, borderWidth: 1, borderColor: brand.border },
-  nowPlayingHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
-  nowPlayingText: { flex: 1, minWidth: 0 },
-  playerTitle: { marginTop: 5, color: brand.text, fontSize: 18, fontWeight: '800' },
-  playerMeta: { marginTop: 3, color: brand.muted, fontSize: 13 },
-  playbackPill: { overflow: 'hidden', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, color: '#a1a1aa', backgroundColor: '#18181b', fontSize: 10, fontWeight: '800', letterSpacing: 0.9 },
-  playbackPillActive: { color: brand.background, backgroundColor: brand.primary },
-  progressTrack: { height: 16, justifyContent: 'center', borderRadius: 999, backgroundColor: '#18181b' },
-  progressFill: { height: 6, borderRadius: 999, backgroundColor: brand.primary },
-  timeRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  timeText: { color: '#71717a', fontSize: 11, fontVariant: ['tabular-nums'] },
-  controlRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  controlButton: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 999, backgroundColor: '#18181b' },
-  controlText: { color: brand.text, fontSize: 12, fontWeight: '800' },
-  playButton: { flex: 1.2, alignItems: 'center', justifyContent: 'center', minHeight: 44, borderRadius: 999, backgroundColor: brand.primary },
-  playButtonText: { color: brand.background, fontSize: 14, fontWeight: '900' },
-  queueHeader: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 },
-  queueTitle: { color: brand.text, fontSize: 18, fontWeight: '800' },
-  queueMeta: { flex: 1, textAlign: 'right', color: brand.muted, fontSize: 12 },
+  status: { color: brand.muted, fontSize: 13, lineHeight: 19 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   playlistPanel: { gap: 8 },
   panelLabel: { color: brand.muted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
-  playlistGrid: { gap: 8 },
-  playlistChip: { gap: 3, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#09090b', borderWidth: 1, borderColor: '#18181b' },
+  linkText: { color: brand.primary, fontSize: 12, fontWeight: '800' },
+  playlistRail: { gap: 8, paddingRight: 16 },
+  playlistChip: { width: 150, gap: 5, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#121214', borderWidth: 1, borderColor: brand.border },
+  playlistChipActive: { borderColor: 'rgba(139,92,246,0.75)', backgroundColor: 'rgba(139,92,246,0.14)' },
+  addPlaylistChip: { alignItems: 'flex-start', justifyContent: 'center', borderStyle: 'dashed', backgroundColor: '#09090b' },
+  addPlaylistIcon: { alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 10, backgroundColor: 'rgba(139,92,246,0.16)' },
+  addPlaylistHorizontal: { position: 'absolute', width: 14, height: 2.5, borderRadius: 999, backgroundColor: brand.primary },
+  addPlaylistVertical: { position: 'absolute', width: 2.5, height: 14, borderRadius: 999, backgroundColor: brand.primary },
   playlistName: { color: brand.text, fontSize: 13, fontWeight: '800' },
   playlistMeta: { color: brand.muted, fontSize: 11 },
+  queueStatementCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 20, backgroundColor: 'rgba(139,92,246,0.11)', borderWidth: 1, borderColor: 'rgba(139,92,246,0.34)' },
+  queueStatementIcon: { alignItems: 'center', justifyContent: 'center', width: 42, height: 42, borderRadius: 14, backgroundColor: brand.primary },
+  queueStatementIconText: { color: brand.background, fontSize: 16, fontWeight: '900' },
+  queueStatementText: { flex: 1, minWidth: 0, gap: 3 },
+  queueStatementTitle: { color: brand.text, fontSize: 15, fontWeight: '900' },
+  queueStatementBody: { color: brand.muted, fontSize: 12, lineHeight: 18 },
+  emptyPlaylistState: { gap: 10, padding: 16, borderRadius: 20, backgroundColor: '#121214', borderWidth: 1, borderColor: brand.border },
+  emptyPlaylistTitle: { color: brand.text, fontSize: 16, fontWeight: '900' },
+  emptyPlaylistBody: { color: brand.muted, fontSize: 13, lineHeight: 20 },
+  emptyPlaylistButton: { alignSelf: 'flex-start', minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 14, backgroundColor: 'rgba(139,92,246,0.16)' },
+  emptyPlaylistButtonText: { color: brand.primary, fontSize: 12, fontWeight: '900' },
+  playlistActionPanel: { gap: 10 },
+  playPlaylistButton: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 58, paddingHorizontal: 14, borderRadius: 18, backgroundColor: brand.primary },
+  playPlaylistIcon: { color: brand.background, fontSize: 18, fontWeight: '900' },
+  playPlaylistTextBlock: { flex: 1, minWidth: 0, gap: 2 },
+  playPlaylistTitle: { color: brand.background, fontSize: 15, fontWeight: '900' },
+  playPlaylistSubtitle: { color: 'rgba(9,9,11,0.72)', fontSize: 12, fontWeight: '700' },
   browsePanel: { gap: 10 },
   searchInput: { minHeight: 42, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#09090b', borderWidth: 1, borderColor: brand.border },
   filterRow: { flexDirection: 'row', gap: 8 },
   filterChip: { minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 13, backgroundColor: '#18181b' },
   filterChipActive: { backgroundColor: brand.primary },
+  refreshChip: { marginLeft: 'auto', minHeight: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 13, backgroundColor: '#18181b' },
   filterText: { color: brand.muted, fontSize: 12, fontWeight: '800' },
   filterTextActive: { color: brand.background },
-  listContent: { gap: 8, paddingBottom: 28 },
-  empty: { paddingVertical: 28, textAlign: 'center', color: brand.muted },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: '#09090b', borderWidth: 1, borderColor: '#18181b' },
-  activeRow: { borderColor: '#2f4f3a', backgroundColor: '#0d1610' },
+  queueHintBar: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36, paddingHorizontal: 12, borderRadius: 14, backgroundColor: '#111113', borderWidth: 1, borderColor: brand.border },
+  queueHintStrong: { color: brand.text, fontSize: 12, fontWeight: '900' },
+  queueHintText: { flex: 1, color: brand.muted, fontSize: 11 },
+  listContent: { gap: 8, paddingBottom: 108 },
+  empty: { paddingVertical: 36, textAlign: 'center', color: brand.muted },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#09090b', borderWidth: 1, borderColor: '#18181b' },
+  activeRow: { borderColor: 'rgba(139,92,246,0.55)', backgroundColor: 'rgba(139,92,246,0.12)' },
+  queueNumber: { alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: 12, backgroundColor: '#18181b' },
+  queueNumberActive: { backgroundColor: brand.primary },
+  queueNumberText: { color: brand.muted, fontSize: 13, fontWeight: '900' },
+  queueNumberTextActive: { color: brand.background, fontSize: 16 },
   rowMain: { flex: 1, minWidth: 0, gap: 4 },
-  songTitle: { color: brand.text, fontSize: 15, fontWeight: '700' },
+  songTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  songTitle: { flex: 1, color: brand.text, fontSize: 15, fontWeight: '700' },
+  nowBadge: { overflow: 'hidden', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, color: brand.background, backgroundColor: brand.primary, fontSize: 10, fontWeight: '900' },
   activeText: { color: brand.primary },
   songMeta: { color: brand.muted, fontSize: 12 },
   duration: { color: '#71717a', fontSize: 12, fontVariant: ['tabular-nums'] },
+  miniPlayer: { position: 'absolute', left: 12, right: 12, bottom: 12, overflow: 'hidden', borderRadius: 22, backgroundColor: '#18181b', borderWidth: 1, borderColor: brand.border },
+  miniProgress: { height: 8, justifyContent: 'center', backgroundColor: '#27272a' },
+  progressFill: { height: 4, borderRadius: 999, backgroundColor: brand.primary },
+  miniPlayerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 70, paddingHorizontal: 12 },
+  miniMeta: { flex: 1, minWidth: 0, gap: 3 },
+  miniTitle: { color: brand.text, fontSize: 15, fontWeight: '800' },
+  miniSubtitle: { color: brand.muted, fontSize: 12 },
+  iconButton: { alignItems: 'center', justifyContent: 'center', width: 48, height: 44, borderRadius: 999, backgroundColor: '#27272a' },
+  transportIconText: { color: brand.text, fontSize: 20, fontWeight: '800', lineHeight: 22 },
+  playCircle: { alignItems: 'center', justifyContent: 'center', width: 58, height: 46, borderRadius: 999, backgroundColor: brand.primary },
+  playIconText: { color: brand.background, fontSize: 20, fontWeight: '900', lineHeight: 22 },
 });
+
+function App() {
+  return <OceanWaveMobileApp />;
+}
 
 export default App;
