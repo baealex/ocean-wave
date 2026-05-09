@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   BackHandler,
@@ -12,11 +12,8 @@ import {
   fetchAuthSession,
   fetchMobileMusic,
   fetchMobilePlaylist,
-  fetchMobilePlaylists,
   loginWithPassword,
   normalizeServerUrl,
-  OceanWaveMusic,
-  OceanWavePlaylist,
 } from './src/api/oceanWaveClient';
 import { brand } from './src/config/brand';
 import { AddServerScreen } from './src/components/AddServerScreen';
@@ -30,11 +27,10 @@ import {
   ServerProfile,
 } from './src/app/serverProfiles';
 import { parseOceanWaveDeepLink, type OceanWaveDeepLinkRequest } from './src/deeplink/oceanWaveDeepLink';
-import { playLibraryFrom, prepareTrackPlayer } from './src/player/trackPlayer';
+import { playLibraryFrom } from './src/player/trackPlayer';
 import { useTrackPlaybackControls } from './src/hooks/useTrackPlaybackControls';
 import { useServerProfiles } from './src/hooks/useServerProfiles';
-
-type Screen = 'servers' | 'addServer' | 'player';
+import { MobileScreen, usePlaylistLibrary } from './src/hooks/usePlaylistLibrary';
 
 
 function OceanWaveMobileApp() {
@@ -50,44 +46,37 @@ function OceanWaveMobileApp() {
     togglePlayback,
   } = useTrackPlaybackControls();
 
-  const [screen, setScreen] = useState<Screen>('servers');
+  const [screen, setScreen] = useState<MobileScreen>('servers');
   const [serverName, setServerName] = useState('');
   const [serverUrl, setServerUrl] = useState(() => getBundlerServerUrl() || DEMO_SERVER_URL);
   const [password, setPassword] = useState('');
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [library, setLibrary] = useState<OceanWaveMusic[]>([]);
-  const [playlists, setPlaylists] = useState<OceanWavePlaylist[]>([]);
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState<number | null>(null);
-  const [selectedPlaylistName, setSelectedPlaylistName] = useState<string | null>(null);
   const [pendingDeepLink, setPendingDeepLink] = useState<OceanWaveDeepLinkRequest | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('Choose a server to start listening.');
-  const [pendingTrackId, setPendingTrackId] = useState<string | null>(null);
+
+  const {
+    library,
+    loadServerContent,
+    openPlaylist,
+    pendingTrackId,
+    playSelectedPlaylist,
+    playTrack,
+    playlists,
+    queueLabel,
+    resetQueueState,
+    searchQuery,
+    selectedPlaylistId,
+    selectedPlaylistName,
+    setLibrary,
+    setPlaylists,
+    setSearchQuery,
+    setSelectedPlaylistId,
+    setSelectedPlaylistName,
+    visibleLibrary,
+  } = usePlaylistLibrary({ setIsLoading, setMessage, setScreen });
 
   const handleDeepLinkUrlRef = useRef<(url: string | null) => void>(() => undefined);
   const didAutoConnectLastProfileRef = useRef(false);
-  const visibleLibrary = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-    if (!normalizedQuery) return library;
-
-    return library.filter(item => [item.name, item.artist?.name, item.album?.name]
-      .filter(Boolean)
-      .some(value => value?.toLowerCase().includes(normalizedQuery)));
-  }, [library, searchQuery]);
-
-  const queueLabel = selectedPlaylistName
-    ? (library.length ? `${library.length.toLocaleString()} tracks · plays in order` : 'This playlist is empty')
-    : (playlists.length ? `${playlists.length.toLocaleString()} playlists available` : 'No playlists yet');
-
-
-  const resetQueueState = useCallback(() => {
-    setLibrary([]);
-    setPlaylists([]);
-    setSelectedPlaylistId(null);
-    setSelectedPlaylistName(null);
-    setSearchQuery('');
-  }, []);
 
   const {
     deleteProfile,
@@ -106,38 +95,6 @@ function OceanWaveMobileApp() {
   const displayedActiveTrackId = activeTrackId ?? pendingTrackId ?? undefined;
 
 
-  const loadServerContent = useCallback(async (profile: ServerProfile) => {
-    setIsLoading(true);
-    setMessage('Loading playlists…');
-    try {
-      const nextPlaylists = await fetchMobilePlaylists(profile.url, profile.sessionCookie).catch(() => []);
-      const focusedPlaylist = nextPlaylists.find(playlist => playlist.id === selectedPlaylistId) ?? nextPlaylists[0];
-
-      setPlaylists(nextPlaylists);
-      setSearchQuery('');
-      setScreen('player');
-      prepareTrackPlayer().catch(() => undefined);
-
-      if (!focusedPlaylist) {
-        setLibrary([]);
-        setSelectedPlaylistId(null);
-        setSelectedPlaylistName(null);
-        setMessage('No playlists yet. Create one in the web app first.');
-        return;
-      }
-
-      const playlist = await fetchMobilePlaylist(profile.url, focusedPlaylist.id, profile.sessionCookie);
-      const nextMusics = playlist?.musics ?? [];
-      setLibrary(nextMusics);
-      setSelectedPlaylistId(focusedPlaylist.id);
-      setSelectedPlaylistName(playlist?.name ?? focusedPlaylist.name);
-      setMessage(`${playlist?.name ?? focusedPlaylist.name} ready.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedPlaylistId]);
 
   const handleMobileBack = useCallback(() => {
     if (screen === 'addServer') {
@@ -157,7 +114,7 @@ function OceanWaveMobileApp() {
     }
 
     return false;
-  }, [screen, searchQuery]);
+  }, [screen, searchQuery, setSearchQuery]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', handleMobileBack);
@@ -271,40 +228,9 @@ function OceanWaveMobileApp() {
     );
   }, [openWebApp, selectedProfile]);
 
-  const openPlaylist = useCallback(async (playlistId: number) => {
-    if (!selectedProfile || !isAuthenticated) return;
+  const handleOpenPlaylist = useCallback((playlistId: number) => openPlaylist(selectedProfile, isAuthenticated, playlistId), [isAuthenticated, openPlaylist, selectedProfile]);
 
-    setIsLoading(true);
-    try {
-      const playlist = await fetchMobilePlaylist(selectedProfile.url, playlistId, selectedProfile.sessionCookie);
-      const nextMusics = playlist?.musics ?? [];
-      setSelectedPlaylistId(playlist?.id ?? playlistId);
-      setSelectedPlaylistName(playlist?.name ?? null);
-      setLibrary(nextMusics);
-      setSearchQuery('');
-        setMessage(playlist ? `${playlist.name} is now your queue.` : 'Playlist not found.');
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isAuthenticated, selectedProfile]);
-
-  const playTrack = useCallback(async (index: number) => {
-    if (!selectedProfile || !visibleLibrary.length) return;
-    const selectedMusic = visibleLibrary[index];
-    if (!selectedMusic) return;
-    setPendingTrackId(String(selectedMusic.id));
-    setMessage(`Starting ${selectedMusic.name}…`);
-    try {
-      await playLibraryFrom(selectedProfile.url, visibleLibrary, index, selectedProfile.sessionCookie);
-      setMessage(`Playing ${selectedMusic.name}.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error));
-    } finally {
-      setPendingTrackId(null);
-    }
-  }, [selectedProfile, visibleLibrary]);
+  const handlePlayTrack = useCallback((index: number) => playTrack(selectedProfile, index), [playTrack, selectedProfile]);
 
   const runDeepLink = useCallback(async (request: OceanWaveDeepLinkRequest) => {
     setPendingDeepLink(null);
@@ -356,7 +282,7 @@ function OceanWaveMobileApp() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }
-  }, [normalizedServerUrl, profiles, setSelectedProfileId, upsertProfile]);
+  }, [normalizedServerUrl, profiles, setLibrary, setPlaylists, setSelectedPlaylistId, setSelectedPlaylistName, setSelectedProfileId, upsertProfile]);
 
   const handleDeepLinkUrl = useCallback((url: string | null) => {
     if (!url) return;
@@ -383,10 +309,7 @@ function OceanWaveMobileApp() {
     runDeepLink(pendingDeepLink).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
   }, [pendingDeepLink, runDeepLink]);
 
-  const playSelectedPlaylist = useCallback(() => {
-    if (!visibleLibrary.length) return;
-    playTrack(0).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
-  }, [playTrack, visibleLibrary.length]);
+  const handlePlaySelectedPlaylist = useCallback(() => playSelectedPlaylist(selectedProfile), [playSelectedPlaylist, selectedProfile]);
 
   const renderNavBar = (title: string) => <NavBar onBack={handleMobileBack} title={title} />;
 
@@ -429,9 +352,9 @@ function OceanWaveMobileApp() {
       onBack={handleMobileBack}
       onCreatePlaylist={openPlaylistCreator}
       onNext={skipNext}
-      onOpenPlaylist={openPlaylist}
-      onPlayPlaylist={playSelectedPlaylist}
-      onPlayTrack={playTrack}
+      onOpenPlaylist={handleOpenPlaylist}
+      onPlayPlaylist={handlePlaySelectedPlaylist}
+      onPlayTrack={handlePlayTrack}
       onPrevious={skipPrevious}
       onProgressLayout={setProgressWidth}
       onSearchQueryChange={setSearchQuery}
