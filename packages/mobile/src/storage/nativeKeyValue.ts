@@ -1,0 +1,42 @@
+import { NativeModules } from 'react-native';
+
+type OceanWaveStorageModule = {
+  getString(key: string): Promise<string | null>;
+  setString(key: string, value: string): Promise<boolean>;
+  removeString(key: string): Promise<boolean>;
+};
+
+const memoryFallback = new Map<string, string>();
+const nativeStorage = NativeModules.OceanWaveStorage as OceanWaveStorageModule | undefined;
+
+export async function getStoredString(key: string) {
+  if (!nativeStorage) return memoryFallback.get(key) ?? null;
+
+  try {
+    return await nativeStorage.getString(key);
+  } catch {
+    return memoryFallback.get(key) ?? null;
+  }
+}
+
+export async function setStoredString(key: string, value: string) {
+  memoryFallback.set(key, value);
+  if (!nativeStorage) return;
+
+  try {
+    await nativeStorage.setString(key, value);
+  } catch {
+    // Keep the in-memory fallback alive instead of crashing the app.
+  }
+}
+
+export async function removeStoredString(key: string) {
+  memoryFallback.delete(key);
+  if (!nativeStorage) return;
+
+  try {
+    await nativeStorage.removeString(key);
+  } catch {
+    // Keep storage best-effort. A failed cleanup should not block navigation.
+  }
+}

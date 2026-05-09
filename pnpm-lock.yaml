@@ -10,7 +10,7 @@ overrides:
 
 patchedDependencies:
   react-native-track-player@4.1.2:
-    hash: 1a1fffa79b385c4897e9c52808b12f274e2d5d2429d8d2cc5ff09e7ea74b53da
+    hash: 27e019787e9858bdb0203ce52d72dc020388a270198ce3ad2ee5b9334fa57366
     path: patches/react-native-track-player@4.1.2.patch
 
 importers:
@@ -134,7 +134,7 @@ importers:
         version: 5.7.0(react-native@0.85.3(@babel/core@7.29.0)(@react-native-community/cli@20.1.0(typescript@5.9.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3)
       react-native-track-player:
         specifier: ^4.1.2
-        version: 4.1.2(patch_hash=1a1fffa79b385c4897e9c52808b12f274e2d5d2429d8d2cc5ff09e7ea74b53da)(react-native@0.85.3(@babel/core@7.29.0)(@react-native-community/cli@20.1.0(typescript@5.9.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3)
+        version: 4.1.2(patch_hash=27e019787e9858bdb0203ce52d72dc020388a270198ce3ad2ee5b9334fa57366)(react-native@0.85.3(@babel/core@7.29.0)(@react-native-community/cli@20.1.0(typescript@5.9.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3)
     devDependencies:
       '@babel/core':
         specifier: ^7.25.2
@@ -12754,7 +12754,7 @@ snapshots:
       react: 19.2.3
       react-native: 0.85.3(@babel/core@7.29.0)(@react-native-community/cli@20.1.0(typescript@5.9.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3)
 
-  react-native-track-player@4.1.2(patch_hash=1a1fffa79b385c4897e9c52808b12f274e2d5d2429d8d2cc5ff09e7ea74b53da)(react-native@0.85.3(@babel/core@7.29.0)(@react-native-community/cli@20.1.0(typescript@5.9.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3):
+  react-native-track-player@4.1.2(patch_hash=27e019787e9858bdb0203ce52d72dc020388a270198ce3ad2ee5b9334fa57366)(react-native@0.85.3(@babel/core@7.29.0)(@react-native-community/cli@20.1.0(typescript@5.9.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3))(react@19.2.3):
     dependencies:
       react: 19.2.3
       react-native: 0.85.3(@babel/core@7.29.0)(@react-native-community/cli@20.1.0(typescript@5.9.3))(@react-native/jest-preset@0.85.3(@babel/core@7.29.0)(react@19.2.3))(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.3)

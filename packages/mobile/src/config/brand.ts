@@ -5,5 +5,5 @@ export const brand = {
   border: '#27272a',
   text: '#fafafa',
   muted: '#a1a1aa',
-  primary: '#1ed760',
+  primary: '#8b5cf6',
 };

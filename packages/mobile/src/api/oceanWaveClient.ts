@@ -40,12 +40,12 @@ function sleep(ms: number) {
 
 function createNetworkError(error: unknown, endpoint: string) {
   if (error instanceof Error && error.name === 'AbortError') {
-    return new Error(`서버 응답이 지연되고 있어요. 같은 Wi-Fi인지 확인해 주세요. (${endpoint})`);
+    return new Error(`Server response timed out. Check that both devices are on the same Wi-Fi. (${endpoint})`);
   }
 
   return new Error(error instanceof Error
-    ? `서버에 연결할 수 없습니다. 같은 Wi-Fi 또는 서버 주소를 확인해 주세요. (${error.message})`
-    : '서버에 연결할 수 없습니다. 같은 Wi-Fi 또는 서버 주소를 확인해 주세요.');
+    ? `Unable to reach the server. Check the Wi-Fi network or server URL. (${error.message})`
+    : 'Unable to reach the server. Check the Wi-Fi network or server URL.');
 }
 
 async function fetchWithTimeout(endpoint: string, options: FetchOptions = {}) {

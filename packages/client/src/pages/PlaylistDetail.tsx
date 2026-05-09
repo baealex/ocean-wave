@@ -25,7 +25,6 @@ import { useResetQueue } from '~/hooks';
 import { getPlaylist } from '~/api';
 import { queryKeys } from '~/api/query-keys';
 import { toast } from '~/modules/toast';
-import { openMobilePlayLink } from '~/modules/mobile-deeplink';
 import {
     PLAYLIST_ADD_MUSIC,
     PLAYLIST_CHANGE_MUSIC_ORDER,
@@ -168,15 +167,6 @@ export default function PlaylistDetail() {
                         </>
                     ) : (
                         <>
-                            <button
-                                type="button"
-                                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] px-3 py-1.5 text-xs font-semibold text-[var(--b-color-text-secondary)] no-underline transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"
-                                onClick={() => openMobilePlayLink('playlist', playlist.id, {
-                                    onFallback: () => toast('Android app이 열리지 않으면 Play 버튼으로 웹에서 재생할 수 있어요.')
-                                })}>
-                                <Icon.Smartphone className="h-3.5 w-3.5" />
-                                App
-                            </button>
                             <button
                                 type="button"
                                 className="min-h-9 rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] px-3 py-1.5 text-xs font-semibold text-[var(--b-color-text-secondary)] transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"

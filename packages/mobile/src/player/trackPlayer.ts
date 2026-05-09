@@ -8,6 +8,7 @@ import TrackPlayer, {
 import { albumArtUrl, audioStreamUrl, OceanWaveMusic } from '../api/oceanWaveClient';
 
 let isPrepared = false;
+let preparePromise: Promise<void> | null = null;
 
 function fallbackText(value: string | undefined | null, fallback: string) {
   const normalized = value?.trim();
@@ -16,35 +17,45 @@ function fallbackText(value: string | undefined | null, fallback: string) {
 
 export async function prepareTrackPlayer() {
   if (isPrepared) return;
+  if (preparePromise) return preparePromise;
 
-  await TrackPlayer.setupPlayer({
-    autoHandleInterruptions: true,
-  });
+  preparePromise = (async () => {
+    await TrackPlayer.setupPlayer({
+      autoHandleInterruptions: true,
+    });
 
-  await TrackPlayer.updateOptions({
-    android: {
-      appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
-    },
-    capabilities: [
-      Capability.Play,
-      Capability.Pause,
-      Capability.Stop,
-      Capability.SkipToNext,
-      Capability.SkipToPrevious,
-      Capability.SeekTo,
-    ],
-    compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext],
-    notificationCapabilities: [
-      Capability.Play,
-      Capability.Pause,
-      Capability.SkipToNext,
-      Capability.SkipToPrevious,
-    ],
-    progressUpdateEventInterval: 2,
-  });
+    await TrackPlayer.updateOptions({
+      android: {
+        appKilledPlaybackBehavior: AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+      },
+      capabilities: [
+        Capability.Play,
+        Capability.Pause,
+        Capability.Stop,
+        Capability.SkipToNext,
+        Capability.SkipToPrevious,
+        Capability.SeekTo,
+      ],
+      compactCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext],
+      notificationCapabilities: [Capability.Play, Capability.Pause, Capability.SkipToNext, Capability.SkipToPrevious],
+      progressUpdateEventInterval: 2,
+    });
 
-  await TrackPlayer.setRepeatMode(RepeatMode.Queue);
-  isPrepared = true;
+    await TrackPlayer.setRepeatMode(RepeatMode.Queue);
+    isPrepared = true;
+  })();
+
+  try {
+    await preparePromise;
+  } finally {
+    preparePromise = null;
+  }
+}
+
+
+export async function resetTrackPlayerIfPrepared() {
+  if (!isPrepared) return;
+  await TrackPlayer.reset();
 }
 
 export function toTrack(serverUrl: string, music: OceanWaveMusic, sessionCookie?: string | null): Track {
@@ -60,15 +71,34 @@ export function toTrack(serverUrl: string, music: OceanWaveMusic, sessionCookie?
   };
 }
 
+const QUEUE_TRACK_LIMIT = 64;
+const QUEUE_TRACKS_BEFORE_SELECTED = 12;
+
+function getQueueWindow(musics: OceanWaveMusic[], selectedIndex: number) {
+  const start = Math.max(0, Math.min(selectedIndex - QUEUE_TRACKS_BEFORE_SELECTED, Math.max(0, musics.length - QUEUE_TRACK_LIMIT)));
+  const end = Math.min(musics.length, start + QUEUE_TRACK_LIMIT);
+
+  return {
+    queue: musics.slice(start, end),
+    selectedQueueIndex: selectedIndex - start,
+  };
+}
+
 export async function playLibraryFrom(
   serverUrl: string,
   musics: OceanWaveMusic[],
   index = 0,
   sessionCookie?: string | null,
 ) {
+  const selectedIndex = Math.max(0, Math.min(index, musics.length - 1));
+  const selectedMusic = musics[selectedIndex];
+  if (!selectedMusic) return;
+
+  const { queue, selectedQueueIndex } = getQueueWindow(musics, selectedIndex);
+
   await prepareTrackPlayer();
   await TrackPlayer.reset();
-  await TrackPlayer.add(musics.map(music => toTrack(serverUrl, music, sessionCookie)));
-  await TrackPlayer.skip(index);
+  await TrackPlayer.add(queue.map(music => toTrack(serverUrl, music, sessionCookie)));
+  await TrackPlayer.skip(selectedQueueIndex);
   await TrackPlayer.play();
 }
