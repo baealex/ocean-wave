@@ -33,6 +33,7 @@ import {
 import { brand } from './src/config/brand';
 import { AddServerScreen } from './src/components/AddServerScreen';
 import { MiniPlayer } from './src/components/MiniPlayer';
+import { NavBar } from './src/components/NavBar';
 import { ServerListScreen } from './src/components/ServerListScreen';
 import {
   createProfile,
@@ -494,21 +495,8 @@ function OceanWaveMobileApp() {
     playTrack(0).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
   }, [playTrack, visibleLibrary.length]);
 
-  const renderBackIcon = () => (
-    <View style={styles.backIconFrame}>
-      <View style={styles.backIconStroke} />
-    </View>
-  );
+  const renderNavBar = (title: string) => <NavBar onBack={handleMobileBack} title={title} />;
 
-  const renderNavBar = (title: string) => (
-    <View style={styles.navBar}>
-      <Pressable accessibilityLabel="Go back" hitSlop={8} onPress={handleMobileBack} style={styles.navIconButton}>
-        {renderBackIcon()}
-      </Pressable>
-      <Text numberOfLines={1} style={styles.navTitle}>{title}</Text>
-      <View style={styles.navIconButton} />
-    </View>
-  );
 
   const renderServerList = () => (
     <ServerListScreen
@@ -649,11 +637,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.background },
   playerPage: { flex: 1, gap: 12, paddingHorizontal: 16, paddingTop: 4, backgroundColor: brand.background },
   kicker: { color: brand.primary, fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
-  navBar: { flexDirection: 'row', alignItems: 'center', minHeight: 60, paddingHorizontal: 0, paddingTop: 4, paddingBottom: 4 },
-  navIconButton: { alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: 24 },
-  backIconFrame: { alignItems: 'center', justifyContent: 'center', width: 28, height: 28 },
-  backIconStroke: { width: 13, height: 13, borderLeftWidth: 2.5, borderBottomWidth: 2.5, borderColor: brand.text, transform: [{ rotate: '45deg' }] },
-  navTitle: { flex: 1, textAlign: 'center', color: brand.text, fontSize: 17, fontWeight: '800', paddingHorizontal: 8 },
   playerHeader: { gap: 4, paddingHorizontal: 2 },
   playerHeading: { color: brand.text, fontSize: 28, fontWeight: '900', letterSpacing: -1 },
   description: { color: brand.muted, fontSize: 15, lineHeight: 22 },
