@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { GestureResponderEvent } from 'react-native';
 import {
   ActivityIndicator,
   Alert,
   BackHandler,
   FlatList,
-  GestureResponderEvent,
   Linking,
   Pressable,
   ScrollView,
@@ -32,6 +32,7 @@ import {
   OceanWavePlaylist,
 } from './src/api/oceanWaveClient';
 import { brand } from './src/config/brand';
+import { MiniPlayer } from './src/components/MiniPlayer';
 import {
   createProfile,
   DEMO_SERVER_URL,
@@ -540,33 +541,7 @@ function OceanWaveMobileApp() {
     </View>
   );
 
-  const renderMiniPlayer = () => (
-    <View style={styles.miniPlayer}>
-      <Pressable
-        disabled={!canControlPlayback}
-        onLayout={event => setProgressWidth(Math.max(event.nativeEvent.layout.width, 1))}
-        onPress={seekToTouch}
-        style={styles.miniProgress}
-      >
-        <View style={[styles.progressFill, { width: `${progressRatio * 100}%` }]} />
-      </Pressable>
-      <View style={styles.miniPlayerRow}>
-        <View style={styles.miniMeta}>
-          <Text numberOfLines={1} style={styles.miniTitle}>{activeTrack?.title ?? 'No track selected'}</Text>
-          <Text numberOfLines={1} style={styles.miniSubtitle}>{activeTrack ? `${activeTrack.artist ?? 'Unknown Artist'} · ${selectedPlaylistName ?? 'Playlist'}` : (selectedPlaylistName ? 'Tap Play playlist or choose a track' : 'Choose a playlist')}</Text>
-        </View>
-        <Pressable accessibilityLabel="Previous track" disabled={!canControlPlayback} onPress={skipPrevious} style={[styles.iconButton, !canControlPlayback && styles.disabledButton]}>
-          <Text style={styles.transportIconText}>⏮</Text>
-        </Pressable>
-        <Pressable accessibilityLabel={isPlaying ? 'Pause' : 'Play'} disabled={!canControlPlayback} onPress={togglePlayback} style={[styles.playCircle, !canControlPlayback && styles.disabledButton]}>
-          <Text style={styles.playIconText}>{isPlaying ? 'Ⅱ' : '▶'}</Text>
-        </Pressable>
-        <Pressable accessibilityLabel="Next track" disabled={!canControlPlayback} onPress={skipNext} style={[styles.iconButton, !canControlPlayback && styles.disabledButton]}>
-          <Text style={styles.transportIconText}>⏭</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
+
 
   const renderServerList = () => (
     <View style={styles.fullPage}>
@@ -720,7 +695,18 @@ function OceanWaveMobileApp() {
           </Pressable>
         </View>
       )}
-      {renderMiniPlayer()}
+      <MiniPlayer
+        activeTrack={activeTrack}
+        canControlPlayback={canControlPlayback}
+        isPlaying={isPlaying}
+        onNext={skipNext}
+        onPrevious={skipPrevious}
+        onProgressLayout={setProgressWidth}
+        onSeek={seekToTouch}
+        onTogglePlayback={togglePlayback}
+        playlistName={selectedPlaylistName}
+        progressRatio={progressRatio}
+      />
     </View>
   );
 
@@ -833,17 +819,6 @@ const styles = StyleSheet.create({
   activeText: { color: brand.primary },
   songMeta: { color: brand.muted, fontSize: 12 },
   duration: { color: '#71717a', fontSize: 12, fontVariant: ['tabular-nums'] },
-  miniPlayer: { position: 'absolute', left: 12, right: 12, bottom: 12, overflow: 'hidden', borderRadius: 22, backgroundColor: '#18181b', borderWidth: 1, borderColor: brand.border },
-  miniProgress: { height: 8, justifyContent: 'center', backgroundColor: '#27272a' },
-  progressFill: { height: 4, borderRadius: 999, backgroundColor: brand.primary },
-  miniPlayerRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 70, paddingHorizontal: 12 },
-  miniMeta: { flex: 1, minWidth: 0, gap: 3 },
-  miniTitle: { color: brand.text, fontSize: 15, fontWeight: '800' },
-  miniSubtitle: { color: brand.muted, fontSize: 12 },
-  iconButton: { alignItems: 'center', justifyContent: 'center', width: 48, height: 44, borderRadius: 999, backgroundColor: '#27272a' },
-  transportIconText: { color: brand.text, fontSize: 20, fontWeight: '800', lineHeight: 22 },
-  playCircle: { alignItems: 'center', justifyContent: 'center', width: 58, height: 46, borderRadius: 999, backgroundColor: brand.primary },
-  playIconText: { color: brand.background, fontSize: 20, fontWeight: '900', lineHeight: 22 },
 });
 
 function App() {
