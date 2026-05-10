@@ -7,6 +7,7 @@ RUN npm install -g pnpm@10.25.0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY scripts/setup scripts/setup
+COPY patches patches
 COPY packages/server/package.json packages/server/package.json
 COPY packages/server/prisma packages/server/prisma
 COPY packages/client/package.json packages/client/package.json
