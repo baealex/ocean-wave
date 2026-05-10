@@ -6,13 +6,21 @@ Ocean Wave is a self-hosted music streaming app for your private library. It is 
 
 <br>
 
+## Try it now
+
+**[Live Demo](https://demo-ocean-wave.baejino.com/)** - Try Ocean Wave in your browser.
+
+The Android companion app is built on pull requests and main-branch CI as a debug APK artifact. See [Ocean Wave Mobile](packages/mobile/README.md#ci-debug-apk-artifact) for the current APK artifact location and installation notes.
+
+<br>
+
 ## Features
 
 - [x] Sync your music (supported mp3, aac, wav, ogg, flac).
 - [x] Categorize your favorite music.
 - [x] Sort your music by the number of times you've listened to it.
 - [x] Create your playlists.
-- [x] Play music in the background on your smartphone. (Download for [Android](https://www.dropbox.com/scl/fo/0mjqlwcj44p7uz999868e/h?rlkey=wyush6qcvbkoss72b18q8gqjg&dl=0))
+- [x] Play music in the background on your smartphone with the Android companion app.
 - [x] Use audio mix-in effects (web only).
 - [x] Use audio equalizer (web only).
 - [x] Use audio visualizer (web only).
