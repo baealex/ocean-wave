@@ -22,6 +22,7 @@ import { playLibraryFrom, prepareTrackPlayer } from '../player/trackPlayer';
 import { isNetworkAvailable } from '../storage/nativeKeyValue';
 
 export type MobileScreen = 'servers' | 'addServer' | 'player';
+export type MobileSyncStatus = 'idle' | 'offline' | 'syncing' | 'synced' | 'failed' | 'authRequired';
 
 
 function mergePlaylistSummaries(cachedPlaylists: OceanWavePlaylist[], offlinePlaylists: OfflinePlaylist[]) {
@@ -47,9 +48,10 @@ type UsePlaylistLibraryOptions = {
   setIsLoading: (value: boolean) => void;
   setMessage: (value: string) => void;
   setScreen: (value: MobileScreen) => void;
+  setSyncStatus: (value: MobileSyncStatus) => void;
 };
 
-export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UsePlaylistLibraryOptions) {
+export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyncStatus }: UsePlaylistLibraryOptions) {
   const [searchQuery, setSearchQuery] = useState('');
   const [library, setLibrary] = useState<OceanWaveMusic[]>([]);
   const [playlists, setPlaylists] = useState<OceanWavePlaylist[]>([]);
@@ -136,6 +138,7 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UseP
   const loadServerContent = useCallback(async (profile: ServerProfile, options: { showLoading?: boolean } = {}) => {
     const { showLoading = true } = options;
     if (showLoading) setIsLoading(true);
+    setSyncStatus('syncing');
     setMessage('Loading playlists…');
     setPendingTrack(null);
     setPendingTrackId(null);
@@ -143,6 +146,7 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UseP
     const hasNetwork = await isNetworkAvailable();
     if (!hasNetwork) {
       await loadCachedServerContent(profile);
+      setSyncStatus('offline');
       setMessage('No network connection. Showing local content.');
       if (showLoading) setIsLoading(false);
       return false;
@@ -162,6 +166,7 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UseP
         setLibrary([]);
         setSelectedPlaylistId(null);
         setSelectedPlaylistName(null);
+        setSyncStatus('synced');
         setMessage('No playlists yet. Create one in the web app first.');
         return true;
       }
@@ -171,16 +176,18 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UseP
       setLibrary(nextMusics);
       setSelectedPlaylistId(focusedPlaylist.id);
       setSelectedPlaylistName(playlist?.name ?? focusedPlaylist.name);
+      setSyncStatus('synced');
       setMessage(`${playlist?.name ?? focusedPlaylist.name} ready.`);
       return true;
     } catch (error) {
       await loadCachedServerContent(profile);
+      setSyncStatus('failed');
       setMessage(error instanceof Error ? error.message : String(error));
       return false;
     } finally {
       if (showLoading) setIsLoading(false);
     }
-  }, [loadCachedServerContent, refreshOfflinePlaylists, selectedPlaylistId, setIsLoading, setMessage, setScreen]);
+  }, [loadCachedServerContent, refreshOfflinePlaylists, selectedPlaylistId, setIsLoading, setMessage, setScreen, setSyncStatus]);
 
   const openPlaylist = useCallback(async (profile: ServerProfile | null, playlistId: number) => {
     if (!profile) return;
@@ -203,6 +210,7 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UseP
     setSearchQuery('');
     const hasNetwork = await isNetworkAvailable();
     if (!hasNetwork) {
+      setSyncStatus('offline');
       setMessage(offlinePlaylist ? `${offlinePlaylist.playlistName} is available offline.` : 'No network connection. Connect to the server network to load this playlist.');
       setIsLoading(false);
       return;
@@ -214,17 +222,20 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UseP
       setSelectedPlaylistId(playlist?.id ?? playlistId);
       setSelectedPlaylistName(playlist?.name ?? null);
       setLibrary(nextMusics);
+      setSyncStatus('synced');
       setMessage(playlist ? `${playlist.name} is now your queue.` : 'Playlist not found.');
     } catch (error) {
       if (offlinePlaylist) {
+        setSyncStatus('failed');
         setMessage(`${offlinePlaylist.playlistName} is available offline. Server sync failed.`);
       } else {
+        setSyncStatus('failed');
         setMessage(error instanceof Error ? error.message : String(error));
       }
     } finally {
       setIsLoading(false);
     }
-  }, [applyOfflinePlaylist, playlists, refreshOfflinePlaylists, setIsLoading, setMessage]);
+  }, [applyOfflinePlaylist, playlists, refreshOfflinePlaylists, setIsLoading, setMessage, setSyncStatus]);
 
   const playTrack = useCallback(async (profile: ServerProfile | null, index: number) => {
     if (!profile || !visibleLibrary.length) return;
@@ -249,19 +260,41 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen }: UseP
   }, []);
 
   const saveSelectedPlaylistOffline = useCallback(async (profile: ServerProfile | null) => {
-    if (!profile || !selectedPlaylistId || !selectedPlaylistName || !library.length) return;
-    setOfflineSaveProgress({ completed: 0, total: library.length });
+    if (!profile || !selectedPlaylistId || !selectedPlaylistName) return;
     setMessage(`Downloading ${selectedPlaylistName} for offline playback…`);
     try {
-      await saveOfflinePlaylist(profile, selectedPlaylistId, selectedPlaylistName, library, setOfflineSaveProgress);
+      const hasNetwork = await isNetworkAvailable();
+      if (!hasNetwork) {
+        setSyncStatus('offline');
+        setMessage('No network connection. Connect to the server network to download this playlist.');
+        return;
+      }
+
+      const latestPlaylist = await fetchMobilePlaylist(profile.url, selectedPlaylistId, profile.sessionCookie);
+      const sourceTracks = latestPlaylist?.musics ?? library;
+      const sourceName = latestPlaylist?.name ?? selectedPlaylistName;
+      if (!sourceTracks.length) {
+        setMessage('No songs in this playlist to download.');
+        return;
+      }
+
+      setLibrary(sourceTracks);
+      setSelectedPlaylistName(sourceName);
+      setOfflineSaveProgress({ completed: 0, failed: 0, total: sourceTracks.length });
+
+      const savedPlaylist = await saveOfflinePlaylist(profile, selectedPlaylistId, sourceName, sourceTracks, setOfflineSaveProgress);
       await refreshOfflinePlaylists();
-      setMessage(`${selectedPlaylistName} downloaded for offline playback.`);
+      const failedCount = savedPlaylist.failedTracks?.length ?? 0;
+      const downloadedCount = savedPlaylist.tracks.length;
+      setMessage(failedCount
+        ? `${sourceName} partially downloaded (${downloadedCount}/${sourceTracks.length}, ${failedCount} failed).`
+        : `${sourceName} downloaded for offline playback.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setOfflineSaveProgress(null);
     }
-  }, [library, refreshOfflinePlaylists, selectedPlaylistId, selectedPlaylistName, setMessage]);
+  }, [library, refreshOfflinePlaylists, selectedPlaylistId, selectedPlaylistName, setMessage, setSyncStatus]);
 
   const deleteSelectedOfflinePlaylist = useCallback(async (profile: ServerProfile | null) => {
     if (!profile || !selectedPlaylistId) return;
