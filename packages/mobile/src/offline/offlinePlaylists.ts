@@ -1,4 +1,4 @@
-import { albumArtUrl, audioStreamUrl, OceanWaveMusic } from '../api/oceanWaveClient';
+import { albumArtUrl, audioStreamUrl, OceanWaveMusic, OceanWavePlaylist } from '../api/oceanWaveClient';
 import { ServerProfile } from '../app/serverProfiles';
 import {
   cacheRemoteImage,
@@ -9,6 +9,7 @@ import {
 } from '../storage/nativeKeyValue';
 
 const OFFLINE_PLAYLISTS_KEY = 'ocean-wave.offlinePlaylists.v1';
+const CACHED_PLAYLISTS_KEY = 'ocean-wave.cachedPlaylists.v1';
 
 export type OfflineMusic = OceanWaveMusic & {
   offlineArtworkUri?: string | null;
@@ -30,6 +31,8 @@ export type SaveOfflinePlaylistProgress = {
   total: number;
   trackName?: string;
 };
+
+type CachedServerPlaylists = Record<string, OceanWavePlaylist[]>;
 
 function offlinePlaylistKey(serverUrl: string, playlistId: number) {
   return `${serverUrl}::${playlistId}`;
@@ -54,6 +57,35 @@ async function writeOfflinePlaylists(playlists: OfflinePlaylist[]) {
   await setStoredString(OFFLINE_PLAYLISTS_KEY, JSON.stringify(playlists));
 }
 
+async function readCachedServerPlaylists() {
+  const stored = await getStoredString(CACHED_PLAYLISTS_KEY);
+  if (!stored) return {};
+
+  try {
+    const parsed = JSON.parse(stored) as CachedServerPlaylists;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function readCachedPlaylistsForServer(serverUrl: string) {
+  const cache = await readCachedServerPlaylists();
+  return cache[serverUrl] ?? [];
+}
+
+export async function writeCachedPlaylistsForServer(serverUrl: string, playlists: OceanWavePlaylist[]) {
+  const cache = await readCachedServerPlaylists();
+  await setStoredString(CACHED_PLAYLISTS_KEY, JSON.stringify({
+    ...cache,
+    [serverUrl]: playlists.map(playlist => ({
+      id: playlist.id,
+      name: playlist.name,
+      musicCount: playlist.musicCount,
+    })),
+  }));
+}
+
 export function findOfflinePlaylist(playlists: OfflinePlaylist[], serverUrl: string, playlistId: number) {
   const key = offlinePlaylistKey(serverUrl, playlistId);
   return playlists.find(playlist => offlinePlaylistKey(playlist.serverUrl, playlist.playlistId) === key) ?? null;
@@ -63,6 +95,16 @@ export function listOfflinePlaylistsForServer(playlists: OfflinePlaylist[], serv
   return playlists.filter(playlist => playlist.serverUrl === serverUrl);
 }
 
+export function hasOfflinePlaylistUpdate(offlinePlaylist: OfflinePlaylist | null | undefined, tracks: OceanWaveMusic[]) {
+  if (!offlinePlaylist) return false;
+  const offlineTrackIds = offlinePlaylist.tracks.map(track => track.id);
+  const trackIds = tracks.map(track => track.id);
+
+  if (offlineTrackIds.length !== trackIds.length) return true;
+
+  return trackIds.some((trackId, index) => offlineTrackIds[index] !== trackId);
+}
+
 export async function saveOfflinePlaylist(
   profile: ServerProfile,
   playlistId: number,
@@ -70,6 +112,10 @@ export async function saveOfflinePlaylist(
   tracks: OceanWaveMusic[],
   onProgress?: (progress: SaveOfflinePlaylistProgress) => void,
 ) {
+  const current = await readOfflinePlaylists();
+  const previousPlaylist = findOfflinePlaylist(current, profile.url, playlistId);
+  const previousTracks = new Map(previousPlaylist?.tracks.map(track => [track.id, track]));
+  const nextTrackIds = new Set(tracks.map(track => track.id));
   const total = tracks.length;
   const offlineTracks: OfflineMusic[] = [];
 
@@ -77,13 +123,14 @@ export async function saveOfflinePlaylist(
     const track = tracks[index];
     onProgress?.({ completed: index, total, trackName: track.name });
 
-    const offlineAudioUri = await downloadRemoteFile(
+    const previousTrack = previousTracks.get(track.id);
+    const offlineAudioUri = previousTrack?.offlineAudioUri ?? await downloadRemoteFile(
       audioStreamUrl(profile.url, track.id),
       audioFileName(profile.url, playlistId, track.id),
       profile.sessionCookie,
     );
     const remoteArtworkUri = albumArtUrl(profile.url, track.album?.cover);
-    const offlineArtworkUri = await cacheRemoteImage(remoteArtworkUri, profile.sessionCookie);
+    const offlineArtworkUri = previousTrack?.offlineArtworkUri ?? await cacheRemoteImage(remoteArtworkUri, profile.sessionCookie);
 
     offlineTracks.push({
       ...track,
@@ -103,12 +150,17 @@ export async function saveOfflinePlaylist(
     tracks: offlineTracks,
   };
 
-  const current = await readOfflinePlaylists();
   const next = [
     ...current.filter(playlist => offlinePlaylistKey(playlist.serverUrl, playlist.playlistId) !== offlinePlaylistKey(profile.url, playlistId)),
     nextPlaylist,
   ];
   await writeOfflinePlaylists(next);
+
+  if (previousPlaylist) {
+    await Promise.all(previousPlaylist.tracks
+      .filter(track => !nextTrackIds.has(track.id))
+      .map(track => deleteLocalFile(track.offlineAudioUri)));
+  }
 
   return nextPlaylist;
 }

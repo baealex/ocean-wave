@@ -1,6 +1,8 @@
 package com.baealex.oceanwave.storage
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -30,6 +32,28 @@ class OceanWaveStorageModule(reactContext: ReactApplicationContext) : ReactConte
   fun removeString(key: String, promise: Promise) {
     preferences.edit().remove(key).apply()
     promise.resolve(true)
+  }
+
+
+  @ReactMethod
+  fun isNetworkAvailable(promise: Promise) {
+    try {
+      val connectivityManager = reactApplicationContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+      val network = connectivityManager.activeNetwork
+      if (network == null) {
+        promise.resolve(false)
+        return
+      }
+
+      val capabilities = connectivityManager.getNetworkCapabilities(network)
+      val hasTransport = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true ||
+        capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true ||
+        capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) == true ||
+        capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+      promise.resolve(hasTransport)
+    } catch (error: Exception) {
+      promise.resolve(true)
+    }
   }
 
   @ReactMethod

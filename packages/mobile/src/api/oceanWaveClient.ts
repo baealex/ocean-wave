@@ -29,10 +29,10 @@ type GraphQLResponse<T> = {
   errors?: Array<{ message: string }>;
 };
 
-const NETWORK_TIMEOUT_MS = 10_000;
-const NETWORK_RETRY_DELAY_MS = 600;
+const NETWORK_TIMEOUT_MS = 4_000;
+const NETWORK_RETRY_DELAY_MS = 300;
 
-type FetchOptions = RequestInit & { retry?: boolean };
+type FetchOptions = RequestInit & { retry?: boolean; timeoutMs?: number };
 
 function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(() => resolve(), ms));
@@ -49,13 +49,13 @@ function createNetworkError(error: unknown, endpoint: string) {
 }
 
 async function fetchWithTimeout(endpoint: string, options: FetchOptions = {}) {
-  const { retry = true, ...fetchOptions } = options;
+  const { retry = true, timeoutMs = NETWORK_TIMEOUT_MS, ...fetchOptions } = options;
   const attempts = retry ? 2 : 1;
   let lastError: unknown = null;
 
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await fetch(endpoint, {

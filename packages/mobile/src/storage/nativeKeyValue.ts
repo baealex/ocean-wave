@@ -5,6 +5,7 @@ type OceanWaveStorageModule = {
   deleteLocalFile?(fileUri: string): Promise<boolean>;
   downloadRemoteFile?(url: string, fileName: string, cookie?: string | null): Promise<string>;
   getString(key: string): Promise<string | null>;
+  isNetworkAvailable?(): Promise<boolean>;
   setString(key: string, value: string): Promise<boolean>;
   removeString(key: string): Promise<boolean>;
 };
@@ -51,6 +52,16 @@ export async function cacheRemoteImage(url: string, cookie?: string | null) {
     return await nativeStorage.cacheRemoteImage(url, cookie);
   } catch {
     return url;
+  }
+}
+
+export async function isNetworkAvailable() {
+  if (!nativeStorage?.isNetworkAvailable) return true;
+
+  try {
+    return await nativeStorage.isNetworkAvailable();
+  } catch {
+    return true;
   }
 }
 

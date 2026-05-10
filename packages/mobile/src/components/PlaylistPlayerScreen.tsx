@@ -15,12 +15,14 @@ type PlaylistPlayerScreenProps = {
   canControlPlayback: boolean;
   displayedActiveTrackId?: string;
   displayedMiniTrack?: Track | { artist?: string; artwork?: string; title?: string };
+  hasSelectedPlaylistOfflineUpdate: boolean;
   isLoading: boolean;
   isOfflineSaving: boolean;
   isPlaying: boolean;
   isSelectedPlaylistOffline: boolean;
   offlineSaveProgress?: SaveOfflinePlaylistProgress | null;
   playlistName?: string | null;
+  playlistOfflineStatuses: Record<number, 'none' | 'partial' | 'downloaded'>;
   playlists: OceanWavePlaylist[];
   progressRatio: number;
   searchQuery: string;
@@ -47,12 +49,14 @@ export function PlaylistPlayerScreen({
   canControlPlayback,
   displayedActiveTrackId,
   displayedMiniTrack,
+  hasSelectedPlaylistOfflineUpdate,
   isLoading,
   isOfflineSaving,
   isPlaying,
   isSelectedPlaylistOffline,
   offlineSaveProgress,
   playlistName,
+  playlistOfflineStatuses,
   playlists,
   progressRatio,
   searchQuery,
@@ -75,7 +79,7 @@ export function PlaylistPlayerScreen({
 }: PlaylistPlayerScreenProps) {
   const offlineButtonLabel = isOfflineSaving
     ? `${offlineSaveProgress?.completed ?? 0}/${offlineSaveProgress?.total ?? 0}`
-    : isSelectedPlaylistOffline ? 'Downloaded' : 'Download';
+    : hasSelectedPlaylistOfflineUpdate ? 'Update' : isSelectedPlaylistOffline ? 'Downloaded' : 'Download';
 
   return (
     <View style={styles.playerPage}>
@@ -92,12 +96,20 @@ export function PlaylistPlayerScreen({
               <Text style={styles.playlistName}>New playlist</Text>
               <Text style={styles.playlistMeta}>Opens web</Text>
             </Pressable>
-            {playlists.map(playlist => (
-              <Pressable key={playlist.id} disabled={isLoading} onPress={() => onOpenPlaylist(playlist.id)} style={[styles.playlistChip, selectedPlaylistId === playlist.id && styles.playlistChipActive]}>
-                <Text numberOfLines={1} style={styles.playlistName}>{playlist.name}</Text>
-                <Text style={styles.playlistMeta}>{playlist.musicCount.toLocaleString()} tracks</Text>
-              </Pressable>
-            ))}
+            {playlists.map(playlist => {
+              const offlineStatus = playlistOfflineStatuses[playlist.id] ?? 'none';
+              const offlineLabel = offlineStatus === 'downloaded' ? 'Downloaded' : offlineStatus === 'partial' ? 'Partial' : null;
+
+              return (
+                <Pressable key={playlist.id} disabled={isLoading} onPress={() => onOpenPlaylist(playlist.id)} style={[styles.playlistChip, selectedPlaylistId === playlist.id && styles.playlistChipActive]}>
+                  <Text numberOfLines={1} style={styles.playlistName}>{playlist.name}</Text>
+                  <View style={styles.playlistMetaRow}>
+                    <Text style={styles.playlistMeta}>{playlist.musicCount.toLocaleString()} tracks</Text>
+                    {offlineLabel ? <Text style={[styles.playlistOfflineBadge, offlineStatus === 'partial' && styles.playlistOfflineBadgePartial]}>{offlineLabel}</Text> : null}
+                  </View>
+                </Pressable>
+              );
+            })}
           </ScrollView>
         </View>
       ) : null}
@@ -106,7 +118,7 @@ export function PlaylistPlayerScreen({
         <>
           <View style={styles.playlistActionPanel}>
             <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={onSearchQueryChange} placeholder="Search in playlist" placeholderTextColor="#71717a" style={styles.searchInput} value={searchQuery} />
-            <Pressable accessibilityLabel={isSelectedPlaylistOffline ? 'Remove offline saved playlist' : 'Save playlist for offline playback'} disabled={isLoading || isOfflineSaving || !visibleLibrary.length} onPress={onToggleOffline} style={[styles.offlineButton, (isLoading || isOfflineSaving || !visibleLibrary.length) && styles.disabledButton, isSelectedPlaylistOffline && styles.offlineButtonSaved]}>
+            <Pressable accessibilityLabel={hasSelectedPlaylistOfflineUpdate ? 'Update downloaded playlist' : isSelectedPlaylistOffline ? 'Remove downloaded playlist' : 'Download playlist for offline playback'} disabled={isLoading || isOfflineSaving || !visibleLibrary.length} onPress={onToggleOffline} style={[styles.offlineButton, (isLoading || isOfflineSaving || !visibleLibrary.length) && styles.disabledButton, isSelectedPlaylistOffline && styles.offlineButtonSaved]}>
               <Text style={[styles.offlineButtonText, isSelectedPlaylistOffline && styles.offlineButtonTextSaved]}>{offlineButtonLabel}</Text>
             </Pressable>
           </View>
@@ -175,7 +187,10 @@ const styles = StyleSheet.create({
   addPlaylistHorizontal: { position: 'absolute', width: 14, height: 2.5, borderRadius: 999, backgroundColor: brand.primary },
   addPlaylistVertical: { position: 'absolute', width: 2.5, height: 14, borderRadius: 999, backgroundColor: brand.primary },
   playlistName: { color: brand.text, fontSize: 13, fontWeight: '800' },
+  playlistMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   playlistMeta: { color: brand.muted, fontSize: 11 },
+  playlistOfflineBadge: { overflow: 'hidden', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: 'rgba(16,185,129,0.16)', color: '#34d399', fontSize: 9, fontWeight: '900' },
+  playlistOfflineBadgePartial: { backgroundColor: 'rgba(245,158,11,0.15)', color: '#fbbf24' },
   emptyPlaylistState: { gap: 10, padding: 16, borderRadius: 20, backgroundColor: '#121214', borderWidth: 1, borderColor: brand.border },
   emptyPlaylistTitle: { color: brand.text, fontSize: 16, fontWeight: '900' },
   emptyPlaylistBody: { color: brand.muted, fontSize: 13, lineHeight: 20 },
