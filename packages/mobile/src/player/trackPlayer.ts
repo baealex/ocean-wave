@@ -10,6 +10,11 @@ import { albumArtUrl, audioStreamUrl, OceanWaveMusic } from '../api/oceanWaveCli
 let isPrepared = false;
 let preparePromise: Promise<void> | null = null;
 
+export type PlayableMusic = OceanWaveMusic & {
+  offlineArtworkUri?: string | null;
+  offlineAudioUri?: string | null;
+};
+
 function fallbackText(value: string | undefined | null, fallback: string) {
   const normalized = value?.trim();
   return normalized || fallback;
@@ -58,23 +63,24 @@ export async function resetTrackPlayerIfPrepared() {
   await TrackPlayer.reset();
 }
 
-export function toTrack(serverUrl: string, music: OceanWaveMusic, sessionCookie?: string | null): Track {
+export function toTrack(serverUrl: string, music: PlayableMusic, sessionCookie?: string | null): Track {
+  const isOffline = Boolean(music.offlineAudioUri);
   return {
     id: String(music.id),
-    url: audioStreamUrl(serverUrl, music.id),
+    url: music.offlineAudioUri ?? audioStreamUrl(serverUrl, music.id),
     title: fallbackText(music.name, `Track ${music.id}`),
     artist: fallbackText(music.artist?.name, 'Unknown Artist'),
     album: fallbackText(music.album?.name, 'Unknown Album'),
     duration: music.duration ?? undefined,
-    artwork: albumArtUrl(serverUrl, music.album?.cover),
-    headers: sessionCookie ? { Cookie: sessionCookie } : undefined,
+    artwork: music.offlineArtworkUri ?? albumArtUrl(serverUrl, music.album?.cover),
+    headers: !isOffline && sessionCookie ? { Cookie: sessionCookie } : undefined,
   };
 }
 
 const QUEUE_TRACK_LIMIT = 64;
 const QUEUE_TRACKS_BEFORE_SELECTED = 12;
 
-function getQueueWindow(musics: OceanWaveMusic[], selectedIndex: number) {
+function getQueueWindow(musics: PlayableMusic[], selectedIndex: number) {
   const start = Math.max(0, Math.min(selectedIndex - QUEUE_TRACKS_BEFORE_SELECTED, Math.max(0, musics.length - QUEUE_TRACK_LIMIT)));
   const end = Math.min(musics.length, start + QUEUE_TRACK_LIMIT);
 
@@ -86,7 +92,7 @@ function getQueueWindow(musics: OceanWaveMusic[], selectedIndex: number) {
 
 export async function playLibraryFrom(
   serverUrl: string,
-  musics: OceanWaveMusic[],
+  musics: PlayableMusic[],
   index = 0,
   sessionCookie?: string | null,
 ) {
