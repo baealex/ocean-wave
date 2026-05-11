@@ -1,6 +1,6 @@
 # Ocean Brain Dev Convention
 
-Updated: 2026-03-06
+Updated: 2026-05-11
 
 ## 1. Base Environment
 - Node.js: `22.12+`
@@ -35,6 +35,7 @@ Updated: 2026-03-06
 - Server start script includes `prisma migrate deploy`.
 - Use `node scripts/release/prepublish.mjs` for release artifact preparation.
 - CLI publish validation is covered by `CLI_SMOKE` CI.
+- Docker image publishing is a deployment artifact update. Do not run `BUILD IMAGE` or any deployment workflow from CI success, PR merge, or inferred intent; run it only after an explicit maintainer request for the current task.
 
 ## 6. Related Documents
 - Git rules: `docs/process/GIT_CONVENTION.md`

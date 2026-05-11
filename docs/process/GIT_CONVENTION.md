@@ -1,6 +1,6 @@
 # Ocean Brain Git Convention
 
-Updated: 2026-03-06
+Updated: 2026-05-11
 
 ## 1. Scope
 - This document defines commit and PR conventions for the Ocean Brain repository.
@@ -75,6 +75,7 @@ Use these shortcode labels exactly:
 2. Local validation for the changed scope is complete
 3. Any docs/scripts/env changes are documented in PR body
 4. Release-impacting changes include version/tag plan
+5. Do not trigger deployment/image-publishing workflows after merge unless the maintainer explicitly requests it for the current task
 
 ### 3-5. Release-Impact PR
 Changes in the files below are treated as release-impacting.
@@ -87,6 +88,9 @@ Release-impact PRs must include:
 1. expected release version
 2. tag plan (`vX.Y.Z`)
 3. verification result (`CLI_SMOKE` pass)
+4. deployment/image-build plan, including whether the maintainer has explicitly requested publishing now
+
+Merging a release-impact PR is not permission to publish deployment artifacts. After merge, confirm main CI and stop unless the maintainer explicitly asks to run the deployment or image build workflow for the current task.
 
 ### 3-6. Merge Policy
 - Default: merge commit
