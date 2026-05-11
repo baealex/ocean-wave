@@ -1,6 +1,6 @@
 # Ocean Wave Deployment and Release Strategy
 
-Updated: 2026-04-26
+Updated: 2026-05-11
 
 ## 1. Deployment Principle
 
@@ -9,6 +9,8 @@ Ocean Wave uses an intentional manual deployment model.
 The core rule is simple: deploy only when the maintainer explicitly wants to deploy.
 
 CI passing means the code is validated. It does not mean a Docker image should be published automatically.
+
+Agents must treat Docker image builds as deployment artifact updates. Do not trigger `BUILD IMAGE` from inferred intent, prior context, PR merge completion, CI success, or workflow maintenance work. Trigger it only when the maintainer explicitly asks to build/publish/deploy the Docker image for the current task.
 
 ## 2. Workflow Roles
 
@@ -31,12 +33,23 @@ CI passing means the code is validated. It does not mean a Docker image should b
 2. Confirm CI passes on `main`.
 3. Open GitHub Actions.
 4. Select `BUILD IMAGE`.
-5. Run the workflow manually.
-6. Confirm `baealex/ocean-wave:latest` was built and pushed.
+5. Confirm the maintainer explicitly requested an image build for this task.
+6. Run the workflow manually.
+7. Confirm `baealex/ocean-wave:latest` was built and pushed.
 
 ## 4. Release Impact
 
 Docker image publishing updates the runtime artifact used by deployments.
 
 Any change to the Docker build path, Docker image tag, deployment workflow, or runtime startup behavior is release-impacting and must be called out in PR notes.
+
+## 5. Agent Guardrail
+
+When an agent changes CI, workflow files, Dockerfiles, dependencies, docs, or any other release-adjacent files, the default stopping point is:
+
+1. PR merged into `main`.
+2. CI on `main` confirmed passing.
+3. Report the status to the maintainer.
+
+The agent must not continue into Docker image publishing unless the maintainer explicitly says to run the image build, publish the image, deploy, or equivalent wording for the current task. Ambiguous phrases such as "update actions", "merge it", "verify CI", or prior-turn deployment requests are not enough.
 
