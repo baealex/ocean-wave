@@ -27,15 +27,23 @@ Agents must treat Docker image builds as deployment artifact updates. Do not tri
 - Must not run automatically after CI success.
 - Must not use `push`, `workflow_run`, or scheduled triggers unless this deployment strategy is intentionally changed.
 
+### MOBILE RELEASE
+
+- Builds an Android APK and publishes it to GitHub Releases for trusted testers and Obtainium users.
+- Must be triggered manually with GitHub Actions `Run workflow`.
+- Must not run automatically after CI success.
+- Must not use `push`, `workflow_run`, or scheduled triggers unless this deployment strategy is intentionally changed.
+- Current mobile releases are alpha/pre-release debug-signed APKs, not Play Store or production-signed builds.
+
 ## 3. Manual Deployment Flow
 
 1. Merge the intended changes into `main`.
 2. Confirm CI passes on `main`.
 3. Open GitHub Actions.
-4. Select `BUILD IMAGE`.
-5. Confirm the maintainer explicitly requested an image build for this task.
+4. Select the requested deployment workflow, such as `BUILD IMAGE` or `MOBILE RELEASE`.
+5. Confirm the maintainer explicitly requested that deployment artifact for this task.
 6. Run the workflow manually.
-7. Confirm `baealex/ocean-wave:latest` was built and pushed.
+7. Confirm the expected artifact was published.
 
 ## 4. Release Impact
 
@@ -51,5 +59,5 @@ When an agent changes CI, workflow files, Dockerfiles, dependencies, docs, or an
 2. CI on `main` confirmed passing.
 3. Report the status to the maintainer.
 
-The agent must not continue into Docker image publishing unless the maintainer explicitly says to run the image build, publish the image, deploy, or equivalent wording for the current task. Ambiguous phrases such as "update actions", "merge it", "verify CI", or prior-turn deployment requests are not enough.
+The agent must not continue into Docker image publishing, mobile release publishing, or any other deployment artifact publication unless the maintainer explicitly says to run the relevant build, publish the artifact, deploy, or equivalent wording for the current task. Ambiguous phrases such as "update actions", "merge it", "verify CI", or prior-turn deployment requests are not enough.
 

@@ -72,6 +72,9 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+def oceanWaveVersionCode = (findProperty("oceanWaveVersionCode") ?: "1").toInteger()
+def oceanWaveVersionName = findProperty("oceanWaveVersionName") ?: "1.0"
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -82,8 +85,8 @@ android {
         applicationId "com.baealex.oceanwave"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode oceanWaveVersionCode
+        versionName oceanWaveVersionName
         manifestPlaceholders = [usesCleartextTraffic: "true"]
     }
     signingConfigs {

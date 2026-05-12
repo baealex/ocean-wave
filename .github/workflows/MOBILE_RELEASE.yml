@@ -1,0 +1,93 @@
+name: MOBILE RELEASE
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Android versionName and release tag suffix, for example 0.1.0'
+        required: true
+        type: string
+      version_code:
+        description: 'Android versionCode. Must be higher than previously published mobile builds.'
+        required: true
+        type: number
+      prerelease:
+        description: 'Create the GitHub Release as a pre-release'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  mobile-release:
+    name: mobile release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.25.0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android packages
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;27.1.12297006"
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Assemble Android debug APK
+        working-directory: packages/mobile/android
+        run: |
+          ./gradlew :app:assembleDebug \
+            -PoceanWaveVersionName=${{ inputs.version_name }} \
+            -PoceanWaveVersionCode=${{ inputs.version_code }} \
+            --no-daemon
+
+      - name: Prepare release asset
+        run: |
+          mkdir -p dist/mobile
+          cp packages/mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            "dist/mobile/ocean-wave-pocket-v${{ inputs.version_name }}-debug.apk"
+
+      - name: Create GitHub pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          VERSION_CODE: ${{ inputs.version_code }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          tag="mobile-v${VERSION_NAME}"
+          asset="dist/mobile/ocean-wave-pocket-v${VERSION_NAME}-debug.apk"
+          prerelease_flag=""
+          if [ "${PRERELEASE}" = "true" ]; then
+            prerelease_flag="--prerelease"
+          fi
+
+          gh release create "${tag}" "${asset}" \
+            ${prerelease_flag} \
+            --target "${GITHUB_SHA}" \
+            --title "Ocean Wave Pocket v${VERSION_NAME}" \
+            --notes "Ocean Wave Pocket Android pre-release.\n\n- versionName: ${VERSION_NAME}\n- versionCode: ${VERSION_CODE}\n- APK: debug-signed development build for GitHub/Obtainium distribution testing.\n\nThis is not a Play Store or production-signed release."

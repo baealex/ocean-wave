@@ -10,7 +10,7 @@ Ocean Wave is a self-hosted music streaming app for your private library. It is 
 
 **[Live Demo](https://demo-ocean-wave.baejino.com/)** - Try Ocean Wave in your browser.
 
-The Android companion app is built on pull requests and main-branch CI as a debug APK artifact. See [Ocean Wave Pocket](packages/mobile/README.md#ci-debug-apk-artifact) for the current APK artifact location and installation notes.
+The Android companion app is built on pull requests and main-branch CI as a debug APK artifact. GitHub pre-release APKs can also be published manually for trusted testers and Obtainium users. See [Ocean Wave Pocket](packages/mobile/README.md#github-pre-release-apks-and-obtainium) for the current Android distribution notes.
 
 <br>
 
