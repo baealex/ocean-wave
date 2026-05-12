@@ -24,7 +24,7 @@ playlist playback, and offline playlist downloads.
 - Mix-in controls
 - Dashboard/management screens
 - Full album/artist management UI
-- Release-signed Android distribution
+- Production-signed Android distribution
 
 ## Try the demo server
 
@@ -194,6 +194,48 @@ To download the latest debug APK from GitHub:
 This debug APK is for development validation only. It is not release-signed and
 should not be treated as a production build. Do not use older Dropbox APK links;
 they are stale and no longer represent the current Android app.
+
+## GitHub pre-release APKs and Obtainium
+
+Ocean Wave Pocket is currently suitable for **alpha/pre-release distribution** to
+trusted testers through GitHub Releases. It is not a Play Store build, but the
+release APK is signed with the project release key when the required GitHub
+Secrets are configured.
+
+The manual `MOBILE RELEASE` workflow can create a GitHub pre-release containing a
+release-signed APK:
+
+1. Confirm `main` CI is passing.
+2. Open GitHub Actions > `MOBILE RELEASE` > `Run workflow`.
+3. Enter a `version_name`, for example `0.1.0`.
+4. Enter a monotonically increasing `version_code`.
+5. Keep `prerelease` enabled unless this project later adopts Play Store production distribution.
+
+Required repository secrets:
+
+- `OCEAN_WAVE_ANDROID_KEYSTORE_BASE64`: base64-encoded Android keystore file.
+- `OCEAN_WAVE_ANDROID_KEYSTORE_PASSWORD`: keystore password.
+- `OCEAN_WAVE_ANDROID_KEY_ALIAS`: release key alias.
+- `OCEAN_WAVE_ANDROID_KEY_PASSWORD`: release key password.
+
+Release tags use the `mobile-v<version_name>` format, and APK assets use:
+
+```text
+ocean-wave-pocket-v<version_name>.apk
+```
+
+Obtainium can track the repository's GitHub Releases and install the latest
+Ocean Wave Pocket APK asset. Because Android updates require the same app
+signature and a higher `versionCode`, keep using this workflow for alpha builds
+and increment `version_code` every time a mobile APK is published.
+
+Limitations of the current alpha channel:
+
+- Releases are intended for testers who trust this repository.
+- The release signing key must be preserved; changing keys later requires users
+  to uninstall the old build before installing the new build.
+- The workflow creates release assets only when manually run; CI artifacts remain
+  the normal validation output for pull requests.
 
 ## Android branding
 
