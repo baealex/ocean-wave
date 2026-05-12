@@ -1,4 +1,4 @@
-# Ocean Wave Mobile
+# Ocean Wave Pocket
 
 Android-first React Native companion player for Ocean Wave.
 
@@ -180,14 +180,14 @@ adb shell am start -W -a android.intent.action.VIEW -d "oceanwave://play/playlis
 Pull requests that touch mobile or workflow paths run the `android mobile assemble`
 job. The job builds the debug APK and uploads it as a GitHub Actions artifact:
 
-- Artifact name: `ocean-wave-mobile-debug-apk`
+- Artifact name: `ocean-wave-pocket-debug-apk`
 - Artifact path in CI: `packages/mobile/android/app/build/outputs/apk/debug/app-debug.apk`
 - Retention: 14 days
 
 To download the latest debug APK from GitHub:
 
 1. Open the latest `CI` workflow run for `main` or the target pull request.
-2. Download the `ocean-wave-mobile-debug-apk` artifact.
+2. Download the `ocean-wave-pocket-debug-apk` artifact.
 3. Extract the artifact and install `app-debug.apk` on an Android device with USB
    debugging enabled.
 
@@ -197,7 +197,7 @@ they are stale and no longer represent the current Android app.
 
 ## Android branding
 
-- App label: `Ocean Wave`
+- App label: `Ocean Wave Pocket`
 - React Native app registry name: `OceanWave`
 - Android application ID / namespace: `com.baealex.oceanwave`
 - Launcher icons are generated from `packages/client/public/brand-logo.svg` so the companion app uses the same primary app mark as the web product.
