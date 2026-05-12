@@ -198,22 +198,30 @@ they are stale and no longer represent the current Android app.
 ## GitHub pre-release APKs and Obtainium
 
 Ocean Wave Pocket is currently suitable for **alpha/pre-release distribution** to
-trusted testers through GitHub Releases. It is not yet a production-signed Play
-Store build.
+trusted testers through GitHub Releases. It is not a Play Store build, but the
+release APK is signed with the project release key when the required GitHub
+Secrets are configured.
 
 The manual `MOBILE RELEASE` workflow can create a GitHub pre-release containing a
-debug-signed APK:
+release-signed APK:
 
 1. Confirm `main` CI is passing.
 2. Open GitHub Actions > `MOBILE RELEASE` > `Run workflow`.
 3. Enter a `version_name`, for example `0.1.0`.
 4. Enter a monotonically increasing `version_code`.
-5. Keep `prerelease` enabled unless this project later adopts production signing.
+5. Keep `prerelease` enabled unless this project later adopts Play Store production distribution.
+
+Required repository secrets:
+
+- `OCEAN_WAVE_ANDROID_KEYSTORE_BASE64`: base64-encoded Android keystore file.
+- `OCEAN_WAVE_ANDROID_KEYSTORE_PASSWORD`: keystore password.
+- `OCEAN_WAVE_ANDROID_KEY_ALIAS`: release key alias.
+- `OCEAN_WAVE_ANDROID_KEY_PASSWORD`: release key password.
 
 Release tags use the `mobile-v<version_name>` format, and APK assets use:
 
 ```text
-ocean-wave-pocket-v<version_name>-debug.apk
+ocean-wave-pocket-v<version_name>.apk
 ```
 
 Obtainium can track the repository's GitHub Releases and install the latest
@@ -223,10 +231,9 @@ and increment `version_code` every time a mobile APK is published.
 
 Limitations of the current alpha channel:
 
-- APKs are debug-signed, not production-signed.
 - Releases are intended for testers who trust this repository.
-- Switching to a production signing key later may require users to uninstall the
-  debug-signed build before installing the production-signed build.
+- The release signing key must be preserved; changing keys later requires users
+  to uninstall the old build before installing the new build.
 - The workflow creates release assets only when manually run; CI artifacts remain
   the normal validation output for pull requests.
 

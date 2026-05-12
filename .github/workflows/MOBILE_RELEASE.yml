@@ -58,10 +58,25 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Assemble Android debug APK
-        working-directory: packages/mobile/android
+      - name: Decode Android release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.OCEAN_WAVE_ANDROID_KEYSTORE_BASE64 }}
         run: |
-          ./gradlew :app:assembleDebug \
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "OCEAN_WAVE_ANDROID_KEYSTORE_BASE64 is required" >&2
+            exit 1
+          fi
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/ocean-wave-release.keystore"
+
+      - name: Assemble Android release APK
+        working-directory: packages/mobile/android
+        env:
+          OCEAN_WAVE_ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/ocean-wave-release.keystore
+          OCEAN_WAVE_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.OCEAN_WAVE_ANDROID_KEYSTORE_PASSWORD }}
+          OCEAN_WAVE_ANDROID_KEY_ALIAS: ${{ secrets.OCEAN_WAVE_ANDROID_KEY_ALIAS }}
+          OCEAN_WAVE_ANDROID_KEY_PASSWORD: ${{ secrets.OCEAN_WAVE_ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew :app:assembleRelease \
             -PoceanWaveVersionName=${{ inputs.version_name }} \
             -PoceanWaveVersionCode=${{ inputs.version_code }} \
             --no-daemon
@@ -69,8 +84,8 @@ jobs:
       - name: Prepare release asset
         run: |
           mkdir -p dist/mobile
-          cp packages/mobile/android/app/build/outputs/apk/debug/app-debug.apk \
-            "dist/mobile/ocean-wave-pocket-v${{ inputs.version_name }}-debug.apk"
+          cp packages/mobile/android/app/build/outputs/apk/release/app-release.apk \
+            "dist/mobile/ocean-wave-pocket-v${{ inputs.version_name }}.apk"
 
       - name: Create GitHub pre-release
         env:
@@ -80,7 +95,7 @@ jobs:
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
           tag="mobile-v${VERSION_NAME}"
-          asset="dist/mobile/ocean-wave-pocket-v${VERSION_NAME}-debug.apk"
+          asset="dist/mobile/ocean-wave-pocket-v${VERSION_NAME}.apk"
           prerelease_flag=""
           if [ "${PRERELEASE}" = "true" ]; then
             prerelease_flag="--prerelease"
@@ -90,4 +105,4 @@ jobs:
             ${prerelease_flag} \
             --target "${GITHUB_SHA}" \
             --title "Ocean Wave Pocket v${VERSION_NAME}" \
-            --notes "Ocean Wave Pocket Android pre-release.\n\n- versionName: ${VERSION_NAME}\n- versionCode: ${VERSION_CODE}\n- APK: debug-signed development build for GitHub/Obtainium distribution testing.\n\nThis is not a Play Store or production-signed release."
+            --notes "Ocean Wave Pocket Android pre-release.\n\n- versionName: ${VERSION_NAME}\n- versionCode: ${VERSION_CODE}\n- APK: release-signed Android build for GitHub/Obtainium distribution.\n\nThis is not a Play Store release."

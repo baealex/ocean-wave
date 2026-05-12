@@ -33,7 +33,7 @@ Agents must treat Docker image builds as deployment artifact updates. Do not tri
 - Must be triggered manually with GitHub Actions `Run workflow`.
 - Must not run automatically after CI success.
 - Must not use `push`, `workflow_run`, or scheduled triggers unless this deployment strategy is intentionally changed.
-- Current mobile releases are alpha/pre-release debug-signed APKs, not Play Store or production-signed builds.
+- Current mobile releases are alpha/pre-release APKs signed with the project Android release key, not Play Store builds.
 
 ## 3. Manual Deployment Flow
 
