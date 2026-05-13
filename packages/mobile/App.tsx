@@ -27,7 +27,7 @@ import {
 } from './src/app/serverProfiles';
 import { useTrackPlaybackControls } from './src/hooks/useTrackPlaybackControls';
 import { useServerProfiles } from './src/hooks/useServerProfiles';
-import { MobileScreen, usePlaylistLibrary } from './src/hooks/usePlaylistLibrary';
+import { MobileScreen, MobileSyncStatus, usePlaylistLibrary } from './src/hooks/usePlaylistLibrary';
 import { useOceanWaveDeepLinks } from './src/hooks/useOceanWaveDeepLinks';
 import { findOfflinePlaylist, hasOfflinePlaylistUpdate } from './src/offline/offlinePlaylists';
 import { isNetworkAvailable } from './src/storage/nativeKeyValue';
@@ -52,6 +52,7 @@ function OceanWaveMobileApp() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('Choose a server to start listening.');
+  const [syncStatus, setSyncStatus] = useState<MobileSyncStatus>('idle');
 
   const {
     library,
@@ -77,7 +78,7 @@ function OceanWaveMobileApp() {
     setSelectedPlaylistName,
     saveSelectedPlaylistOffline,
     visibleLibrary,
-  } = usePlaylistLibrary({ setIsLoading, setMessage, setScreen });
+  } = usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyncStatus });
 
   const didAutoConnectLastProfileRef = useRef(false);
 
@@ -108,16 +109,25 @@ function OceanWaveMobileApp() {
   const selectedPlaylistSummary = selectedPlaylistId
     ? playlists.find(playlist => playlist.id === selectedPlaylistId)
     : null;
+  const selectedOfflineFailureCount = selectedOfflinePlaylist?.failedTracks?.length ?? 0;
   const hasSelectedPlaylistOfflineUpdate = hasOfflinePlaylistUpdate(selectedOfflinePlaylist, library)
+    || selectedOfflineFailureCount > 0
     || Boolean(selectedOfflinePlaylist && selectedPlaylistSummary && selectedOfflinePlaylist.tracks.length < selectedPlaylistSummary.musicCount);
-  const playlistOfflineStatuses = useMemo<Record<number, 'none' | 'partial' | 'downloaded'>>(() => {
-    const statuses: Record<number, 'none' | 'partial' | 'downloaded'> = {};
+  const playlistOfflineStatuses = useMemo<Record<number, 'none' | { state: 'partial' | 'downloaded'; downloaded: number; total: number; failed: number }>>(() => {
+    const statuses: Record<number, 'none' | { state: 'partial' | 'downloaded'; downloaded: number; total: number; failed: number }> = {};
 
     for (const playlist of playlists) {
       const offlinePlaylist = findOfflinePlaylist(offlinePlaylists, normalizedServerUrl, playlist.id);
+      const downloadedCount = offlinePlaylist?.tracks.length ?? 0;
+      const expectedCount = Math.max(playlist.musicCount, offlinePlaylist?.totalTrackCount ?? 0);
       statuses[playlist.id] = !offlinePlaylist
         ? 'none'
-        : offlinePlaylist.tracks.length >= playlist.musicCount ? 'downloaded' : 'partial';
+        : {
+          downloaded: downloadedCount,
+          failed: offlinePlaylist.failedTracks?.length ?? 0,
+          state: downloadedCount >= expectedCount && !(offlinePlaylist.failedTracks?.length) ? 'downloaded' : 'partial',
+          total: expectedCount,
+        };
     }
 
     return statuses;
@@ -173,6 +183,7 @@ function OceanWaveMobileApp() {
   const connectProfile = useCallback(async (profile: ServerProfile) => {
     setIsLoading(true);
     setSelectedProfileId(profile.id);
+    setSyncStatus('syncing');
     setMessage(`Opening ${profile.name}…`);
 
     const loadedCachedContent = await loadCachedServerContent(profile);
@@ -183,6 +194,7 @@ function OceanWaveMobileApp() {
 
     const hasNetwork = await isNetworkAvailable();
     if (!hasNetwork) {
+      setSyncStatus('offline');
       setMessage(loadedCachedContent ? `${profile.name} is available offline.` : 'No network connection. Connect to the server network to sync.');
       setIsLoading(false);
       return;
@@ -195,6 +207,7 @@ function OceanWaveMobileApp() {
 
       if (nextSession.authRequired && !nextSession.authenticated && !profile.sessionCookie) {
         if (loadedCachedContent) {
+          setSyncStatus('authRequired');
           setMessage(`${nextProfile.name} is available offline. Sign in to sync updates.`);
           return;
         }
@@ -204,6 +217,7 @@ function OceanWaveMobileApp() {
         setPassword('');
         resetQueueState();
         setScreen('addServer');
+        setSyncStatus('authRequired');
         setMessage('Password required. Sign in once to save this server.');
         return;
       }
@@ -211,8 +225,10 @@ function OceanWaveMobileApp() {
       await loadServerContent(nextProfile, { showLoading: !loadedCachedContent });
     } catch (error) {
       if (!loadedCachedContent) {
+        setSyncStatus('failed');
         setMessage(error instanceof Error ? error.message : String(error));
       } else {
+        setSyncStatus('failed');
         setMessage(`${profile.name} is available offline. Server sync failed.`);
       }
     } finally {
@@ -243,6 +259,7 @@ function OceanWaveMobileApp() {
     try {
       const hasNetwork = await isNetworkAvailable();
       if (!hasNetwork) {
+        setSyncStatus('offline');
         setMessage('No network connection. Connect to the server network first.');
         return;
       }
@@ -311,12 +328,23 @@ function OceanWaveMobileApp() {
   const handlePlayTrack = useCallback((index: number) => playTrack(selectedProfile, index), [playTrack, selectedProfile]);
   const handleToggleOffline = useCallback(() => {
     if (isSelectedPlaylistOffline && !hasSelectedPlaylistOfflineUpdate) {
-      deleteSelectedOfflinePlaylist(selectedProfile).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
+      Alert.alert(
+        'Remove downloaded playlist?',
+        `${selectedPlaylistName ?? 'This playlist'} will be removed from offline playback.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: () => deleteSelectedOfflinePlaylist(selectedProfile).catch(error => setMessage(error instanceof Error ? error.message : String(error))),
+          },
+        ],
+      );
       return;
     }
 
     saveSelectedPlaylistOffline(selectedProfile).catch(error => setMessage(error instanceof Error ? error.message : String(error)));
-  }, [deleteSelectedOfflinePlaylist, hasSelectedPlaylistOfflineUpdate, isSelectedPlaylistOffline, saveSelectedPlaylistOffline, selectedProfile]);
+  }, [deleteSelectedOfflinePlaylist, hasSelectedPlaylistOfflineUpdate, isSelectedPlaylistOffline, saveSelectedPlaylistOffline, selectedPlaylistName, selectedProfile]);
 
   const renderNavBar = (title: string) => <NavBar onBack={handleMobileBack} title={title} />;
 
@@ -359,6 +387,8 @@ function OceanWaveMobileApp() {
       isOfflineSaving={Boolean(offlineSaveProgress)}
       hasSelectedPlaylistOfflineUpdate={hasSelectedPlaylistOfflineUpdate}
       isSelectedPlaylistOffline={isSelectedPlaylistOffline}
+      selectedOfflineFailureCount={selectedOfflineFailureCount}
+      syncStatus={syncStatus}
       onBack={handleMobileBack}
       onCreatePlaylist={openPlaylistCreator}
       onNext={skipNext}

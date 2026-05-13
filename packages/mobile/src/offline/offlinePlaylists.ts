@@ -16,6 +16,12 @@ export type OfflineMusic = OceanWaveMusic & {
   offlineAudioUri: string;
 };
 
+export type OfflineDownloadFailure = {
+  id: number;
+  name: string;
+  error: string;
+};
+
 export type OfflinePlaylist = {
   playlistId: number;
   playlistName: string;
@@ -24,10 +30,13 @@ export type OfflinePlaylist = {
   serverName: string;
   serverUrl: string;
   tracks: OfflineMusic[];
+  totalTrackCount?: number;
+  failedTracks?: OfflineDownloadFailure[];
 };
 
 export type SaveOfflinePlaylistProgress = {
   completed: number;
+  failed: number;
   total: number;
   trackName?: string;
 };
@@ -118,26 +127,37 @@ export async function saveOfflinePlaylist(
   const nextTrackIds = new Set(tracks.map(track => track.id));
   const total = tracks.length;
   const offlineTracks: OfflineMusic[] = [];
+  const failedTracks: OfflineDownloadFailure[] = [];
 
   for (let index = 0; index < tracks.length; index += 1) {
     const track = tracks[index];
-    onProgress?.({ completed: index, total, trackName: track.name });
+    onProgress?.({ completed: index, failed: failedTracks.length, total, trackName: track.name });
 
     const previousTrack = previousTracks.get(track.id);
-    const offlineAudioUri = previousTrack?.offlineAudioUri ?? await downloadRemoteFile(
-      audioStreamUrl(profile.url, track.id),
-      audioFileName(profile.url, playlistId, track.id),
-      profile.sessionCookie,
-    );
-    const remoteArtworkUri = albumArtUrl(profile.url, track.album?.cover);
-    const offlineArtworkUri = previousTrack?.offlineArtworkUri ?? await cacheRemoteImage(remoteArtworkUri, profile.sessionCookie);
 
-    offlineTracks.push({
-      ...track,
-      offlineArtworkUri,
-      offlineAudioUri,
-    });
-    onProgress?.({ completed: index + 1, total, trackName: track.name });
+    try {
+      const offlineAudioUri = previousTrack?.offlineAudioUri ?? await downloadRemoteFile(
+        audioStreamUrl(profile.url, track.id),
+        audioFileName(profile.url, playlistId, track.id),
+        profile.sessionCookie,
+      );
+      const remoteArtworkUri = albumArtUrl(profile.url, track.album?.cover);
+      const offlineArtworkUri = previousTrack?.offlineArtworkUri ?? await cacheRemoteImage(remoteArtworkUri, profile.sessionCookie);
+
+      offlineTracks.push({
+        ...track,
+        offlineArtworkUri,
+        offlineAudioUri,
+      });
+    } catch (error) {
+      failedTracks.push({
+        id: track.id,
+        name: track.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    onProgress?.({ completed: index + 1, failed: failedTracks.length, total, trackName: track.name });
   }
 
   const nextPlaylist: OfflinePlaylist = {
@@ -148,6 +168,8 @@ export async function saveOfflinePlaylist(
     serverName: profile.name,
     serverUrl: profile.url,
     tracks: offlineTracks,
+    totalTrackCount: total,
+    failedTracks,
   };
 
   const next = [
