@@ -400,6 +400,7 @@ function OceanWaveMobileApp() {
       canControlPlayback={canControlPlayback}
       displayedActiveTrackId={displayedActiveTrackId}
       isLoading={isLoading}
+      playlistContentState={playlistContentState}
       isPlaying={isPlaying}
       isOfflineSaving={Boolean(offlineSaveProgress)}
       hasSelectedPlaylistOfflineUpdate={hasSelectedPlaylistOfflineUpdate}

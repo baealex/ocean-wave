@@ -5,7 +5,7 @@ import type { Track } from 'react-native-track-player';
 import { albumArtUrl, OceanWaveMusic, OceanWavePlaylist } from '../api/oceanWaveClient';
 import { brand } from '../config/brand';
 import { SaveOfflinePlaylistProgress } from '../offline/offlinePlaylists';
-import { MobileSyncStatus } from '../hooks/usePlaylistLibrary';
+import { MobileSyncStatus, PlaylistContentState } from '../hooks/usePlaylistLibrary';
 import { formatDuration } from '../utils/time';
 import { CachedArtwork } from './CachedArtwork';
 import { MiniPlayer } from './MiniPlayer';
@@ -20,6 +20,7 @@ type PlaylistPlayerScreenProps = {
   displayedMiniTrack?: Track | { artist?: string; artwork?: string; title?: string };
   hasSelectedPlaylistOfflineUpdate: boolean;
   isLoading: boolean;
+  playlistContentState: PlaylistContentState;
   isOfflineSaving: boolean;
   isPlaying: boolean;
   isSelectedPlaylistOffline: boolean;
@@ -58,6 +59,7 @@ export function PlaylistPlayerScreen({
   displayedMiniTrack,
   hasSelectedPlaylistOfflineUpdate,
   isLoading,
+  playlistContentState,
   isOfflineSaving,
   isPlaying,
   isSelectedPlaylistOffline,
@@ -91,6 +93,12 @@ export function PlaylistPlayerScreen({
   const offlineButtonLabel = isOfflineSaving
     ? offlineSaveProgress ? `${offlineSaveProgress.completed}/${offlineSaveProgress.total}${offlineSaveProgress.failed ? ` · ${offlineSaveProgress.failed} failed` : ''}` : 'Downloading…'
     : selectedOfflineFailureCount > 0 ? 'Retry' : hasSelectedPlaylistOfflineUpdate ? 'Update' : isSelectedPlaylistOffline ? 'Downloaded' : 'Download';
+  const contentLabel = playlistContentState === 'showing-offline'
+    ? 'Offline copy'
+    : playlistContentState === 'showing-cache' ? 'Cached'
+      : playlistContentState === 'refreshing' ? 'Refreshing'
+        : playlistContentState === 'failed' && visibleLibrary.length > 0 ? 'Stale data'
+          : null;
   const syncLabel = syncStatus === 'idle'
     ? null
     : syncStatus === 'offline' ? 'Offline'
@@ -152,9 +160,13 @@ export function PlaylistPlayerScreen({
 
       {playlistName ? (
         <>
+          <View style={styles.playlistStatusRow}>
+            {contentLabel ? <Text style={[styles.contentSourceBadge, playlistContentState === 'showing-offline' && styles.contentSourceBadgeOffline, playlistContentState === 'failed' && styles.contentSourceBadgeFailed]}>{contentLabel}</Text> : null}
+            {playlistContentState === 'refreshing' ? <Text style={styles.refreshingHint}>Updating in background…</Text> : null}
+          </View>
           <View style={styles.playlistActionPanel}>
             <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={onSearchQueryChange} placeholder="Search in playlist" placeholderTextColor="#71717a" style={styles.searchInput} value={searchQuery} />
-            <Pressable accessibilityLabel={selectedOfflineFailureCount > 0 ? 'Retry failed offline downloads' : hasSelectedPlaylistOfflineUpdate ? 'Update downloaded playlist' : isSelectedPlaylistOffline ? 'Remove downloaded playlist' : 'Download playlist for offline playback'} disabled={isLoading || isOfflineSaving || !visibleLibrary.length} onPress={onToggleOffline} style={[styles.offlineButton, (isLoading || isOfflineSaving || !visibleLibrary.length) && styles.disabledButton, isSelectedPlaylistOffline && styles.offlineButtonSaved]}>
+            <Pressable accessibilityLabel={selectedOfflineFailureCount > 0 ? 'Retry failed offline downloads' : hasSelectedPlaylistOfflineUpdate ? 'Update downloaded playlist' : isSelectedPlaylistOffline ? 'Remove downloaded playlist' : 'Download playlist for offline playback'} disabled={isOfflineSaving || !visibleLibrary.length} onPress={onToggleOffline} style={[styles.offlineButton, (isOfflineSaving || !visibleLibrary.length) && styles.disabledButton, isSelectedPlaylistOffline && styles.offlineButtonSaved]}>
               <Text style={[styles.offlineButtonText, isSelectedPlaylistOffline && styles.offlineButtonTextSaved]}>{offlineButtonLabel}</Text>
             </Pressable>
           </View>
@@ -262,6 +274,11 @@ const styles = StyleSheet.create({
   emptyPlaylistButton: { alignSelf: 'flex-start', minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 14, backgroundColor: 'rgba(139,92,246,0.16)' },
   emptyPlaylistButtonText: { color: brand.primary, fontSize: 12, fontWeight: '900' },
   playlistActionPanel: { flexDirection: 'row', gap: 8 },
+  playlistStatusRow: { minHeight: 20, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  contentSourceBadge: { overflow: 'hidden', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: 'rgba(139,92,246,0.14)', color: brand.primary, fontSize: 10, fontWeight: '900' },
+  contentSourceBadgeOffline: { backgroundColor: 'rgba(16,185,129,0.14)', color: '#34d399' },
+  contentSourceBadgeFailed: { backgroundColor: 'rgba(245,158,11,0.14)', color: '#fbbf24' },
+  refreshingHint: { color: brand.muted, fontSize: 11, fontWeight: '700' },
   searchInput: { flex: 1, minHeight: 42, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#09090b', borderWidth: 1, borderColor: brand.border },
   offlineButton: { minWidth: 112, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, paddingHorizontal: 12, backgroundColor: 'rgba(139,92,246,0.16)', borderWidth: 1, borderColor: 'rgba(139,92,246,0.32)' },
   offlineButtonSaved: { backgroundColor: 'rgba(16,185,129,0.14)', borderColor: 'rgba(16,185,129,0.34)' },
