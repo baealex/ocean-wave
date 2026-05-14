@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 
 import {
   fetchMobilePlaylist,
@@ -77,14 +77,16 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
   const [playlistContentState, setPlaylistContentState] = useState<PlaylistContentState>('idle');
   const playlistRequestSeqRef = useRef(0);
 
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
   const visibleLibrary = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
     if (!normalizedQuery) return library;
 
     return library.filter(item => [item.name, item.artist?.name, item.album?.name]
       .filter(Boolean)
       .some(value => value?.toLowerCase().includes(normalizedQuery)));
-  }, [library, searchQuery]);
+  }, [deferredSearchQuery, library]);
 
   const resetQueueState = useCallback(() => {
     setLibrary([]);

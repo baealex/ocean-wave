@@ -12,6 +12,8 @@ type CachedArtworkProps = {
 };
 
 const artworkCache = new Map<string, string>();
+const artworkFailureCache = new Map<string, number>();
+const ARTWORK_RETRY_DELAY_MS = 1000 * 60 * 5;
 
 export const CachedArtwork = memo(function CachedArtwork({
   active = false,
@@ -30,9 +32,11 @@ export const CachedArtwork = memo(function CachedArtwork({
 
     let isMounted = true;
     const cachedUri = artworkCache.get(remoteUri);
+    const failureKey = `${remoteUri}::${cookie ?? ''}`;
+    const lastFailureAt = artworkFailureCache.get(failureKey) ?? 0;
     setArtworkUri(cachedUri ?? remoteUri);
 
-    if (cachedUri) {
+    if (cachedUri || Date.now() - lastFailureAt < ARTWORK_RETRY_DELAY_MS) {
       return () => {
         isMounted = false;
       };
@@ -41,9 +45,12 @@ export const CachedArtwork = memo(function CachedArtwork({
     cacheRemoteImage(remoteUri, cookie)
       .then(nextUri => {
         artworkCache.set(remoteUri, nextUri);
+        artworkFailureCache.delete(failureKey);
         if (isMounted) setArtworkUri(nextUri);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        artworkFailureCache.set(failureKey, Date.now());
+      });
 
     return () => {
       isMounted = false;
