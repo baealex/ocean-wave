@@ -10,6 +10,8 @@ import {
 
 const OFFLINE_PLAYLISTS_KEY = 'ocean-wave.offlinePlaylists.v1';
 const CACHED_PLAYLISTS_KEY = 'ocean-wave.cachedPlaylists.v1';
+const CACHED_PLAYLIST_DETAILS_KEY = 'ocean-wave.cachedPlaylistDetails.v1';
+const MAX_CACHED_PLAYLIST_DETAILS = 20;
 
 export type OfflineMusic = OceanWaveMusic & {
   offlineArtworkUri?: string | null;
@@ -37,13 +39,42 @@ export type OfflinePlaylist = {
 export type SaveOfflinePlaylistProgress = {
   completed: number;
   failed: number;
+  playlistId: number;
   total: number;
   trackName?: string;
 };
 
 type CachedServerPlaylists = Record<string, OceanWavePlaylist[]>;
 
+export type CachedPlaylistDetail = {
+  cachedAt: string;
+  musicCount: number;
+  playlistId: number;
+  playlistName: string;
+  serverUrl: string;
+  tracks: OceanWaveMusic[];
+};
+
+type CachedPlaylistDetails = Record<string, CachedPlaylistDetail>;
+
+function isCachedPlaylistDetail(value: unknown): value is CachedPlaylistDetail {
+  if (!value || typeof value !== 'object') return false;
+  const detail = value as Partial<CachedPlaylistDetail>;
+  const cachedAtMs = typeof detail.cachedAt === 'string' ? Date.parse(detail.cachedAt) : Number.NaN;
+  return typeof detail.playlistId === 'number'
+    && typeof detail.playlistName === 'string'
+    && typeof detail.musicCount === 'number'
+    && Number.isFinite(cachedAtMs)
+    && typeof detail.serverUrl === 'string'
+    && Array.isArray(detail.tracks)
+    && detail.tracks.every(track => typeof track?.id === 'number' && typeof track?.name === 'string');
+}
+
 function offlinePlaylistKey(serverUrl: string, playlistId: number) {
+  return `${serverUrl}::${playlistId}`;
+}
+
+function cachedPlaylistDetailKey(serverUrl: string, playlistId: number) {
   return `${serverUrl}::${playlistId}`;
 }
 
@@ -95,6 +126,50 @@ export async function writeCachedPlaylistsForServer(serverUrl: string, playlists
   }));
 }
 
+async function readCachedPlaylistDetails() {
+  const stored = await getStoredString(CACHED_PLAYLIST_DETAILS_KEY);
+  if (!stored) return {};
+
+  try {
+    const parsed = JSON.parse(stored) as CachedPlaylistDetails;
+    if (!parsed || typeof parsed !== 'object') return {};
+
+    return Object.fromEntries(Object.entries(parsed)
+      .filter((entry): entry is [string, CachedPlaylistDetail] => isCachedPlaylistDetail(entry[1])));
+  } catch {
+    return {};
+  }
+}
+
+export async function readCachedPlaylistDetail(serverUrl: string, playlistId: number) {
+  const cache = await readCachedPlaylistDetails();
+  const detail = cache[cachedPlaylistDetailKey(serverUrl, playlistId)] ?? null;
+  return detail?.serverUrl === serverUrl ? detail : null;
+}
+
+export async function writeCachedPlaylistDetail(serverUrl: string, playlist: OceanWavePlaylist) {
+  const tracks = playlist.musics ?? [];
+  const cache = await readCachedPlaylistDetails();
+  const key = cachedPlaylistDetailKey(serverUrl, playlist.id);
+
+  const nextCache = {
+    ...cache,
+    [key]: {
+      cachedAt: new Date().toISOString(),
+      musicCount: playlist.musicCount,
+      playlistId: playlist.id,
+      playlistName: playlist.name,
+      serverUrl,
+      tracks,
+    },
+  };
+  const trimmedEntries = Object.entries(nextCache)
+    .sort(([, left], [, right]) => Date.parse(right.cachedAt) - Date.parse(left.cachedAt))
+    .slice(0, MAX_CACHED_PLAYLIST_DETAILS);
+
+  await setStoredString(CACHED_PLAYLIST_DETAILS_KEY, JSON.stringify(Object.fromEntries(trimmedEntries)));
+}
+
 export function findOfflinePlaylist(playlists: OfflinePlaylist[], serverUrl: string, playlistId: number) {
   const key = offlinePlaylistKey(serverUrl, playlistId);
   return playlists.find(playlist => offlinePlaylistKey(playlist.serverUrl, playlist.playlistId) === key) ?? null;
@@ -131,7 +206,7 @@ export async function saveOfflinePlaylist(
 
   for (let index = 0; index < tracks.length; index += 1) {
     const track = tracks[index];
-    onProgress?.({ completed: index, failed: failedTracks.length, total, trackName: track.name });
+    onProgress?.({ completed: index, failed: failedTracks.length, playlistId, total, trackName: track.name });
 
     const previousTrack = previousTracks.get(track.id);
 
@@ -157,7 +232,7 @@ export async function saveOfflinePlaylist(
       });
     }
 
-    onProgress?.({ completed: index + 1, failed: failedTracks.length, total, trackName: track.name });
+    onProgress?.({ completed: index + 1, failed: failedTracks.length, playlistId, total, trackName: track.name });
   }
 
   const nextPlaylist: OfflinePlaylist = {

@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -56,8 +57,10 @@ function OceanWaveMobileApp() {
 
   const {
     library,
+    beginPlaylistRequest,
     loadCachedServerContent,
     loadServerContent,
+    isPlaylistRequestCurrent,
     openPlaylist,
     clearPendingTrackId,
     pendingTrackId,
@@ -65,6 +68,7 @@ function OceanWaveMobileApp() {
     deleteSelectedOfflinePlaylist,
     offlinePlaylists,
     offlineSaveProgress,
+    playlistContentState,
     playTrack,
     playlists,
     resetQueueState,
@@ -108,6 +112,9 @@ function OceanWaveMobileApp() {
   const isSelectedPlaylistOffline = Boolean(selectedOfflinePlaylist);
   const selectedPlaylistSummary = selectedPlaylistId
     ? playlists.find(playlist => playlist.id === selectedPlaylistId)
+    : null;
+  const selectedOfflineSaveProgress = offlineSaveProgress?.playlistId === selectedPlaylistId
+    ? offlineSaveProgress
     : null;
   const selectedOfflineFailureCount = selectedOfflinePlaylist?.failedTracks?.length ?? 0;
   const hasSelectedPlaylistOfflineUpdate = hasOfflinePlaylistUpdate(selectedOfflinePlaylist, library)
@@ -186,29 +193,38 @@ function OceanWaveMobileApp() {
     setSyncStatus('syncing');
     setMessage(`Opening ${profile.name}…`);
 
-    const loadedCachedContent = await loadCachedServerContent(profile);
-    if (loadedCachedContent) {
+    const requestSeq = beginPlaylistRequest();
+    const cachedContent = await loadCachedServerContent(profile, { requestSeq });
+    if (!isPlaylistRequestCurrent(requestSeq)) return;
+    if (cachedContent.hasImmediateTrackContent) {
       setIsLoading(false);
-      setMessage(`${profile.name} is available offline. Syncing server…`);
+      setMessage(cachedContent.source === 'offline'
+        ? `${cachedContent.name ?? profile.name} is available offline. Syncing server…`
+        : `${cachedContent.name ?? profile.name} is cached. Syncing server…`);
     }
 
     const hasNetwork = await isNetworkAvailable();
+    if (!isPlaylistRequestCurrent(requestSeq)) return;
     if (!hasNetwork) {
       setSyncStatus('offline');
-      setMessage(loadedCachedContent ? `${profile.name} is available offline.` : 'No network connection. Connect to the server network to sync.');
+      setMessage(cachedContent.hasImmediateTrackContent
+        ? `${cachedContent.name ?? profile.name} is available ${cachedContent.source === 'offline' ? 'offline' : 'from cache'}.`
+        : cachedContent.hasAnyContent ? 'No network connection. Showing cached playlist list.'
+          : 'No network connection. Connect to the server network to sync.');
       setIsLoading(false);
       return;
     }
 
     try {
       const nextSession = await fetchAuthSession(profile.url, profile.sessionCookie);
+      if (!isPlaylistRequestCurrent(requestSeq)) return;
       const nextProfile = await upsertProfile({ ...profile, authSession: nextSession });
       setSelectedProfileId(nextProfile.id);
 
       if (nextSession.authRequired && !nextSession.authenticated && !profile.sessionCookie) {
-        if (loadedCachedContent) {
+        if (cachedContent.hasImmediateTrackContent) {
           setSyncStatus('authRequired');
-          setMessage(`${nextProfile.name} is available offline. Sign in to sync updates.`);
+          setMessage(`${cachedContent.name ?? nextProfile.name} is available ${cachedContent.source === 'offline' ? 'offline' : 'from cache'}. Sign in to sync updates.`);
           return;
         }
 
@@ -222,19 +238,20 @@ function OceanWaveMobileApp() {
         return;
       }
 
-      await loadServerContent(nextProfile, { showLoading: !loadedCachedContent });
+      await loadServerContent(nextProfile, { requestSeq, showLoading: !cachedContent.hasImmediateTrackContent });
     } catch (error) {
-      if (!loadedCachedContent) {
+      if (!isPlaylistRequestCurrent(requestSeq)) return;
+      if (!cachedContent.hasImmediateTrackContent) {
         setSyncStatus('failed');
         setMessage(error instanceof Error ? error.message : String(error));
       } else {
         setSyncStatus('failed');
-        setMessage(`${profile.name} is available offline. Server sync failed.`);
+        setMessage(`${cachedContent.name ?? profile.name} is available ${cachedContent.source === 'offline' ? 'offline' : 'from cache'}. Server sync failed.`);
       }
     } finally {
-      setIsLoading(false);
+      if (isPlaylistRequestCurrent(requestSeq)) setIsLoading(false);
     }
-  }, [loadCachedServerContent, loadServerContent, resetQueueState, setSelectedProfileId, upsertProfile]);
+  }, [beginPlaylistRequest, isPlaylistRequestCurrent, loadCachedServerContent, loadServerContent, resetQueueState, setSelectedProfileId, upsertProfile]);
 
   useEffect(() => {
     if (!hasLoadedSavedProfiles || didAutoConnectLastProfileRef.current || screen !== 'servers') return;
@@ -400,8 +417,10 @@ function OceanWaveMobileApp() {
       onSeek={seekToTouch}
       onTogglePlayback={togglePlayback}
       onToggleOffline={handleToggleOffline}
-      offlineSaveProgress={offlineSaveProgress}
+      offlineSaveProgress={selectedOfflineSaveProgress}
       playlistName={selectedPlaylistName}
+      showPlaylistSkeleton={isLoading && !playlists.length}
+      showTrackSkeleton={playlistContentState === 'skeleton'}
       playlistOfflineStatuses={playlistOfflineStatuses}
       playlists={playlists}
       progressRatio={progressRatio}
@@ -430,8 +449,22 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: brand.background },
 });
 
+const mobileQueryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      gcTime: 1000 * 60 * 30,
+      retry: 1,
+      staleTime: 1000 * 30,
+    },
+  },
+});
+
 function App() {
-  return <OceanWaveMobileApp />;
+  return (
+    <QueryClientProvider client={mobileQueryClient}>
+      <OceanWaveMobileApp />
+    </QueryClientProvider>
+  );
 }
 
 export default App;

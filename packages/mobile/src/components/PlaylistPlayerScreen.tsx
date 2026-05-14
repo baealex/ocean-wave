@@ -35,6 +35,8 @@ type PlaylistPlayerScreenProps = {
   selectedProfileName?: string | null;
   serverUrl: string;
   sessionCookie?: string | null;
+  showPlaylistSkeleton?: boolean;
+  showTrackSkeleton?: boolean;
   visibleLibrary: OceanWaveMusic[];
   onBack: () => void;
   onCreatePlaylist: () => void;
@@ -71,6 +73,8 @@ export function PlaylistPlayerScreen({
   selectedProfileName,
   serverUrl,
   sessionCookie,
+  showPlaylistSkeleton = false,
+  showTrackSkeleton = false,
   visibleLibrary,
   onBack,
   onCreatePlaylist,
@@ -85,7 +89,7 @@ export function PlaylistPlayerScreen({
   onToggleOffline,
 }: PlaylistPlayerScreenProps) {
   const offlineButtonLabel = isOfflineSaving
-    ? `${offlineSaveProgress?.completed ?? 0}/${offlineSaveProgress?.total ?? 0}${offlineSaveProgress?.failed ? ` · ${offlineSaveProgress.failed} failed` : ''}`
+    ? offlineSaveProgress ? `${offlineSaveProgress.completed}/${offlineSaveProgress.total}${offlineSaveProgress.failed ? ` · ${offlineSaveProgress.failed} failed` : ''}` : 'Downloading…'
     : selectedOfflineFailureCount > 0 ? 'Retry' : hasSelectedPlaylistOfflineUpdate ? 'Update' : isSelectedPlaylistOffline ? 'Downloaded' : 'Download';
   const syncLabel = syncStatus === 'idle'
     ? null
@@ -106,17 +110,24 @@ export function PlaylistPlayerScreen({
         </View>
       ) : null}
 
-      {playlists.length ? (
+      {playlists.length || showPlaylistSkeleton ? (
         <View style={styles.playlistPanel}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.playlistRail}>
-            <Pressable onPress={onCreatePlaylist} style={[styles.playlistChip, styles.addPlaylistChip]}>
+            {!showPlaylistSkeleton ? <Pressable onPress={onCreatePlaylist} style={[styles.playlistChip, styles.addPlaylistChip]}>
               <View style={styles.addPlaylistIcon}>
                 <View style={styles.addPlaylistHorizontal} />
                 <View style={styles.addPlaylistVertical} />
               </View>
               <Text style={styles.playlistName}>New playlist</Text>
               <Text style={styles.playlistMeta}>Opens web</Text>
-            </Pressable>
+            </Pressable> : null}
+            {showPlaylistSkeleton ? Array.from({ length: 3 }).map((_, index) => (
+              <View key={`playlist-skeleton-${index}`} style={[styles.playlistChip, styles.skeletonCard]}>
+                <View style={[styles.skeletonBlock, styles.skeletonTitle]} />
+                <View style={[styles.skeletonBlock, styles.skeletonMeta]} />
+                <View style={[styles.skeletonBlock, styles.skeletonBadge]} />
+              </View>
+            )) : null}
             {playlists.map(playlist => {
               const offlineStatus = playlistOfflineStatuses[playlist.id] ?? 'none';
               const offlineLabel = offlineStatus === 'none'
@@ -125,7 +136,7 @@ export function PlaylistPlayerScreen({
               const failedLabel = offlineStatus !== 'none' && offlineStatus.failed ? `${offlineStatus.failed} failed` : null;
 
               return (
-                <Pressable key={playlist.id} disabled={isLoading} onPress={() => onOpenPlaylist(playlist.id)} style={[styles.playlistChip, selectedPlaylistId === playlist.id && styles.playlistChipActive]}>
+                <Pressable key={playlist.id} onPress={() => onOpenPlaylist(playlist.id)} style={[styles.playlistChip, selectedPlaylistId === playlist.id && styles.playlistChipActive]}>
                   <Text numberOfLines={1} style={styles.playlistName}>{playlist.name}</Text>
                   <View style={styles.playlistMetaRow}>
                     <Text style={styles.playlistMeta}>{playlist.musicCount.toLocaleString()} tracks</Text>
@@ -156,7 +167,7 @@ export function PlaylistPlayerScreen({
             maxToRenderPerBatch={8}
             removeClippedSubviews
             contentContainerStyle={styles.listContent}
-            ListEmptyComponent={<Text style={styles.empty}>{isLoading ? 'Loading…' : 'No songs in this playlist.'}</Text>}
+            ListEmptyComponent={showTrackSkeleton ? <TrackListSkeleton /> : <Text style={styles.empty}>{isLoading ? 'Loading…' : 'No songs in this playlist.'}</Text>}
             renderItem={({ item, index }) => {
               const active = displayedActiveTrackId === String(item.id);
               return (
@@ -196,6 +207,23 @@ export function PlaylistPlayerScreen({
         progressRatio={progressRatio}
         sessionCookie={sessionCookie}
       />
+    </View>
+  );
+}
+
+function TrackListSkeleton() {
+  return (
+    <View style={styles.skeletonList}>
+      {Array.from({ length: 7 }).map((_, index) => (
+        <View key={`track-skeleton-${index}`} style={[styles.row, styles.skeletonRow]}>
+          <View style={[styles.skeletonBlock, styles.skeletonArtwork]} />
+          <View style={styles.skeletonRowMain}>
+            <View style={[styles.skeletonBlock, styles.skeletonTrackTitle]} />
+            <View style={[styles.skeletonBlock, styles.skeletonTrackMeta]} />
+          </View>
+          <View style={[styles.skeletonBlock, styles.skeletonDuration]} />
+        </View>
+      ))}
     </View>
   );
 }
@@ -249,4 +277,16 @@ const styles = StyleSheet.create({
   activeText: { color: brand.primary },
   songMeta: { color: brand.muted, fontSize: 12 },
   duration: { color: '#71717a', fontSize: 12, fontVariant: ['tabular-nums'] },
+  skeletonArtwork: { width: 44, height: 44, borderRadius: 12 },
+  skeletonBadge: { width: 74, height: 17, borderRadius: 999 },
+  skeletonBlock: { backgroundColor: '#27272a', opacity: 0.72 },
+  skeletonCard: { justifyContent: 'center' },
+  skeletonDuration: { width: 34, height: 12, borderRadius: 999 },
+  skeletonList: { gap: 8, paddingVertical: 2 },
+  skeletonMeta: { width: 62, height: 11, borderRadius: 999 },
+  skeletonRow: { borderColor: '#18181b' },
+  skeletonRowMain: { flex: 1, gap: 8 },
+  skeletonTitle: { width: 104, height: 13, borderRadius: 999 },
+  skeletonTrackMeta: { width: '62%', height: 12, borderRadius: 999 },
+  skeletonTrackTitle: { width: '84%', height: 15, borderRadius: 999 },
 });
