@@ -1,3 +1,4 @@
+import { memo, useCallback, useEffect, useRef } from 'react';
 import type { GestureResponderEvent } from 'react-native';
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { Track } from 'react-native-track-player';
@@ -106,6 +107,13 @@ export function PlaylistPlayerScreen({
         : syncStatus === 'synced' ? 'Synced'
           : syncStatus === 'authRequired' ? 'Sign in needed'
             : 'Sync failed';
+  const onPlayTrackRef = useRef(onPlayTrack);
+  useEffect(() => {
+    onPlayTrackRef.current = onPlayTrack;
+  }, [onPlayTrack]);
+  const handlePlayTrackByIndex = useCallback((index: number) => {
+    onPlayTrackRef.current(index);
+  }, []);
 
   return (
     <View style={styles.playerPage}>
@@ -180,21 +188,16 @@ export function PlaylistPlayerScreen({
             removeClippedSubviews
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={showTrackSkeleton ? <TrackListSkeleton /> : <Text style={styles.empty}>{isLoading ? 'Loading…' : 'No songs in this playlist.'}</Text>}
-            renderItem={({ item, index }) => {
-              const active = displayedActiveTrackId === String(item.id);
-              return (
-                <Pressable onPress={() => onPlayTrack(index)} style={[styles.row, active && styles.activeRow]}>
-                  <CachedArtwork active={active} cookie={sessionCookie} uri={albumArtUrl(serverUrl, item.album?.cover)} />
-                  <View style={styles.rowMain}>
-                    <View style={styles.songTitleRow}>
-                      <Text numberOfLines={1} style={[styles.songTitle, active && styles.activeText]}>{item.name}</Text>
-                    </View>
-                    <Text numberOfLines={1} style={styles.songMeta}>{item.artist?.name ?? 'Unknown Artist'} · {item.album?.name ?? 'Unknown Album'}</Text>
-                  </View>
-                  <Text style={styles.duration}>{formatDuration(item.duration)}</Text>
-                </Pressable>
-              );
-            }}
+            renderItem={({ item, index }) => (
+              <PlaylistTrackRow
+                active={displayedActiveTrackId === String(item.id)}
+                index={index}
+                item={item}
+                onPlayTrack={handlePlayTrackByIndex}
+                serverUrl={serverUrl}
+                sessionCookie={sessionCookie}
+              />
+            )}
           />
         </>
       ) : (
@@ -222,6 +225,38 @@ export function PlaylistPlayerScreen({
     </View>
   );
 }
+
+
+type PlaylistTrackRowProps = {
+  active: boolean;
+  index: number;
+  item: OceanWaveMusic;
+  onPlayTrack: (index: number) => void;
+  serverUrl: string;
+  sessionCookie?: string | null;
+};
+
+const PlaylistTrackRow = memo(function PlaylistTrackRow({
+  active,
+  index,
+  item,
+  onPlayTrack,
+  serverUrl,
+  sessionCookie,
+}: PlaylistTrackRowProps) {
+  return (
+    <Pressable onPress={() => onPlayTrack(index)} style={[styles.row, active && styles.activeRow]}>
+      <CachedArtwork active={active} cookie={sessionCookie} uri={albumArtUrl(serverUrl, item.album?.cover)} />
+      <View style={styles.rowMain}>
+        <View style={styles.songTitleRow}>
+          <Text numberOfLines={1} style={[styles.songTitle, active && styles.activeText]}>{item.name}</Text>
+        </View>
+        <Text numberOfLines={1} style={styles.songMeta}>{item.artist?.name ?? 'Unknown Artist'} · {item.album?.name ?? 'Unknown Album'}</Text>
+      </View>
+      <Text style={styles.duration}>{formatDuration(item.duration)}</Text>
+    </Pressable>
+  );
+});
 
 function TrackListSkeleton() {
   return (
