@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 import {
   fetchMobilePlaylist,
@@ -6,16 +7,19 @@ import {
   OceanWaveMusic,
   OceanWavePlaylist,
 } from '../api/oceanWaveClient';
+import { mobileQueryKeys } from '../api/mobileQueryKeys';
 import { ServerProfile } from '../app/serverProfiles';
 import {
   deleteOfflinePlaylist,
   findOfflinePlaylist,
   listOfflinePlaylistsForServer,
   OfflinePlaylist,
+  readCachedPlaylistDetail,
   readCachedPlaylistsForServer,
   readOfflinePlaylists,
   saveOfflinePlaylist,
   SaveOfflinePlaylistProgress,
+  writeCachedPlaylistDetail,
   writeCachedPlaylistsForServer,
 } from '../offline/offlinePlaylists';
 import { playLibraryFrom, prepareTrackPlayer } from '../player/trackPlayer';
@@ -23,6 +27,7 @@ import { isNetworkAvailable } from '../storage/nativeKeyValue';
 
 export type MobileScreen = 'servers' | 'addServer' | 'player';
 export type MobileSyncStatus = 'idle' | 'offline' | 'syncing' | 'synced' | 'failed' | 'authRequired';
+export type PlaylistContentState = 'idle' | 'showing-offline' | 'showing-cache' | 'skeleton' | 'refreshing' | 'synced' | 'failed';
 
 
 function mergePlaylistSummaries(cachedPlaylists: OceanWavePlaylist[], offlinePlaylists: OfflinePlaylist[]) {
@@ -51,7 +56,15 @@ type UsePlaylistLibraryOptions = {
   setSyncStatus: (value: MobileSyncStatus) => void;
 };
 
+export type CachedServerContentResult = {
+  hasAnyContent: boolean;
+  hasImmediateTrackContent: boolean;
+  name?: string;
+  source: 'cache' | 'none' | 'offline' | 'summary-only';
+};
+
 export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyncStatus }: UsePlaylistLibraryOptions) {
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [library, setLibrary] = useState<OceanWaveMusic[]>([]);
   const [playlists, setPlaylists] = useState<OceanWavePlaylist[]>([]);
@@ -61,6 +74,8 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
   const [pendingTrack, setPendingTrack] = useState<OceanWaveMusic | null>(null);
   const [offlinePlaylists, setOfflinePlaylists] = useState<OfflinePlaylist[]>([]);
   const [offlineSaveProgress, setOfflineSaveProgress] = useState<SaveOfflinePlaylistProgress | null>(null);
+  const [playlistContentState, setPlaylistContentState] = useState<PlaylistContentState>('idle');
+  const playlistRequestSeqRef = useRef(0);
 
   const visibleLibrary = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -79,6 +94,7 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
     setPendingTrack(null);
     setPendingTrackId(null);
     setOfflineSaveProgress(null);
+    setPlaylistContentState('idle');
     setSearchQuery('');
   }, []);
 
@@ -88,26 +104,79 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
     return nextOfflinePlaylists;
   }, []);
 
+  const beginPlaylistRequest = useCallback(() => {
+    playlistRequestSeqRef.current += 1;
+    return playlistRequestSeqRef.current;
+  }, []);
+
+  const isPlaylistRequestCurrent = useCallback((requestSeq: number) => {
+    return requestSeq === playlistRequestSeqRef.current;
+  }, []);
+
+  const fetchPlaylistSummaries = useCallback(async (profile: ServerProfile) => {
+    return queryClient.fetchQuery({
+      queryKey: mobileQueryKeys.playlists.list(profile.url, Boolean(profile.sessionCookie)),
+      queryFn: async () => {
+        const nextPlaylists = await fetchMobilePlaylists(profile.url, profile.sessionCookie);
+        writeCachedPlaylistsForServer(profile.url, nextPlaylists).catch(() => undefined);
+        return nextPlaylists;
+      },
+      staleTime: 0,
+    });
+  }, [queryClient]);
+
+  const fetchPlaylistDetail = useCallback(async (profile: ServerProfile, playlistId: number) => {
+    return queryClient.fetchQuery({
+      queryKey: mobileQueryKeys.playlists.detail(profile.url, playlistId, Boolean(profile.sessionCookie)),
+      queryFn: async () => {
+        const playlist = await fetchMobilePlaylist(profile.url, playlistId, profile.sessionCookie);
+        if (playlist) writeCachedPlaylistDetail(profile.url, playlist).catch(() => undefined);
+        return playlist;
+      },
+      staleTime: 0,
+    });
+  }, [queryClient]);
+
   const applyOfflinePlaylist = useCallback((offlinePlaylist: OfflinePlaylist) => {
     setLibrary(offlinePlaylist.tracks);
     setSelectedPlaylistId(offlinePlaylist.playlistId);
     setSelectedPlaylistName(offlinePlaylist.playlistName);
+    setPlaylistContentState('showing-offline');
     setSearchQuery('');
     setScreen('player');
   }, [setScreen]);
 
+  const applyCachedPlaylistDetail = useCallback((cachedPlaylist: Awaited<ReturnType<typeof readCachedPlaylistDetail>>) => {
+    if (!cachedPlaylist) return false;
 
-  const loadCachedServerContent = useCallback(async (profile: ServerProfile) => {
+    setLibrary(cachedPlaylist.tracks);
+    setSelectedPlaylistId(cachedPlaylist.playlistId);
+    setSelectedPlaylistName(cachedPlaylist.playlistName);
+    setPlaylistContentState('showing-cache');
+    setSearchQuery('');
+    setScreen('player');
+    return true;
+  }, [setScreen]);
+
+
+  const loadCachedServerContent = useCallback(async (profile: ServerProfile, options: { requestSeq?: number } = {}) => {
+    const shouldApply = () => options.requestSeq === undefined || options.requestSeq === playlistRequestSeqRef.current;
     const [savedPlaylists, cachedPlaylists] = await Promise.all([
       refreshOfflinePlaylists(),
       readCachedPlaylistsForServer(profile.url),
     ]);
+    if (!shouldApply()) return { hasAnyContent: false, hasImmediateTrackContent: false, source: 'none' } satisfies CachedServerContentResult;
+
     const offlineServerPlaylists = listOfflinePlaylistsForServer(savedPlaylists, profile.url);
     const playlistSummaries = mergePlaylistSummaries(cachedPlaylists, offlineServerPlaylists);
     const focusedPlaylist = playlistSummaries.find(playlist => playlist.id === selectedPlaylistId) ?? playlistSummaries[0];
     const offlineFallback = focusedPlaylist
       ? findOfflinePlaylist(savedPlaylists, profile.url, focusedPlaylist.id)
       : null;
+    const cachedDetail = focusedPlaylist
+      ? await readCachedPlaylistDetail(profile.url, focusedPlaylist.id)
+      : null;
+    if (!shouldApply()) return { hasAnyContent: false, hasImmediateTrackContent: false, source: 'none' } satisfies CachedServerContentResult;
 
     setPlaylists(playlistSummaries);
     setSearchQuery('');
@@ -115,28 +184,39 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
     prepareTrackPlayer().catch(() => undefined);
 
     if (offlineFallback) {
+      if (!shouldApply()) return { hasAnyContent: false, hasImmediateTrackContent: false, source: 'none' } satisfies CachedServerContentResult;
       applyOfflinePlaylist(offlineFallback);
       setMessage(`${offlineFallback.playlistName} is available offline. Syncing server…`);
-      return true;
+      return { hasAnyContent: true, hasImmediateTrackContent: true, name: offlineFallback.playlistName, source: 'offline' } satisfies CachedServerContentResult;
+    }
+
+    if (cachedDetail) {
+      if (!shouldApply()) return { hasAnyContent: false, hasImmediateTrackContent: false, source: 'none' } satisfies CachedServerContentResult;
+      applyCachedPlaylistDetail(cachedDetail);
+      setMessage(`${cachedDetail.playlistName} is cached. Syncing server…`);
+      return { hasAnyContent: true, hasImmediateTrackContent: true, name: cachedDetail.playlistName, source: 'cache' } satisfies CachedServerContentResult;
     }
 
     if (focusedPlaylist) {
+      if (!shouldApply()) return { hasAnyContent: false, hasImmediateTrackContent: false, source: 'none' } satisfies CachedServerContentResult;
       setLibrary([]);
       setSelectedPlaylistId(focusedPlaylist.id);
       setSelectedPlaylistName(focusedPlaylist.name);
+      setPlaylistContentState('skeleton');
       setMessage(`${focusedPlaylist.name} will load when the server responds.`);
-      return true;
+      return { hasAnyContent: true, hasImmediateTrackContent: false, name: focusedPlaylist.name, source: 'summary-only' } satisfies CachedServerContentResult;
     }
 
     setLibrary([]);
     setSelectedPlaylistId(null);
     setSelectedPlaylistName(null);
+    setPlaylistContentState('skeleton');
     setMessage('Syncing server…');
-    return false;
-  }, [applyOfflinePlaylist, refreshOfflinePlaylists, selectedPlaylistId, setMessage, setScreen]);
+    return { hasAnyContent: false, hasImmediateTrackContent: false, source: 'none' } satisfies CachedServerContentResult;
+  }, [applyCachedPlaylistDetail, applyOfflinePlaylist, refreshOfflinePlaylists, selectedPlaylistId, setMessage, setScreen]);
 
-  const loadServerContent = useCallback(async (profile: ServerProfile, options: { showLoading?: boolean } = {}) => {
-    const { showLoading = true } = options;
+  const loadServerContent = useCallback(async (profile: ServerProfile, options: { requestSeq?: number; showLoading?: boolean } = {}) => {
+    const { requestSeq = beginPlaylistRequest(), showLoading = true } = options;
     if (showLoading) setIsLoading(true);
     setSyncStatus('syncing');
     setMessage('Loading playlists…');
@@ -145,7 +225,8 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
     await refreshOfflinePlaylists();
     const hasNetwork = await isNetworkAvailable();
     if (!hasNetwork) {
-      await loadCachedServerContent(profile);
+      await loadCachedServerContent(profile, { requestSeq });
+      if (requestSeq !== playlistRequestSeqRef.current) return false;
       setSyncStatus('offline');
       setMessage('No network connection. Showing local content.');
       if (showLoading) setIsLoading(false);
@@ -153,9 +234,9 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
     }
 
     try {
-      const nextPlaylists = await fetchMobilePlaylists(profile.url, profile.sessionCookie);
-      await writeCachedPlaylistsForServer(profile.url, nextPlaylists);
+      const nextPlaylists = await fetchPlaylistSummaries(profile);
       const focusedPlaylist = nextPlaylists.find(playlist => playlist.id === selectedPlaylistId) ?? nextPlaylists[0];
+      if (requestSeq !== playlistRequestSeqRef.current) return false;
 
       setPlaylists(nextPlaylists);
       setSearchQuery('');
@@ -171,32 +252,52 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
         return true;
       }
 
-      const playlist = await fetchMobilePlaylist(profile.url, focusedPlaylist.id, profile.sessionCookie);
+      const cachedDetail = await readCachedPlaylistDetail(profile.url, focusedPlaylist.id);
+      if (requestSeq !== playlistRequestSeqRef.current) return false;
+      if (cachedDetail) {
+        applyCachedPlaylistDetail(cachedDetail);
+        setMessage(`${cachedDetail.playlistName} is cached. Syncing server…`);
+      } else {
+        setPlaylistContentState('skeleton');
+      }
+
+      const playlist = await fetchPlaylistDetail(profile, focusedPlaylist.id);
+      if (requestSeq !== playlistRequestSeqRef.current) return false;
       const nextMusics = playlist?.musics ?? [];
       setLibrary(nextMusics);
       setSelectedPlaylistId(focusedPlaylist.id);
       setSelectedPlaylistName(playlist?.name ?? focusedPlaylist.name);
+      setPlaylistContentState('synced');
       setSyncStatus('synced');
       setMessage(`${playlist?.name ?? focusedPlaylist.name} ready.`);
       return true;
     } catch (error) {
-      await loadCachedServerContent(profile);
+      if (requestSeq !== playlistRequestSeqRef.current) return false;
+      const cachedContent = await loadCachedServerContent(profile, { requestSeq });
+      if (requestSeq !== playlistRequestSeqRef.current) return false;
+      setPlaylistContentState(cachedContent.hasImmediateTrackContent ? 'failed' : 'skeleton');
       setSyncStatus('failed');
       setMessage(error instanceof Error ? error.message : String(error));
       return false;
     } finally {
-      if (showLoading) setIsLoading(false);
+      if (showLoading && requestSeq === playlistRequestSeqRef.current) setIsLoading(false);
     }
-  }, [loadCachedServerContent, refreshOfflinePlaylists, selectedPlaylistId, setIsLoading, setMessage, setScreen, setSyncStatus]);
+  }, [applyCachedPlaylistDetail, beginPlaylistRequest, fetchPlaylistDetail, fetchPlaylistSummaries, loadCachedServerContent, refreshOfflinePlaylists, selectedPlaylistId, setIsLoading, setMessage, setScreen, setSyncStatus]);
 
   const openPlaylist = useCallback(async (profile: ServerProfile | null, playlistId: number) => {
     if (!profile) return;
 
+    const requestSeq = beginPlaylistRequest();
     const pendingPlaylist = playlists.find(playlist => playlist.id === playlistId);
     const savedPlaylists = await refreshOfflinePlaylists();
-    const offlinePlaylist = findOfflinePlaylist(savedPlaylists, profile.url, playlistId);
+    if (requestSeq !== playlistRequestSeqRef.current) return;
 
-    setIsLoading(!offlinePlaylist);
+    const offlinePlaylist = findOfflinePlaylist(savedPlaylists, profile.url, playlistId);
+    const cachedDetail = await readCachedPlaylistDetail(profile.url, playlistId);
+    if (requestSeq !== playlistRequestSeqRef.current) return;
+    const hasImmediateContent = Boolean(offlinePlaylist || cachedDetail);
+
+    setIsLoading(!hasImmediateContent);
     setSelectedPlaylistId(playlistId);
     setSelectedPlaylistName(pendingPlaylist?.name ?? null);
     setPendingTrack(null);
@@ -204,38 +305,60 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
     if (offlinePlaylist) {
       applyOfflinePlaylist(offlinePlaylist);
       setMessage(`${offlinePlaylist.playlistName} is available offline. Syncing server…`);
+    } else if (cachedDetail && applyCachedPlaylistDetail(cachedDetail)) {
+      setMessage(`${cachedDetail.playlistName} is cached. Syncing server…`);
     } else {
       setLibrary([]);
+      setPlaylistContentState('skeleton');
     }
     setSearchQuery('');
     const hasNetwork = await isNetworkAvailable();
+    if (requestSeq !== playlistRequestSeqRef.current) return;
+
     if (!hasNetwork) {
       setSyncStatus('offline');
-      setMessage(offlinePlaylist ? `${offlinePlaylist.playlistName} is available offline.` : 'No network connection. Connect to the server network to load this playlist.');
+      setMessage(offlinePlaylist
+        ? `${offlinePlaylist.playlistName} is available offline.`
+        : cachedDetail ? `${cachedDetail.playlistName} is cached for offline viewing.`
+          : 'No network connection. Connect to the server network to load this playlist.');
       setIsLoading(false);
       return;
     }
 
     try {
-      const playlist = await fetchMobilePlaylist(profile.url, playlistId, profile.sessionCookie);
+      if (hasImmediateContent) {
+        setPlaylistContentState('refreshing');
+      }
+      const playlist = await fetchPlaylistDetail(profile, playlistId);
+      if (requestSeq !== playlistRequestSeqRef.current) return;
       const nextMusics = playlist?.musics ?? [];
       setSelectedPlaylistId(playlist?.id ?? playlistId);
       setSelectedPlaylistName(playlist?.name ?? null);
       setLibrary(nextMusics);
+      setPlaylistContentState('synced');
       setSyncStatus('synced');
       setMessage(playlist ? `${playlist.name} is now your queue.` : 'Playlist not found.');
     } catch (error) {
+      if (requestSeq !== playlistRequestSeqRef.current) return;
       if (offlinePlaylist) {
+        setPlaylistContentState('failed');
         setSyncStatus('failed');
         setMessage(`${offlinePlaylist.playlistName} is available offline. Server sync failed.`);
+      } else if (cachedDetail) {
+        setPlaylistContentState('failed');
+        setSyncStatus('failed');
+        setMessage(`${cachedDetail.playlistName} is cached. Server sync failed.`);
       } else {
+        setPlaylistContentState('failed');
         setSyncStatus('failed');
         setMessage(error instanceof Error ? error.message : String(error));
       }
     } finally {
-      setIsLoading(false);
+      if (requestSeq === playlistRequestSeqRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [applyOfflinePlaylist, playlists, refreshOfflinePlaylists, setIsLoading, setMessage, setSyncStatus]);
+  }, [applyCachedPlaylistDetail, applyOfflinePlaylist, beginPlaylistRequest, fetchPlaylistDetail, playlists, refreshOfflinePlaylists, setIsLoading, setMessage, setSyncStatus]);
 
   const playTrack = useCallback(async (profile: ServerProfile | null, index: number) => {
     if (!profile || !visibleLibrary.length) return;
@@ -280,7 +403,7 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
 
       setLibrary(sourceTracks);
       setSelectedPlaylistName(sourceName);
-      setOfflineSaveProgress({ completed: 0, failed: 0, total: sourceTracks.length });
+      setOfflineSaveProgress({ completed: 0, failed: 0, playlistId: selectedPlaylistId, total: sourceTracks.length });
 
       const savedPlaylist = await saveOfflinePlaylist(profile, selectedPlaylistId, sourceName, sourceTracks, setOfflineSaveProgress);
       await refreshOfflinePlaylists();
@@ -305,8 +428,10 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
 
   return {
     library,
+    beginPlaylistRequest,
     loadCachedServerContent,
     loadServerContent,
+    isPlaylistRequestCurrent,
     openPlaylist,
     clearPendingTrackId,
     pendingTrackId,
@@ -314,6 +439,7 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
     deleteSelectedOfflinePlaylist,
     offlinePlaylists,
     offlineSaveProgress,
+    playlistContentState,
     playTrack,
     playlists,
     resetQueueState,

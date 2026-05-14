@@ -126,6 +126,9 @@ importers:
 
   packages/mobile:
     dependencies:
+      '@tanstack/react-query':
+        specifier: ^5.100.5
+        version: 5.100.5(react@19.2.3)
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -9204,6 +9207,11 @@ snapshots:
       vite: 8.0.10(@types/node@25.6.0)(jiti@2.6.1)(sass@1.99.0)(terser@5.47.0)(yaml@2.8.4)
 
   '@tanstack/query-core@5.100.5': {}
+
+  '@tanstack/react-query@5.100.5(react@19.2.3)':
+    dependencies:
+      '@tanstack/query-core': 5.100.5
+      react: 19.2.3
 
   '@tanstack/react-query@5.100.5(react@19.2.5)':
     dependencies:
