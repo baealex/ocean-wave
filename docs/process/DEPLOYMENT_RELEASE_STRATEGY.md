@@ -35,7 +35,24 @@ Agents must treat Docker image builds as deployment artifact updates. Do not tri
 - Must not use `push`, `workflow_run`, or scheduled triggers unless this deployment strategy is intentionally changed.
 - Current mobile releases are alpha/pre-release APKs signed with the project Android release key, not Play Store builds.
 
-## 3. Manual Deployment Flow
+## 3. Deployment Artifact Smoke Matrix
+
+Ocean Wave has two deployment artifact surfaces. Keep their smoke checks separate;
+do not add npm or npx publish smoke because this repository does not publish an
+npm package as a deployment artifact.
+
+| Artifact | Producer | Minimum smoke | Secret needed | Notes |
+| --- | --- | --- | --- | --- |
+| Docker server/web image `baealex/ocean-wave:latest` | Manual `BUILD IMAGE` workflow | Start the image, confirm `/api/auth/session` returns open-mode JSON in explicit no-auth smoke mode, and confirm `/` serves the built web app. | No | Local command: `SMOKE_IMAGE=baealex/ocean-wave:latest pnpm smoke:docker`. This may pull the image if it is not already present. |
+| Android debug APK `app-debug.apk` | `CI` `android mobile assemble` job | Confirm Gradle produces `packages/mobile/android/app/build/outputs/apk/debug/app-debug.apk` and GitHub Actions uploads `ocean-wave-pocket-debug-apk`. | No | This is a validation artifact, not a production release. |
+| Android release-signed APK `ocean-wave-pocket-v<version_name>.apk` | Manual `MOBILE RELEASE` workflow | Confirm `app-release.apk` is copied to `dist/mobile/ocean-wave-pocket-v<version_name>.apk` and attached to the `mobile-v<version_name>` GitHub Release. | Yes, release signing secrets | Do not run this smoke locally without maintainer-provided release credentials. |
+
+The Docker smoke intentionally uses `OCEAN_WAVE_ALLOW_INSECURE_NO_AUTH=true` so it
+can verify container startup and bundled web assets without requiring a real
+deployment password or session secret. This is only a smoke-test mode, not a
+recommended deployment mode.
+
+## 4. Manual Deployment Flow
 
 1. Merge the intended changes into `main`.
 2. Confirm CI passes on `main`.
@@ -45,7 +62,7 @@ Agents must treat Docker image builds as deployment artifact updates. Do not tri
 6. Run the workflow manually.
 7. Confirm the expected artifact was published.
 
-## 4. Docker Server Release
+## 5. Docker Server Release
 
 Docker server release means publishing the server/web runtime image with the
 `BUILD IMAGE` workflow.
@@ -72,7 +89,7 @@ Docker rollback means republishing or redeploying a known-good server image or
 commit according to the hosting environment. It is independent from Android app
 rollback rules.
 
-## 5. Android Mobile Release
+## 6. Android Mobile Release
 
 Android mobile release means publishing a release-signed APK with the
 `MOBILE RELEASE` workflow for GitHub Releases and Obtainium users.
@@ -102,13 +119,13 @@ APK must be corrected, create a hotfix APK from the known-good code or fix commi
 and publish it with a higher `versionCode`. Use a new `version_name` or another
 clear hotfix version label so Obtainium and testers see it as the latest build.
 
-## 6. Release Impact
+## 7. Release Impact
 
 Docker image publishing updates the runtime artifact used by deployments.
 
 Any change to the Docker build path, Docker image tag, deployment workflow, or runtime startup behavior is release-impacting and must be called out in PR notes.
 
-## 7. Agent Guardrail
+## 8. Agent Guardrail
 
 When an agent changes CI, workflow files, Dockerfiles, dependencies, docs, or any other release-adjacent files, the default stopping point is:
 

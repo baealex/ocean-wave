@@ -24,7 +24,8 @@
         "start": "pnpm build:client && pnpm start:server",
         "prepare": "node scripts/setup/install-lefthook.mjs",
         "dev:mobile": "pnpm --filter ocean-wave-mobile start",
-        "android:mobile": "pnpm --filter ocean-wave-mobile android"
+        "android:mobile": "pnpm --filter ocean-wave-mobile android",
+        "smoke:docker": "node tests/smoke/docker-server-smoke.mjs"
     },
     "devDependencies": {
         "@biomejs/biome": "^2.4.13",
