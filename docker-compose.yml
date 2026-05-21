@@ -4,6 +4,14 @@ name: ocean-wave
 services:
   app:
     image: baealex/ocean-wave
+    environment:
+      OCEAN_WAVE_AUTH_PASSWORD: ${OCEAN_WAVE_AUTH_PASSWORD:?Set OCEAN_WAVE_AUTH_PASSWORD in .env or the shell}
+      OCEAN_WAVE_SESSION_SECRET: ${OCEAN_WAVE_SESSION_SECRET:?Set OCEAN_WAVE_SESSION_SECRET in .env or the shell}
+      OCEAN_WAVE_ALLOW_INSECURE_NO_AUTH: ${OCEAN_WAVE_ALLOW_INSECURE_NO_AUTH:-}
+      OCEAN_WAVE_MUSIC_PATH: ${OCEAN_WAVE_MUSIC_PATH:-/music}
+      OCEAN_WAVE_CACHE_PATH: ${OCEAN_WAVE_CACHE_PATH:-/cache}
+      DATABASE_URL: ${DATABASE_URL:-file:/data/db.sqlite3}
+      PORT: ${PORT:-44100}
     volumes:
       - ./data:/data
       - ./cache:/cache
