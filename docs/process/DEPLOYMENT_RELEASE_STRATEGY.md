@@ -1,6 +1,6 @@
 # Ocean Wave Deployment and Release Strategy
 
-Updated: 2026-05-11
+Updated: 2026-05-21
 
 ## 1. Deployment Principle
 
@@ -45,13 +45,70 @@ Agents must treat Docker image builds as deployment artifact updates. Do not tri
 6. Run the workflow manually.
 7. Confirm the expected artifact was published.
 
-## 4. Release Impact
+## 4. Docker Server Release
+
+Docker server release means publishing the server/web runtime image with the
+`BUILD IMAGE` workflow.
+
+Keep Docker server release decisions separate from Android mobile release
+decisions:
+
+- A server change can require `BUILD IMAGE` without requiring `MOBILE RELEASE`.
+- A mobile-only change can require `MOBILE RELEASE` without requiring `BUILD IMAGE`.
+- If both artifacts are needed, treat them as two explicit maintainer requests and
+  run the workflows separately.
+
+Docker server release checklist:
+
+1. Confirm `main` CI passes.
+2. Confirm the maintainer explicitly requested Docker image build/publish/deploy
+   for the current task.
+3. Run `BUILD IMAGE` manually from GitHub Actions.
+4. Confirm `baealex/ocean-wave:latest` was pushed for the expected commit.
+5. Report the image publication result. Do not infer that mobile APK publication
+   is also needed.
+
+Docker rollback means republishing or redeploying a known-good server image or
+commit according to the hosting environment. It is independent from Android app
+rollback rules.
+
+## 5. Android Mobile Release
+
+Android mobile release means publishing a release-signed APK with the
+`MOBILE RELEASE` workflow for GitHub Releases and Obtainium users.
+
+Keep mobile releases independent from Docker server releases:
+
+- Mobile release uses `mobile-v<version_name>` GitHub Release tags.
+- Mobile users update by Android package signature and monotonically increasing
+  `versionCode`.
+- Publishing a mobile APK does not publish or redeploy the Docker server image.
+- Publishing a Docker image does not publish a mobile APK.
+
+Mobile release checklist:
+
+1. Confirm `main` CI passes, including the Android mobile assemble job.
+2. Confirm the maintainer explicitly requested a mobile APK release for the
+   current task.
+3. Choose a `version_name` for the GitHub Release tag and APK file name.
+4. Choose a `version_code` higher than every previously published APK for this
+   application ID and signing key.
+5. Run `MOBILE RELEASE` manually from GitHub Actions.
+6. Confirm the `mobile-v<version_name>` release and APK asset were published.
+
+Mobile rollback is not an old APK redeploy. Android will not install an update
+with a lower or reused `versionCode` over an existing installation. If a released
+APK must be corrected, create a hotfix APK from the known-good code or fix commit
+and publish it with a higher `versionCode`. Use a new `version_name` or another
+clear hotfix version label so Obtainium and testers see it as the latest build.
+
+## 6. Release Impact
 
 Docker image publishing updates the runtime artifact used by deployments.
 
 Any change to the Docker build path, Docker image tag, deployment workflow, or runtime startup behavior is release-impacting and must be called out in PR notes.
 
-## 5. Agent Guardrail
+## 7. Agent Guardrail
 
 When an agent changes CI, workflow files, Dockerfiles, dependencies, docs, or any other release-adjacent files, the default stopping point is:
 
@@ -60,4 +117,8 @@ When an agent changes CI, workflow files, Dockerfiles, dependencies, docs, or an
 3. Report the status to the maintainer.
 
 The agent must not continue into Docker image publishing, mobile release publishing, or any other deployment artifact publication unless the maintainer explicitly says to run the relevant build, publish the artifact, deploy, or equivalent wording for the current task. Ambiguous phrases such as "update actions", "merge it", "verify CI", or prior-turn deployment requests are not enough.
+
+A request for one release channel is not permission for the other channel. Docker
+server release and Android mobile release must remain separate unless the
+maintainer explicitly asks for both in the current task.
 

@@ -52,10 +52,17 @@ Then open `http://localhost:44100`.
 
 ### Use Docker
 
-Bind your music directory to `/music` inside the container.
+Bind your music directory to `/music` inside the container. The server reads the
+container paths from environment variables so persisted music, cache, and database
+data stay aligned with the mounted volumes.
 
 ```bash
 docker run \
+    -e OCEAN_WAVE_AUTH_PASSWORD=listen-safe \
+    -e OCEAN_WAVE_SESSION_SECRET=replace-this-secret \
+    -e OCEAN_WAVE_MUSIC_PATH=/music \
+    -e OCEAN_WAVE_CACHE_PATH=/cache \
+    -e DATABASE_URL=file:/data/db.sqlite3 \
     -v {YOUR_MUSIC_PATH}:/music \
     -v ./cache:/cache \
     -v ./data:/data \
@@ -63,11 +70,21 @@ docker run \
     baealex/ocean-wave
 ```
 
+Or use Docker Compose:
+
+```bash
+cp .env.example .env
+# Edit .env and fill OCEAN_WAVE_AUTH_PASSWORD and OCEAN_WAVE_SESSION_SECRET.
+docker compose up -d
+```
+
 Then open `http://localhost:44100`.
 
 ### Password Mode
 
 Ocean Wave fails closed when auth mode is not configured. Use password mode for normal deployments.
+The included `docker-compose.yml` follows this policy by requiring password mode
+values through `.env` or shell variables before the container starts.
 
 Password mode requires both values:
 
@@ -90,6 +107,9 @@ Docker:
 docker run \
     -e OCEAN_WAVE_AUTH_PASSWORD=listen-safe \
     -e OCEAN_WAVE_SESSION_SECRET=replace-this-secret \
+    -e OCEAN_WAVE_MUSIC_PATH=/music \
+    -e OCEAN_WAVE_CACHE_PATH=/cache \
+    -e DATABASE_URL=file:/data/db.sqlite3 \
     -v {YOUR_MUSIC_PATH}:/music \
     -v ./cache:/cache \
     -v ./data:/data \
@@ -106,3 +126,19 @@ OCEAN_WAVE_ALLOW_INSECURE_NO_AUTH=true pnpm start
 ```
 
 Do not set `OCEAN_WAVE_ALLOW_INSECURE_NO_AUTH=true` together with `OCEAN_WAVE_AUTH_PASSWORD`.
+For Docker Compose, open mode requires intentionally changing the auth variables;
+do not leave password mode values set at the same time.
+
+### Server Environment Variables
+
+See `.env.example` for a copyable Docker Compose template.
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `OCEAN_WAVE_AUTH_PASSWORD` | Password mode | none | Shared password for unlocking Ocean Wave. |
+| `OCEAN_WAVE_SESSION_SECRET` | Password mode | none | Separate secret used to sign the session cookie. |
+| `OCEAN_WAVE_ALLOW_INSECURE_NO_AUTH` | Open mode only | none | Set to `true` only when intentionally running without auth. |
+| `OCEAN_WAVE_MUSIC_PATH` | Docker recommended | `./music` | Directory scanned for music files. Use `/music` with the provided Docker volume. |
+| `OCEAN_WAVE_CACHE_PATH` | Docker recommended | `./cache` | Directory for generated cache files. Use `/cache` with the provided Docker volume. |
+| `DATABASE_URL` | Optional | `file:./prisma/data/db.sqlite3` | SQLite database URL. Use `file:/data/db.sqlite3` with the provided Docker volume. |
+| `PORT` | Optional | `44100` | HTTP server port. |
