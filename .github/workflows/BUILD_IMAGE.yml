@@ -44,7 +44,8 @@ jobs:
 
       - name: Summarize pushed image digest
         env:
-          IMAGE_TAG: baealex/ocean-wave:latest
+          IMAGE_NAME: baealex/ocean-wave
+          IMAGE_TAG: latest
           IMAGE_DIGEST: ${{ steps.build_push.outputs.digest }}
           GIT_SHA: ${{ github.sha }}
         run: |
@@ -58,8 +59,8 @@ jobs:
             echo ""
             echo "| Field | Value |"
             echo "| --- | --- |"
-            echo "| Tag | \`$IMAGE_TAG\` |"
+            echo "| Tag | \`${IMAGE_NAME}:${IMAGE_TAG}\` |"
             echo "| Digest | \`$IMAGE_DIGEST\` |"
             echo "| Commit | \`$GIT_SHA\` |"
-            echo "| Pull by digest | \`docker pull ${IMAGE_TAG}@${IMAGE_DIGEST}\` |"
+            echo "| Pull by digest | \`docker pull ${IMAGE_NAME}@${IMAGE_DIGEST}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
