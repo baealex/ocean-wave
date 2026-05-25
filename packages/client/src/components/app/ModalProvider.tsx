@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 import { Button, Text } from '~/components/shared';
 
 const modalClass = {
-    overlay: 'fixed inset-0 z-[120] bg-[rgba(2,9,12,0.68)] animate-[fade-in_180ms_ease]',
+    overlay: 'fixed inset-0 z-[120] bg-[var(--b-color-overlay-default)] animate-[fade-in_180ms_ease]',
     content: 'fixed left-1/2 top-1/2 z-[121] w-[min(calc(100vw_-_1.5rem),26rem)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-modal)] p-3.5 text-[var(--b-color-text)] shadow-[0_12px_28px_rgba(2,8,11,0.22)] focus:outline-none max-sm:w-[min(calc(100vw_-_1rem),26rem)]',
     header: 'flex flex-col gap-2',
     title: 'tracking-normal',

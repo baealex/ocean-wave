@@ -18,7 +18,7 @@ interface TextEntryDialogProps {
 }
 
 const dialogClass = {
-    overlay: 'fixed inset-0 z-[122] bg-[rgba(2,9,12,0.72)] animate-[fade-in_180ms_ease]',
+    overlay: 'fixed inset-0 z-[122] bg-[var(--b-color-overlay-strong)] animate-[fade-in_180ms_ease]',
     content: 'fixed left-1/2 top-1/2 z-[123] w-[min(calc(100vw_-_1.5rem),28rem)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-modal)] p-4 text-[var(--b-color-text)] shadow-[var(--b-card-shadow-sub)] focus:outline-none max-sm:w-[min(calc(100vw_-_1rem),28rem)] max-sm:p-3.5',
     form: 'flex flex-col gap-4',
     header: 'flex flex-col gap-2',
