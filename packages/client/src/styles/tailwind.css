@@ -2,13 +2,6 @@
 
 @theme {
     --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --color-wave-bg: #09090b;
-    --color-wave-panel: #121214;
-    --color-wave-border: rgba(244, 244, 245, 0.08);
-    --color-wave-accent: #8b5cf6;
-    --color-wave-accent-soft: #a78bfa;
-    --color-wave-text: rgba(250, 250, 250, 0.94);
-    --color-wave-muted: rgba(212, 212, 216, 0.54);
 }
 
 @layer base, components;
