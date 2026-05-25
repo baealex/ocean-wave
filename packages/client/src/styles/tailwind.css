@@ -29,6 +29,14 @@
   --b-color-border: rgba(244, 244, 245, 0.14);
   --b-color-border-subtle: rgba(244, 244, 245, 0.08);
   --b-color-cd-border: rgba(244, 244, 245, 0.14);
+  --b-color-overlay-default: rgba(2, 9, 12, 0.68);
+  --b-color-overlay-strong: rgba(2, 9, 12, 0.72);
+  --b-color-badge-success-background: rgba(56, 189, 120, 0.1);
+  --b-color-badge-success-text: rgba(129, 222, 168, 0.92);
+  --b-color-badge-warning-background: rgba(245, 158, 11, 0.12);
+  --b-color-badge-warning-text: rgba(255, 210, 138, 0.95);
+  --b-color-badge-danger-background: rgba(244, 63, 94, 0.1);
+  --b-color-badge-danger-text: rgba(255, 154, 173, 0.92);
   --b-card-shadow-main: none;
   --b-card-shadow-hover: none;
   --b-card-shadow-glow: none;

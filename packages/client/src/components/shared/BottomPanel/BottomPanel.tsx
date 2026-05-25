@@ -65,7 +65,7 @@ export default function BottomPanel({
                 }
             }}>
             <Dialog.Portal>
-                <Dialog.Overlay className="fixed inset-0 z-[110] bg-[rgba(2,9,12,0.72)] will-change-[opacity] animate-[fade-in_180ms_ease]" />
+                <Dialog.Overlay className="fixed inset-0 z-[110] bg-[var(--b-color-overlay-strong)] will-change-[opacity] animate-[fade-in_180ms_ease]" />
 
                 <Dialog.Content
                     className="fixed bottom-0 left-1/2 z-[111] flex max-h-[min(80dvh,42rem)] w-[min(100vw,37.5rem)] -translate-x-1/2 translate-y-[var(--panel-offset)] flex-col overflow-hidden rounded-t-[1.25rem] border border-b-0 border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-modal)] text-[var(--b-color-text)] shadow-[var(--b-card-shadow-sub)] focus:outline-none max-sm:max-h-[85dvh] max-sm:w-screen max-sm:rounded-t-[1.125rem]"
