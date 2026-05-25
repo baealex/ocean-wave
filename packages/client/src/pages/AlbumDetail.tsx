@@ -7,7 +7,7 @@ import { TwoToneLayout } from '~/components/layout';
 import { AlbumSummary } from '~/components/album';
 import { Play } from '~/icon';
 
-import { getAlbum } from '~/api';
+import { getAlbum } from '~/api/library';
 import { queryKeys } from '~/api/query-keys';
 
 import { getOriginalImage } from '~/modules/image';

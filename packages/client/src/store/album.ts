@@ -4,7 +4,7 @@ import type { Album } from '~/models/type';
 
 import * as sort from '~/modules/sort';
 
-import { getAlbums } from '~/api';
+import { getAlbums } from '~/api/library';
 
 const SORT_STATE = {
     NAME: 'name',

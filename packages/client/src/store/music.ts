@@ -4,7 +4,7 @@ import type { Music } from '~/models/type';
 
 import * as sort from '~/modules/sort';
 
-import { getMusics } from '~/api';
+import { getMusics } from '~/api/library';
 import { MusicListener } from '~/socket';
 
 const SORT_STATE = {

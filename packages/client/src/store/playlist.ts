@@ -1,5 +1,5 @@
 import { BaseStore } from './base-store';
-import { getPlaylists } from '~/api';
+import { getPlaylists } from '~/api/library';
 import type { Playlist } from '~/models/type';
 import { PlaylistListener } from '~/socket';
 

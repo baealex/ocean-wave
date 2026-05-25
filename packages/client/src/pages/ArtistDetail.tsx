@@ -9,7 +9,7 @@ import { MusicActionPanelContent, MusicListItem } from '~/components/music';
 import { Text } from '~/components/shared';
 import { Play } from '~/icon';
 
-import { getArtist } from '~/api';
+import { getArtist } from '~/api/library';
 import { queryKeys } from '~/api/query-keys';
 
 import { musicStore } from '~/store/music';

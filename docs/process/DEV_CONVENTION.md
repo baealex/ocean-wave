@@ -1,6 +1,6 @@
 # Ocean Brain Dev Convention
 
-Updated: 2026-05-11
+Updated: 2026-05-25
 
 ## 1. Base Environment
 - Node.js: `22.12+`
@@ -42,4 +42,5 @@ Updated: 2026-05-11
 - Encoding rules: `docs/process/ENCODING_CONVENTION.md`
 - Testing rules: `docs/process/TESTING_CONVENTION.md`
 - Query key rules: `docs/process/QUERY_KEY_CONVENTION.md`
+- Client API import rules: `docs/process/API_IMPORT_CONVENTION.md`
 - Deployment/release: `docs/process/DEPLOYMENT_RELEASE_STRATEGY.md`
