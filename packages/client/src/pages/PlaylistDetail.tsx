@@ -22,7 +22,7 @@ import { Play } from '~/icon';
 import { panel } from '~/modules/panel';
 import { useResetQueue } from '~/hooks';
 
-import { getPlaylist } from '~/api';
+import { getPlaylist } from '~/api/library';
 import { queryKeys } from '~/api/query-keys';
 import { toast } from '~/modules/toast';
 import {

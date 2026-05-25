@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 
-import { getArtist, graphQLRequest } from './index';
+import { graphQLRequest } from './graphql';
+import { getArtist } from './library';
 
 interface GraphqlPayload {
     operationName?: string;

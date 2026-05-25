@@ -4,7 +4,7 @@ import type { Artist } from '~/models/type';
 
 import * as sort from '~/modules/sort';
 
-import { getArtists } from '~/api';
+import { getArtists } from '~/api/library';
 
 const SORT_STATE = {
     NAME: 'name',

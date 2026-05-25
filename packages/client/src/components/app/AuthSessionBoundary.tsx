@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 import AuthGate from '~/components/auth/AuthGate';
-import { getAuthSession } from '~/api';
+import { getAuthSession } from '~/api/auth';
 import { queryKeys } from '~/api/query-keys';
 import {
     redirectToLogin,

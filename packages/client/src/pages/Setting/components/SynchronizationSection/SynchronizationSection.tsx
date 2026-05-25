@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge, Button, SettingSection, SettingItem, Text } from '~/components/shared';
-import { getLatestSyncReport } from '~/api';
+import { getLatestSyncReport } from '~/api/sync';
 import { queryKeys } from '~/api/query-keys';
 import { toast } from '~/modules/toast';
 import { socket } from '~/socket';
