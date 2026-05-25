@@ -31,6 +31,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push
+        id: build_push
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -40,3 +41,26 @@ jobs:
           tags: baealex/ocean-wave:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Summarize pushed image digest
+        env:
+          IMAGE_NAME: baealex/ocean-wave
+          IMAGE_TAG: latest
+          IMAGE_DIGEST: ${{ steps.build_push.outputs.digest }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$IMAGE_DIGEST" ]; then
+            echo "Docker build-push-action did not return an image digest." >&2
+            exit 1
+          fi
+
+          {
+            echo "## Docker latest image"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Tag | \`${IMAGE_NAME}:${IMAGE_TAG}\` |"
+            echo "| Digest | \`$IMAGE_DIGEST\` |"
+            echo "| Commit | \`$GIT_SHA\` |"
+            echo "| Pull by digest | \`docker pull ${IMAGE_NAME}@${IMAGE_DIGEST}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
