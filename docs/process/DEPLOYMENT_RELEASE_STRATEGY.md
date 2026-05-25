@@ -43,14 +43,14 @@ npm package as a deployment artifact.
 
 | Artifact | Producer | Minimum smoke | Secret needed | Notes |
 | --- | --- | --- | --- | --- |
-| Docker server/web image `baealex/ocean-wave:latest` | Manual `BUILD IMAGE` workflow | Start the image, confirm `/api/auth/session` returns open-mode JSON in explicit no-auth smoke mode, and confirm `/` serves the built web app. | No | Local command: `SMOKE_IMAGE=baealex/ocean-wave:latest pnpm smoke:docker`. This may pull the image if it is not already present. |
+| Docker server/web image `baealex/ocean-wave:latest` | Manual `BUILD IMAGE` workflow | Start the image in explicit open mode and password mode. Confirm `/api/auth/session`, `/` app shell serving, password login, and a basic GraphQL list query. | No | Local command: `SMOKE_IMAGE=baealex/ocean-wave:latest pnpm smoke:docker`. This may pull the image if it is not already present. |
 | Android debug APK `app-debug.apk` | `CI` `android mobile assemble` job | Confirm Gradle produces `packages/mobile/android/app/build/outputs/apk/debug/app-debug.apk` and GitHub Actions uploads `ocean-wave-pocket-debug-apk`. | No | This is a validation artifact, not a production release. |
 | Android release-signed APK `ocean-wave-pocket-v<version_name>.apk` | Manual `MOBILE RELEASE` workflow | Confirm `app-release.apk` is copied to `dist/mobile/ocean-wave-pocket-v<version_name>.apk` and attached to the `mobile-v<version_name>` GitHub Release. | Yes, release signing secrets | Do not run this smoke locally without maintainer-provided release credentials. |
 
-The Docker smoke intentionally uses `OCEAN_WAVE_ALLOW_INSECURE_NO_AUTH=true` so it
-can verify container startup and bundled web assets without requiring a real
-deployment password or session secret. This is only a smoke-test mode, not a
-recommended deployment mode.
+The Docker smoke still includes `OCEAN_WAVE_ALLOW_INSECURE_NO_AUTH=true` for the
+open-mode startup check, then starts a second short-lived container with a
+temporary password and session secret. This verifies the password gate without
+using real deployment credentials.
 
 ## 4. Manual Deployment Flow
 
@@ -82,8 +82,9 @@ Docker server release checklist:
    for the current task.
 3. Run `BUILD IMAGE` manually from GitHub Actions.
 4. Confirm `baealex/ocean-wave:latest` was pushed for the expected commit.
-5. Report the image publication result. Do not infer that mobile APK publication
-   is also needed.
+5. Check the GitHub Actions summary for the pushed image digest and use it when
+   reporting the image publication result. Do not infer that mobile APK
+   publication is also needed.
 
 Docker rollback means republishing or redeploying a known-good server image or
 commit according to the hosting environment. It is independent from Android app
