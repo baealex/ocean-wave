@@ -9,12 +9,18 @@ import { queueStore } from '~/store/queue';
 import { Image, Surface, Text } from '~/components/shared';
 import { useResetQueue } from '~/hooks';
 import * as Icon from '~/icon';
+import {
+    DORMANT_FAVORITE_DAYS,
+    buildSmartMusicBuckets,
+    sortMusicsByHeavyRotation,
+    sortMusicsByLeastHeard,
+    sortMusicsByRecentPlay
+} from '~/modules/smart-music-filters';
 
 import type { Music } from '~/models/type';
 
 const TRACK_LIMIT = 4;
 const RECENT_LIMIT = 4;
-const DORMANT_DAYS = 30;
 
 const formatNumber = (value: number) => value.toLocaleString();
 
@@ -45,22 +51,6 @@ const formatDate = (value: string | null) => {
         month: 'short',
         day: 'numeric'
     }).format(date);
-};
-
-const isLossless = (music: Music) => {
-    const codec = music.codec.toLowerCase();
-
-    return codec.includes('flac') || codec.includes('alac') || codec.includes('wav');
-};
-
-const isDormant = (music: Music) => {
-    if (!music.lastPlayedAt) return true;
-
-    const lastPlayedAt = new Date(music.lastPlayedAt).getTime();
-
-    if (Number.isNaN(lastPlayedAt)) return true;
-
-    return Date.now() - lastPlayedAt > DORMANT_DAYS * 24 * 60 * 60 * 1000;
 };
 
 const takeIds = (musics: Music[], limit = 80) => musics.slice(0, limit).map(music => music.id);
@@ -198,26 +188,17 @@ export default function Dashboard() {
     const [{ playlists }] = useStore(playlistStore);
     const [{ queueLength, isPlaying }] = useStore(queueStore);
 
-    const availableMusics = musics.filter(music => !music.isHated);
-    const likedMusics = availableMusics.filter(music => music.isLiked);
-    const playedMusics = availableMusics.filter(music => music.playCount > 0);
-    const unplayedMusics = availableMusics.filter(music => music.playCount === 0);
-    const losslessMusics = availableMusics.filter(isLossless);
-    const dormantFavorites = likedMusics.filter(isDormant);
-    const recentMusics = [...playedMusics]
-        .sort((a, b) => new Date(b.lastPlayedAt ?? 0).getTime() - new Date(a.lastPlayedAt ?? 0).getTime())
-        .slice(0, RECENT_LIMIT);
-    const topMusics = [...playedMusics]
-        .sort((a, b) => b.playCount - a.playCount)
-        .slice(0, TRACK_LIMIT);
-    const leastHeardMusics = [...availableMusics]
-        .sort((a, b) => {
-            if (a.playCount === 0 && b.playCount !== 0) return -1;
-            if (a.playCount !== 0 && b.playCount === 0) return 1;
-
-            return a.totalPlayedMs - b.totalPlayedMs;
-        })
-        .slice(0, TRACK_LIMIT);
+    const {
+        availableMusics,
+        likedMusics,
+        playedMusics,
+        unplayedMusics,
+        losslessMusics,
+        dormantFavorites
+    } = buildSmartMusicBuckets(musics);
+    const recentMusics = sortMusicsByRecentPlay(playedMusics).slice(0, RECENT_LIMIT);
+    const topMusics = sortMusicsByHeavyRotation(playedMusics).slice(0, TRACK_LIMIT);
+    const leastHeardMusics = sortMusicsByLeastHeard(availableMusics).slice(0, TRACK_LIMIT);
     const topArtistsByPlays = [...availableMusics]
         .reduce<Array<{ id: string; name: string; playCount: number; musicCount: number }>>((items, music) => {
             const current = items.find(item => item.id === music.artist.id);
@@ -277,7 +258,7 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-4 gap-3 max-[980px]:grid-cols-2 max-sm:grid-cols-1">
                 <DashboardStat label="Unplayed" value={formatNumber(unplayedMusics.length)} meta={`${formatPercent(playedCoverage)} of library has been heard`} icon={<Icon.Search />} />
-                <DashboardStat label="Favorites to revisit" value={formatNumber(dormantFavorites.length)} meta={`Liked but quiet for ${DORMANT_DAYS}+ days`} icon={<Icon.Heart />} />
+                <DashboardStat label="Favorites to revisit" value={formatNumber(dormantFavorites.length)} meta={`Liked but quiet for ${DORMANT_FAVORITE_DAYS}+ days`} icon={<Icon.Heart />} />
                 <DashboardStat label="Listening time" value={formatHours(totalPlayedMs)} meta={`Recorded from ${formatNumber(totalPlayCount)} counted plays`} icon={<Icon.Play />} />
                 <DashboardStat label="Lossless" value={formatPercent(losslessRatio)} meta={`${formatNumber(losslessMusics.length)} of ${formatNumber(availableMusics.length)} tracks`} icon={<Icon.Activity />} />
             </div>
