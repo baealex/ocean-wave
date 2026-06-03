@@ -142,3 +142,7 @@ See `.env.example` for a copyable Docker Compose template.
 | `OCEAN_WAVE_CACHE_PATH` | Docker recommended | `./cache` | Directory for generated cache files. Use `/cache` with the provided Docker volume. |
 | `DATABASE_URL` | Optional | `file:./prisma/data/db.sqlite3` | SQLite database URL. Use `file:/data/db.sqlite3` with the provided Docker volume. |
 | `PORT` | Optional | `44100` | HTTP server port. |
+
+## License
+
+Ocean Wave is licensed under the [MIT License](./LICENSE).
