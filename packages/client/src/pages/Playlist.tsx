@@ -138,7 +138,7 @@ export default function Playlist() {
                 title="Create playlist"
                 description="Give this playlist a short name so you can find it later."
                 value={createName}
-                placeholder="Night drive"
+                placeholder="Playlist name"
                 confirmLabel="Create"
                 onValueChange={setCreateName}
                 onConfirm={handleCreateConfirm}

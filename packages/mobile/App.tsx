@@ -22,8 +22,6 @@ import { NavBar } from './src/components/NavBar';
 import { ServerListScreen } from './src/components/ServerListScreen';
 import {
   createProfile,
-  DEMO_SERVER_URL,
-  getBundlerServerUrl,
   ServerProfile,
 } from './src/app/serverProfiles';
 import { useTrackPlaybackControls } from './src/hooks/useTrackPlaybackControls';
@@ -49,7 +47,7 @@ function OceanWaveMobileApp() {
 
   const [screen, setScreen] = useState<MobileScreen>('servers');
   const [serverName, setServerName] = useState('');
-  const [serverUrl, setServerUrl] = useState(() => getBundlerServerUrl() || DEMO_SERVER_URL);
+  const [serverUrl, setServerUrl] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('Choose a server to start listening.');
@@ -267,7 +265,7 @@ function OceanWaveMobileApp() {
   const saveServer = useCallback(async () => {
     const normalizedUrl = normalizeServerUrl(serverUrl);
     if (!normalizedUrl) {
-      Alert.alert('Server URL required', `Example: ${getBundlerServerUrl() || DEMO_SERVER_URL}`);
+      Alert.alert('Server URL required', 'Enter the URL of your Ocean Wave server.');
       return;
     }
 
@@ -313,7 +311,7 @@ function OceanWaveMobileApp() {
   const openAddServer = useCallback(() => {
     setSelectedProfileId(null);
     setServerName('');
-    setServerUrl(getBundlerServerUrl() || DEMO_SERVER_URL);
+    setServerUrl('');
     setPassword('');
     setScreen('addServer');
     setMessage('Add an Ocean Wave server.');
