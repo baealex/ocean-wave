@@ -8,6 +8,7 @@ import {
     ListMusic,
     Music,
     Play,
+    Tags,
     User
 } from '~/icon';
 
@@ -67,6 +68,12 @@ export const appShell = {
                 label: 'Playlists',
                 path: '/playlist',
                 icon: ListMusic
+            },
+            {
+                id: 'tags',
+                label: 'Tags',
+                path: '/tag',
+                icon: Tags
             }
         ] satisfies AppShellNavigationItem[],
         utility: [

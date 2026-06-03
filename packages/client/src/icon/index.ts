@@ -20,6 +20,7 @@ export {
     Pause,
     Pencil,
     Play,
+    Plus,
     Repeat,
     Search,
     Settings,
@@ -28,6 +29,7 @@ export {
     SkipBack,
     SkipForward,
     SquareCheckBig as CheckBox,
+    Tags,
     Trash2 as TrashCan,
     User,
     X as Close

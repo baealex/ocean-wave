@@ -39,6 +39,11 @@ describe('appShell', () => {
                 id: 'playlists',
                 label: 'Playlists',
                 path: '/playlist'
+            }),
+            expect.objectContaining({
+                id: 'tags',
+                label: 'Tags',
+                path: '/tag'
             })
         ]);
     });

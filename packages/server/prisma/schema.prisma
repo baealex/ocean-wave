@@ -38,6 +38,24 @@ model Genre {
     Music     Music[]
 }
 
+model Tag {
+    id             Int            @id @default(autoincrement())
+    scopeKey       String         @default("local")
+    name           String
+    normalizedName String
+    color          String?
+    description    String?
+    order          Int            @default(0)
+    createdAt      DateTime       @default(now())
+    updatedAt      DateTime       @updatedAt
+    MusicTag       MusicTag[]
+    SmartViewTag   SmartViewTag[]
+
+    @@unique([scopeKey, normalizedName])
+    @@index([scopeKey, order])
+    @@index([scopeKey, updatedAt])
+}
+
 model Music {
     id            Int             @id @default(autoincrement())
     name          String
@@ -65,11 +83,61 @@ model Music {
     Genre         Genre[]
     MusicLike     MusicLike[]
     MusicHate     MusicHate[]
+    MusicTag      MusicTag[]
     PlaybackEvent PlaybackEvent[]
     PlaylistMusic PlaylistMusic[]
 
     @@index([contentHash])
     @@index([syncStatus, missingSinceAt])
+}
+
+model MusicTag {
+    id        Int      @id @default(autoincrement())
+    source    String   @default("manual")
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    Music     Music    @relation(fields: [musicId], references: [id], onDelete: Cascade)
+    musicId   Int
+    Tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+    tagId     Int
+
+    @@unique([musicId, tagId])
+    @@index([tagId, musicId])
+}
+
+model SmartView {
+    id             Int            @id @default(autoincrement())
+    scopeKey       String         @default("local")
+    name           String
+    normalizedName String
+    tagMode        String         @default("all")
+    filterVersion  Int            @default(1)
+    filterJson     String?
+    sortKey        String?
+    order          Int            @default(0)
+    createdAt      DateTime       @default(now())
+    updatedAt      DateTime       @updatedAt
+    SmartViewTag   SmartViewTag[]
+
+    @@unique([scopeKey, normalizedName])
+    @@index([scopeKey, order])
+    @@index([scopeKey, updatedAt])
+}
+
+model SmartViewTag {
+    id          Int       @id @default(autoincrement())
+    polarity    String    @default("include")
+    order       Int       @default(0)
+    createdAt   DateTime  @default(now())
+    updatedAt   DateTime  @updatedAt
+    SmartView   SmartView @relation(fields: [smartViewId], references: [id], onDelete: Cascade)
+    smartViewId Int
+    Tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+    tagId       Int
+
+    @@unique([smartViewId, tagId])
+    @@index([tagId, smartViewId])
+    @@index([smartViewId, order])
 }
 
 model SyncReport {

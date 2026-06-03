@@ -3,6 +3,7 @@ import { useAppStore as useStore } from '~/store/base-store';
 import { Image, PanelContent } from '~/components/shared';
 import { panelContentClass } from '~/components/shared/PanelContent';
 import { PlaylistPanelContent } from '~/components/playlist';
+import MusicTagPanelContent from './MusicTagPanelContent';
 
 import * as Icon from '~/icon';
 
@@ -107,6 +108,20 @@ export default function MusicActionPanelContent({
                                     }}
                                 />
                             )
+                        });
+                    }
+                },
+                {
+                    icon: <Icon.Tags />,
+                    text: 'Tags',
+                    description: music.tags.length > 0
+                        ? music.tags.map(tag => tag.name).join(', ')
+                        : 'No tags on this track.',
+                    onClick: () => {
+                        panel.close();
+                        panel.open({
+                            title: 'Music Tags',
+                            content: <MusicTagPanelContent id={music.id} />
                         });
                     }
                 },

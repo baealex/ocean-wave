@@ -17,4 +17,17 @@ describe('queryKeys', () => {
         expect(queryKeys.syncReports.listAll()).toEqual(['sync-report']);
         expect(queryKeys.syncReports.latest()).toEqual(['sync-report', { scope: 'latest' }]);
     });
+
+    it('provides stable tag list keys', () => {
+        expect(queryKeys.tags.all()).toEqual(['tags']);
+        expect(queryKeys.tags.list({ query: 'focus', limit: 20, offset: 10 })).toEqual([
+            'tags',
+            {
+                scope: 'list',
+                query: 'focus',
+                limit: 20,
+                offset: 10
+            }
+        ]);
+    });
 });

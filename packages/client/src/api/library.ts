@@ -32,6 +32,18 @@ export function getMusics() {
                 'name',
                 'cover',
                 'publishedYear'
+            ]),
+            createQuery('tags', [
+                'id',
+                'scopeKey',
+                'name',
+                'normalizedName',
+                'color',
+                'description',
+                'order',
+                'musicCount',
+                'createdAt',
+                'updatedAt'
             ])
         ])))
     });

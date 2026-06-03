@@ -11,7 +11,12 @@ import {
     Loading,
     SearchField
 } from '~/components/shared';
-import { MusicListItem, MusicActionPanelContent, SmartMusicFilterPanelContent } from '~/components/music';
+import {
+    MusicListItem,
+    MusicActionPanelContent,
+    MusicTagFilterPanelContent,
+    SmartMusicFilterPanelContent
+} from '~/components/music';
 import * as Icon from '~/icon';
 
 import { panel } from '~/modules/panel';
@@ -23,6 +28,16 @@ import {
     resolveSmartMusicFilterId,
     type SmartMusicFilterId
 } from '~/modules/smart-music-filters';
+import {
+    DEFAULT_MUSIC_TAG_FILTER_MODE,
+    MUSIC_TAG_FILTER_MODE_PARAM,
+    MUSIC_TAG_FILTER_PARAM,
+    filterMusicsByTagIds,
+    getMusicTagFilterLabel,
+    parseMusicTagIdsParam,
+    resolveMusicTagFilterMode,
+    type MusicTagFilterMode
+} from '~/modules/music-tags';
 
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
@@ -38,9 +53,12 @@ export default function Music() {
     const [{ musics, loaded }] = useStore(musicStore);
     const query = searchParams.get('q') || '';
     const smartFilterId = resolveSmartMusicFilterId(searchParams.get(SMART_FILTER_PARAM));
+    const tagFilterIds = parseMusicTagIdsParam(searchParams.get(MUSIC_TAG_FILTER_PARAM));
+    const tagFilterMode = resolveMusicTagFilterMode(searchParams.get(MUSIC_TAG_FILTER_MODE_PARAM));
     const activeSmartFilter = getSmartMusicFilterOption(smartFilterId);
     const deferredQuery = useDeferredValue(query.trim().toLowerCase());
     const isSmartFilterActive = smartFilterId !== DEFAULT_SMART_MUSIC_FILTER_ID;
+    const isTagFilterActive = tagFilterIds.length > 0;
 
     const handleSearchChange = (value: string) => {
         setSearchParams((currentSearchParams) => {
@@ -73,9 +91,36 @@ export default function Music() {
         }, { once: true });
     };
 
+    const handleTagFilterChange = (
+        selectedTagIds: string[],
+        mode: MusicTagFilterMode
+    ) => {
+        const nextSearchParams = new URLSearchParams(searchParams);
+
+        if (selectedTagIds.length > 0) {
+            nextSearchParams.set(MUSIC_TAG_FILTER_PARAM, selectedTagIds.join(','));
+        } else {
+            nextSearchParams.delete(MUSIC_TAG_FILTER_PARAM);
+        }
+
+        if (selectedTagIds.length > 0 && mode !== DEFAULT_MUSIC_TAG_FILTER_MODE) {
+            nextSearchParams.set(MUSIC_TAG_FILTER_MODE_PARAM, mode);
+        } else {
+            nextSearchParams.delete(MUSIC_TAG_FILTER_MODE_PARAM);
+        }
+
+        nextSearchParams.delete('py');
+
+        window.addEventListener('popstate', () => {
+            setSearchParams(nextSearchParams, { replace: true });
+        }, { once: true });
+        panel.close();
+    };
+
     const availableMusics = (musics?.filter(music => !music.isHated)) ?? [];
     const smartFilteredMusics = filterMusicsBySmartFilter(availableMusics, smartFilterId);
-    const filteredMusics = smartFilteredMusics.filter(music =>
+    const tagFilteredMusics = filterMusicsByTagIds(smartFilteredMusics, tagFilterIds, tagFilterMode);
+    const filteredMusics = tagFilteredMusics.filter(music =>
         music.name.toLowerCase().includes(deferredQuery) ||
         music.artist.name.toLowerCase().includes(deferredQuery) ||
         music.album.name.toLowerCase().includes(deferredQuery)
@@ -111,6 +156,25 @@ export default function Music() {
                             )
                         })}>
                         <Icon.Filter /> {activeSmartFilter.shortLabel}
+                    </Button>
+                    <Button
+                        size="sm"
+                        aria-pressed={isTagFilterActive}
+                        aria-label="Filter music by tags"
+                        className={isTagFilterActive
+                            ? 'border-[var(--b-color-focus)] bg-[var(--b-color-active)] !text-[var(--b-color-point)] [&_svg]:!text-[var(--b-color-point)]'
+                            : undefined}
+                        onClick={() => panel.open({
+                            title: 'Tag Filter',
+                            content: (
+                                <MusicTagFilterPanelContent
+                                    selectedTagIds={tagFilterIds}
+                                    mode={tagFilterMode}
+                                    onApply={handleTagFilterChange}
+                                />
+                            )
+                        })}>
+                        <Icon.Tags /> {getMusicTagFilterLabel(tagFilterIds.length)}
                     </Button>
                     <Button
                         size="sm"

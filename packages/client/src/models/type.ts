@@ -18,6 +18,20 @@ export interface Music {
     genres: {
         name: string;
     }[];
+    tags: Tag[];
+}
+
+export interface Tag {
+    id: string;
+    scopeKey: string;
+    name: string;
+    normalizedName: string;
+    color: string | null;
+    description: string | null;
+    order: number;
+    musicCount: number;
+    createdAt: string;
+    updatedAt: string;
 }
 
 export interface Album {

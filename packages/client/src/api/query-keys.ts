@@ -17,5 +17,22 @@ export const queryKeys = {
     syncReports: {
         listAll: () => ['sync-report'] as const,
         latest: () => ['sync-report', { scope: 'latest' }] as const
+    },
+    tags: {
+        all: () => ['tags'] as const,
+        list: ({
+            query = '',
+            limit = 100,
+            offset = 0
+        }: {
+            query?: string;
+            limit?: number;
+            offset?: number;
+        } = {}) => ['tags', {
+            scope: 'list',
+            query,
+            limit,
+            offset
+        }] as const
     }
 };
