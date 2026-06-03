@@ -23,9 +23,13 @@ FROM node:22-alpine
 
 WORKDIR /app
 ENV NODE_ENV=production
+ENV DATABASE_URL=file:/data/db.sqlite3
+ENV OCEAN_WAVE_CACHE_PATH=/cache
+ENV OCEAN_WAVE_MUSIC_PATH=/music
 
 RUN apk add --no-cache openssl
 RUN npm install -g pnpm@10.25.0
+RUN mkdir -p /data /cache /music
 
 COPY --from=build /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=build /app/node_modules ./node_modules
@@ -36,10 +40,6 @@ COPY --from=build /app/packages/client/dist ./packages/client/dist
 WORKDIR /app/packages/server
 
 EXPOSE 44100
-
-RUN ln -s /app/packages/server/prisma/data /data
-RUN ln -s /app/packages/server/cache /cache
-RUN ln -s /app/packages/server/music /music
 
 ENTRYPOINT ["pnpm"]
 CMD ["start"]
