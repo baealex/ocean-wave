@@ -29,27 +29,27 @@ export const SMART_MUSIC_FILTER_OPTIONS: SmartMusicFilterOption[] = [{
     id: 'all',
     label: 'All tracks',
     shortLabel: 'All',
-    description: 'Show every visible track in the library.'
+    description: 'No smart filter. Shows the current list after search.'
 }, {
     id: 'unplayed',
     label: 'Unplayed tracks',
     shortLabel: 'Unplayed',
-    description: 'Songs that have not been counted as played yet.'
+    description: 'Filters tracks with play count = 0.'
 }, {
     id: 'dormant-liked',
     label: 'Favorites to revisit',
     shortLabel: 'Revisit',
-    description: `Liked songs quiet for ${DORMANT_FAVORITE_DAYS}+ days.`
+    description: `Filters liked tracks never played or not played for ${DORMANT_FAVORITE_DAYS}+ days.`
 }, {
     id: 'lossless',
     label: 'Lossless tracks',
     shortLabel: 'Lossless',
-    description: 'FLAC, ALAC, WAV, and AIFF files.'
+    description: 'Filters tracks whose codec includes FLAC, ALAC, WAV, or AIFF.'
 }, {
     id: 'heavy-rotation',
     label: 'Heavy rotation',
     shortLabel: 'Heavy',
-    description: 'Top quarter of tracks by counted plays.'
+    description: 'Filters the top 25% of played tracks by play count; cutoff ties stay included.'
 }];
 
 const SMART_MUSIC_FILTER_IDS = new Set<SmartMusicFilterId>(

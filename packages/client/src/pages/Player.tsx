@@ -27,6 +27,7 @@ import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
 import { themeStore } from '~/store/theme';
 import type { PlayerVisualizerMode } from '~/store/theme';
+import { MusicListener } from '~/socket';
 
 const PLAYER_VISUALIZER_MODES: Array<{
     value: PlayerVisualizerMode;
@@ -519,6 +520,17 @@ export default function PlayerDetail() {
                         </div>
 
                         <div className="flex w-full flex-wrap items-center justify-center gap-2.5 max-sm:gap-2">
+                            <IconTextButton
+                                className={cx(
+                                    playerSecondaryActionClass,
+                                    currentMusic.isLiked && 'border-[var(--b-color-focus)] bg-[var(--b-color-active)] !text-[var(--b-color-point)] [&_svg]:!fill-[var(--b-color-point)] [&_svg]:!stroke-[var(--b-color-point)]'
+                                )}
+                                size="sm"
+                                icon={<Icon.Heart />}
+                                label={currentMusic.isLiked ? 'Liked' : 'Like'}
+                                aria-pressed={currentMusic.isLiked}
+                                onClick={() => MusicListener.like(currentMusic.id, !currentMusic.isLiked)}
+                            />
                             <IconTextButton
                                 className={playerSecondaryActionClass}
                                 size="sm"

@@ -70,7 +70,6 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
 
     const containerRef = useRef<HTMLDivElement>(null);
     const shouldBeScroll = useRef(true);
-    const searchParamsRef = useRef(searchParams);
     const setSearchParamsRef = useRef(setSearchParams);
     const isSubPage = isSubPagePath(location.pathname);
     const subPagePresentation = resolveSubPagePresentation(location.pathname);
@@ -91,7 +90,6 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
     };
 
     useEffect(() => {
-        searchParamsRef.current = searchParams;
         setSearchParamsRef.current = setSearchParams;
     });
 
@@ -118,9 +116,11 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
             }
 
             timer = setTimeout(() => {
-                const params = searchParamsRef.current;
-                params.set('py', containerRef.current?.scrollTop.toString() || '0');
-                setSearchParamsRef.current(params, { replace: true });
+                setSearchParamsRef.current((currentSearchParams) => {
+                    const nextSearchParams = new URLSearchParams(currentSearchParams);
+                    nextSearchParams.set('py', containerRef.current?.scrollTop.toString() || '0');
+                    return nextSearchParams;
+                }, { replace: true });
             }, 200);
         };
 
