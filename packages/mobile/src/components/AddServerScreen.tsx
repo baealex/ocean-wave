@@ -38,9 +38,9 @@ export function AddServerScreen({
       </View>
       <View style={styles.card}>
         <Text style={styles.label}>Name</Text>
-        <TextInput onChangeText={onChangeServerName} placeholder="My Ocean Wave" placeholderTextColor="#71717a" style={styles.input} value={serverName} />
+        <TextInput onChangeText={onChangeServerName} placeholder="Server name" placeholderTextColor="#71717a" style={styles.input} value={serverName} />
         <Text style={styles.label}>Server URL</Text>
-        <TextInput autoCapitalize="none" autoCorrect={false} inputMode="url" onChangeText={onChangeServerUrl} placeholder="http://192.168.0.10:44100" placeholderTextColor="#71717a" style={styles.input} value={serverUrl} />
+        <TextInput autoCapitalize="none" autoCorrect={false} inputMode="url" onChangeText={onChangeServerUrl} placeholder="Enter server URL" placeholderTextColor="#71717a" style={styles.input} value={serverUrl} />
         <Text style={styles.label}>Password</Text>
         <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={onChangePassword} placeholder="Only if required" placeholderTextColor="#71717a" secureTextEntry style={styles.input} value={password} />
         <Pressable disabled={isLoading} onPress={onSave} style={styles.wideButton}>
