@@ -32,15 +32,27 @@ const MusicListItem = ({
     onClick,
     onLongPress
 }: MusicListItemProps) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key !== 'Enter' && e.key !== ' ') {
+            return;
+        }
+
+        e.preventDefault();
+        onClick?.();
+    };
+
     return (
-        <button
-            type="button"
+        <div
+            role="button"
+            tabIndex={0}
             className={cx(
                 'group/row flex w-full cursor-pointer flex-row items-center gap-4 px-6 py-4 text-left text-[var(--b-color-text)] transition-colors',
                 'hover:bg-[image:var(--b-gradient-row-hover)] active:bg-[var(--b-color-active)]',
+                'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
                 { 'opacity-40': isHated }
             )}
             onClick={onClick}
+            onKeyDown={handleKeyDown}
             onContextMenu={(e) => {
                 e.preventDefault();
                 onLongPress?.();
@@ -71,7 +83,10 @@ const MusicListItem = ({
                     <IconButton
                         aria-label={`Open actions for ${musicName}`}
                         active={isLiked}
-                        className="h-10 w-10"
+                        className={cx(
+                            'h-10 w-10',
+                            isLiked && '[&_svg]:!fill-[var(--b-color-point)] [&_svg]:!stroke-[var(--b-color-point)]'
+                        )}
                         onClick={(e) => {
                             e.stopPropagation();
                             onLongPress?.();
@@ -80,7 +95,7 @@ const MusicListItem = ({
                     </IconButton>
                 )}
             </span>
-        </button>
+        </div>
     );
 };
 

@@ -76,7 +76,13 @@ export default function MusicActionPanelContent({
             )}
             items={[
                 {
-                    icon: <Icon.Heart />,
+                    icon: (
+                        <Icon.Heart
+                            className={music.isLiked
+                                ? '!fill-[var(--b-color-point)] !stroke-[var(--b-color-point)]'
+                                : undefined}
+                        />
+                    ),
                     text: 'Like',
                     isActive: music.isLiked,
                     onClick: () => MusicListener.like(music.id, !music.isLiked)

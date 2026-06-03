@@ -121,6 +121,27 @@ describe('smart music filters', () => {
         expect(filterMusicsBySmartFilter(musics, 'heavy-rotation', now).map(music => music.id)).toEqual(['lossless']);
     });
 
+    it('treats heavy rotation as the top quarter of counted plays', () => {
+        const musics = [
+            createMusic({ id: 'top', playCount: 20 }),
+            createMusic({ id: 'cutoff-a', playCount: 12 }),
+            createMusic({ id: 'cutoff-b', playCount: 12 }),
+            createMusic({ id: 'third', playCount: 10 }),
+            createMusic({ id: 'fourth', playCount: 8 }),
+            createMusic({ id: 'fifth', playCount: 6 }),
+            createMusic({ id: 'sixth', playCount: 4 }),
+            createMusic({ id: 'seventh', playCount: 2 }),
+            createMusic({ id: 'unplayed', playCount: 0 })
+        ];
+
+        expect(filterMusicsBySmartFilter(musics, 'heavy-rotation', now).map(music => music.id)).toEqual([
+            'top',
+            'cutoff-a',
+            'cutoff-b'
+        ]);
+        expect(filterMusicsBySmartFilter([createMusic({ id: 'unplayed' })], 'heavy-rotation', now)).toEqual([]);
+    });
+
     it('detects dormant and lossless tracks defensively', () => {
         expect(isDormantMusic({ lastPlayedAt: null }, now)).toBe(true);
         expect(isDormantMusic({ lastPlayedAt: 'not-a-date' }, now)).toBe(true);

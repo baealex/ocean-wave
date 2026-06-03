@@ -40,18 +40,21 @@ export default function Music() {
     const smartFilterId = resolveSmartMusicFilterId(searchParams.get(SMART_FILTER_PARAM));
     const activeSmartFilter = getSmartMusicFilterOption(smartFilterId);
     const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+    const isSmartFilterActive = smartFilterId !== DEFAULT_SMART_MUSIC_FILTER_ID;
 
     const handleSearchChange = (value: string) => {
-        const nextSearchParams = new URLSearchParams(searchParams);
+        setSearchParams((currentSearchParams) => {
+            const nextSearchParams = new URLSearchParams(currentSearchParams);
 
-        if (value.trim()) {
-            nextSearchParams.set('q', value);
-        } else {
-            nextSearchParams.delete('q');
-        }
+            if (value.trim()) {
+                nextSearchParams.set('q', value);
+            } else {
+                nextSearchParams.delete('q');
+            }
 
-        nextSearchParams.delete('py');
-        setSearchParams(nextSearchParams, { replace: true });
+            nextSearchParams.delete('py');
+            return nextSearchParams;
+        }, { replace: true });
     };
 
     const handleSmartFilterChange = (filterId: SmartMusicFilterId) => {
@@ -64,7 +67,10 @@ export default function Music() {
         }
 
         nextSearchParams.delete('py');
-        setSearchParams(nextSearchParams, { replace: true });
+
+        window.addEventListener('popstate', () => {
+            setSearchParams(nextSearchParams, { replace: true });
+        }, { once: true });
     };
 
     const favoriteMusics = (musics?.filter(music => !music.isHated && music.isLiked)) ?? [];
@@ -90,7 +96,11 @@ export default function Music() {
                     </Button>
                     <Button
                         size="sm"
+                        aria-pressed={isSmartFilterActive}
                         aria-label="Filter favorite music"
+                        className={isSmartFilterActive
+                            ? 'border-[var(--b-color-focus)] bg-[var(--b-color-active)] !text-[var(--b-color-point)] [&_svg]:!text-[var(--b-color-point)]'
+                            : undefined}
                         onClick={() => panel.open({
                             title: 'Favorite Filter',
                             content: (
