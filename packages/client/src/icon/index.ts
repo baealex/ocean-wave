@@ -12,6 +12,7 @@ export {
     Heart,
     Infinity as Infinite,
     List,
+    ListFilter as Filter,
     ListMusic,
     Menu,
     MoreVertical as VerticalDots,

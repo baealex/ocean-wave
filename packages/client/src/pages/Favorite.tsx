@@ -11,16 +11,24 @@ import {
     ItemSortPanelContent,
     SearchField
 } from '~/components/shared';
-import { MusicListItem, MusicActionPanelContent } from '~/components/music';
+import { MusicListItem, MusicActionPanelContent, SmartMusicFilterPanelContent } from '~/components/music';
 import * as Icon from '~/icon';
 
 import { panel } from '~/modules/panel';
 import { useResetQueue } from '~/hooks';
+import {
+    DEFAULT_SMART_MUSIC_FILTER_ID,
+    filterMusicsBySmartFilter,
+    getSmartMusicFilterOption,
+    resolveSmartMusicFilterId,
+    type SmartMusicFilterId
+} from '~/modules/smart-music-filters';
 
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
 
 const FAVORITE_LIST_ROW_HEIGHT = 80;
+const SMART_FILTER_PARAM = 'filter';
 
 export default function Music() {
     const navigate = useNavigate();
@@ -29,6 +37,8 @@ export default function Music() {
 
     const [{ musics, loaded }] = useStore(musicStore);
     const query = searchParams.get('q') || '';
+    const smartFilterId = resolveSmartMusicFilterId(searchParams.get(SMART_FILTER_PARAM));
+    const activeSmartFilter = getSmartMusicFilterOption(smartFilterId);
     const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
     const handleSearchChange = (value: string) => {
@@ -40,17 +50,30 @@ export default function Music() {
             nextSearchParams.delete('q');
         }
 
+        nextSearchParams.delete('py');
         setSearchParams(nextSearchParams, { replace: true });
     };
 
-    const filteredMusics = (musics
-        ?.filter(music =>
-            !music.isHated && music.isLiked && (
-                music.name.toLowerCase().includes(deferredQuery) ||
-                music.artist.name.toLowerCase().includes(deferredQuery) ||
-                music.album.name.toLowerCase().includes(deferredQuery)
-            )
-        )) ?? [];
+    const handleSmartFilterChange = (filterId: SmartMusicFilterId) => {
+        const nextSearchParams = new URLSearchParams(searchParams);
+
+        if (filterId === DEFAULT_SMART_MUSIC_FILTER_ID) {
+            nextSearchParams.delete(SMART_FILTER_PARAM);
+        } else {
+            nextSearchParams.set(SMART_FILTER_PARAM, filterId);
+        }
+
+        nextSearchParams.delete('py');
+        setSearchParams(nextSearchParams, { replace: true });
+    };
+
+    const favoriteMusics = (musics?.filter(music => !music.isHated && music.isLiked)) ?? [];
+    const smartFilteredMusics = filterMusicsBySmartFilter(favoriteMusics, smartFilterId);
+    const filteredMusics = smartFilteredMusics.filter(music =>
+        music.name.toLowerCase().includes(deferredQuery) ||
+        music.artist.name.toLowerCase().includes(deferredQuery) ||
+        music.album.name.toLowerCase().includes(deferredQuery)
+    );
 
     return (
         <>
@@ -64,6 +87,20 @@ export default function Music() {
                 <StickyHeaderActions>
                     <Button onClick={() => void resetQueue(filteredMusics.map(music => music.id))}>
                         <Icon.Play /> Play
+                    </Button>
+                    <Button
+                        size="sm"
+                        aria-label="Filter favorite music"
+                        onClick={() => panel.open({
+                            title: 'Favorite Filter',
+                            content: (
+                                <SmartMusicFilterPanelContent
+                                    activeFilterId={smartFilterId}
+                                    onSelect={handleSmartFilterChange}
+                                />
+                            )
+                        })}>
+                        <Icon.Filter /> {activeSmartFilter.shortLabel}
                     </Button>
                     <Button
                         size="sm"
