@@ -15,7 +15,8 @@ import {
     Playlist,
     PlaylistDetail,
     Queue,
-    Setting
+    Setting,
+    TagList
 } from './pages';
 import { SiteLayout } from './components/layout';
 
@@ -56,6 +57,10 @@ const router = createBrowserRouter([
             {
                 path: '/playlist',
                 element: <Playlist />
+            },
+            {
+                path: '/tag',
+                element: <TagList />
             },
             {
                 path: '/setting',

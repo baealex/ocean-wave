@@ -4,6 +4,7 @@ import { artistResolvers, artistTypeDefs } from './artist';
 import { musicResolvers, musicTypeDefs } from './music';
 import { playlistResolvers, playlistTypeDefs } from './playlist';
 import { syncReportResolvers, syncReportTypeDefs } from './sync-report';
+import { tagResolvers, tagTypeDefs } from '../features/tag/graphql';
 
 const schema = makeExecutableSchema({
     typeDefs: [
@@ -11,14 +12,16 @@ const schema = makeExecutableSchema({
         artistTypeDefs,
         musicTypeDefs,
         playlistTypeDefs,
-        syncReportTypeDefs
+        syncReportTypeDefs,
+        tagTypeDefs
     ],
     resolvers: [
         albumResolvers,
         artistResolvers,
         musicResolvers,
         playlistResolvers,
-        syncReportResolvers
+        syncReportResolvers,
+        tagResolvers
     ]
 });
 

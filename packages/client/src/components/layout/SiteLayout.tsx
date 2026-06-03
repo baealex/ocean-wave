@@ -13,6 +13,7 @@ import MusicPlayer from '../music/MusicPlayer';
 import Loading from '../shared/Loading';
 import PageContainer from '../shared/PageContainer';
 import type { PageContainerProps } from '../shared/PageContainer';
+import PanelProvider from '../app/PanelProvider';
 import {
     isSubPagePath,
     resolveSubPagePresentation,
@@ -135,7 +136,8 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
     }, [containerRef, isSubPage, location.pathname]);
 
     return (
-        <main>
+        <PanelProvider>
+            <main>
             {!isSubPage && <SiteHeader />}
             <div className={cx('relative flex min-h-0 flex-1 overflow-hidden', isSubPage && 'lg:col-[1/3]')}>
                 {!isSubPage && (
@@ -178,6 +180,7 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                 )}
             </div>
             {!disablePlayer && !hideMiniPlayer && <MusicPlayer />}
-        </main>
+            </main>
+        </PanelProvider>
     );
 }

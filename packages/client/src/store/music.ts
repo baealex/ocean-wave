@@ -1,6 +1,9 @@
 import { BaseStore } from './base-store';
 
-import type { Music } from '~/models/type';
+import type {
+    Music,
+    Tag
+} from '~/models/type';
 
 import * as sort from '~/modules/sort';
 
@@ -19,6 +22,8 @@ const SORT_STATE = {
     CREATED_AT: 'createdAt',
     CREATED_AT_DESC: 'createdAtDesc'
 } as const;
+
+const createMusicMap = (musics: Music[]) => new Map(musics.map(music => [music.id, music]));
 
 interface MusicStoreState {
     loaded: boolean;
@@ -42,32 +47,51 @@ class MusicStore extends BaseStore<MusicStoreState> {
         this.listener = new MusicListener();
         this.listener.connect({
             onLike: ({ id, isLiked }) => {
-                this.set({
-                    musics: this.state.musics.map((music) => {
+                this.set((prevState) => {
+                    const musics = prevState.musics.map((music) => {
                         if (music.id === id) {
-                            music.isLiked = isLiked;
+                            return {
+                                ...music,
+                                isLiked
+                            };
                         }
                         return music;
-                    })
+                    });
+
+                    return {
+                        musics,
+                        musicMap: createMusicMap(musics)
+                    };
                 });
             },
             onHate: ({ id, isHated }) => {
-                this.set({
-                    musics: this.state.musics.map((music) => {
+                this.set((prevState) => {
+                    const musics = prevState.musics.map((music) => {
                         if (music.id === id) {
-                            music.isHated = isHated;
+                            return {
+                                ...music,
+                                isHated
+                            };
                         }
                         return music;
-                    })
+                    });
+
+                    return {
+                        musics,
+                        musicMap: createMusicMap(musics)
+                    };
                 });
             },
             onCount: ({ id, playCount, lastPlayedAt, totalPlayedMs }) => {
                 this.set((prevState) => {
                     let nextMusics = prevState.musics.map((music) => {
                         if (music.id === id) {
-                            music.playCount = playCount;
-                            music.lastPlayedAt = lastPlayedAt;
-                            music.totalPlayedMs = totalPlayedMs;
+                            return {
+                                ...music,
+                                playCount,
+                                lastPlayedAt,
+                                totalPlayedMs
+                            };
                         }
                         return music;
                     });
@@ -78,7 +102,10 @@ class MusicStore extends BaseStore<MusicStoreState> {
                         nextMusics = sort.sortByPlayCount(nextMusics).reverse();
                     }
 
-                    return { musics: nextMusics };
+                    return {
+                        musics: nextMusics,
+                        musicMap: createMusicMap(nextMusics)
+                    };
                 });
             }
         });
@@ -101,9 +128,29 @@ class MusicStore extends BaseStore<MusicStoreState> {
             this.set({
                 loaded: true,
                 musics: data.allMusics,
-                musicMap: new Map(data.allMusics.map(music => [music.id, music])),
+                musicMap: createMusicMap(data.allMusics),
                 sortedFrom: SORT_STATE.PLAY_COUNT_DESC
             });
+        });
+    }
+
+    updateMusicTags(id: string, tags: Tag[]) {
+        this.set((prevState) => {
+            const musics = prevState.musics.map((music) => {
+                if (music.id !== id) {
+                    return music;
+                }
+
+                return {
+                    ...music,
+                    tags
+                };
+            });
+
+            return {
+                musics,
+                musicMap: createMusicMap(musics)
+            };
         });
     }
 

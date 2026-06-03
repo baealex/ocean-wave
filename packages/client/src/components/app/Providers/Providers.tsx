@@ -3,7 +3,6 @@ import { QueryClientProvider } from '@tanstack/react-query';
 
 import queryClient from './configs/query-client';
 import ModalProvider from '../ModalProvider';
-import PanelProvider from '../PanelProvider';
 import ToastProvider from '../ToastProvider';
 
 interface ProvidersProps {
@@ -14,9 +13,7 @@ const Providers = ({ children }: ProvidersProps) => {
     return (
         <QueryClientProvider client={queryClient}>
             <ModalProvider>
-                <PanelProvider>
-                    {children}
-                </PanelProvider>
+                {children}
                 <ToastProvider />
             </ModalProvider>
         </QueryClientProvider>

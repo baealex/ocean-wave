@@ -13,3 +13,4 @@ export { default as Playlist } from './Playlist';
 export { default as PlaylistDetail } from './PlaylistDetail';
 export { default as Queue } from './Queue';
 export { default as Setting } from './Setting';
+export { default as TagList } from './TagList';
