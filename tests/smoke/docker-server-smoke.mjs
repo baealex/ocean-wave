@@ -153,12 +153,8 @@ const createScenarioWorkspace = (scenarioName) => {
 const startContainer = ({ scenarioName, port, env }) => {
     const workspace = createScenarioWorkspace(scenarioName);
     const containerName = `ocean-wave-smoke-${scenarioName}-${process.pid}`;
-    const dockerEnvArgs = Object.entries({
-        ...env,
-        OCEAN_WAVE_MUSIC_PATH: '/music',
-        OCEAN_WAVE_CACHE_PATH: '/cache',
-        DATABASE_URL: 'file:/data/db.sqlite3',
-    }).flatMap(([key, value]) => ['-e', `${key}=${value}`]);
+    const dockerEnvArgs = Object.entries(env)
+        .flatMap(([key, value]) => ['-e', `${key}=${value}`]);
 
     const containerId = run('docker', [
         'run',

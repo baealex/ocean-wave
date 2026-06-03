@@ -69,3 +69,21 @@ test('runtime configuration uses the Ocean Wave audio sample-rate port', () => {
     assert.match(serverEntry, /DEFAULT_PORT = 44100/);
     assert.match(viteConfig, /localhost:44100/);
 });
+
+test('Docker runtime uses stable volume directories without symlinks', () => {
+    const composeFile = readText('docker-compose.yml');
+    const dockerfile = readText('packages', 'server', 'Dockerfile');
+
+    assert.match(dockerfile, /RUN mkdir -p \/data \/cache \/music/);
+    assert.match(dockerfile, /ENV DATABASE_URL=file:\/data\/db\.sqlite3/);
+    assert.match(dockerfile, /ENV OCEAN_WAVE_CACHE_PATH=\/cache/);
+    assert.match(dockerfile, /ENV OCEAN_WAVE_MUSIC_PATH=\/music/);
+    assert.doesNotMatch(dockerfile, /\bln\s+-s\b/);
+
+    assert.match(composeFile, /- \.\/data:\/data/);
+    assert.match(composeFile, /- \.\/cache:\/cache/);
+    assert.match(composeFile, /- \.\/music:\/music/);
+    assert.match(composeFile, /DATABASE_URL: \$\{DATABASE_URL:-file:\/data\/db\.sqlite3\}/);
+    assert.match(composeFile, /OCEAN_WAVE_CACHE_PATH: \$\{OCEAN_WAVE_CACHE_PATH:-\/cache\}/);
+    assert.match(composeFile, /OCEAN_WAVE_MUSIC_PATH: \$\{OCEAN_WAVE_MUSIC_PATH:-\/music\}/);
+});
