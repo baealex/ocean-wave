@@ -1,6 +1,6 @@
 # GraphQL Variables Convention
 
-Updated: 2026-03-06
+Updated: 2026-06-05
 
 ## 1. Purpose
 - Prevent query breakage and injection risks caused by string interpolation.
@@ -12,7 +12,7 @@ Updated: 2026-03-06
 
 ## 3. Required Pattern
 1. API layer only
-- Compose GraphQL requests only in `packages/client/src/apis/**`.
+- Compose GraphQL requests only in `packages/client/src/api/**`.
 - Components/pages must call API functions and must not build GraphQL strings directly.
 
 2. Request shape
@@ -49,7 +49,7 @@ graphQuery<{ note: { id: string; title: string } }, { id: string }>(
 ## 6. Verification
 - Run interpolation scan:
 ```bash
-rg -n "\"\\$\\{.*\\}\"|\\$\\{.*\\}" packages/client/src/apis packages/client/src/pages/Note.tsx
+rg -n "\"\\$\\{.*\\}\"|\\$\\{.*\\}" packages/client/src/api packages/client/src/pages
 ```
 - Ensure output is empty for GraphQL request code.
 
