@@ -1,6 +1,6 @@
 # Ocean Wave Client API Import Convention
 
-Updated: 2026-05-25
+Updated: 2026-06-05
 
 ## 1. Purpose
 - Keep the client API layer easy to trace after it was split by domain.
@@ -17,6 +17,7 @@ import { getAuthSession } from '~/api/auth';
 import { getAlbum, getMusics } from '~/api/library';
 import { getAudio } from '~/api/playback';
 import { getLatestSyncReport } from '~/api/sync';
+import { fetchTags } from '~/api/tags';
 ```
 
 Disallowed example:
@@ -31,6 +32,7 @@ import { getAlbum } from '~/api';
 - `~/api/library`: music, artist, album, and playlist GraphQL calls.
 - `~/api/playback`: audio playback HTTP calls.
 - `~/api/sync`: sync report GraphQL calls.
+- `~/api/tags`: tag GraphQL query and mutation calls.
 - `~/api/query-keys`: React Query key builders.
 
 ## 4. Barrel Compatibility
@@ -53,3 +55,7 @@ PY
 ```
 
 Expected result: no production imports from `~/api`.
+
+## 6. Realtime Boundary
+- Use `docs/process/API_REALTIME_CONVENTION.md` when adding or changing data writes that also need realtime updates.
+- Client code should call domain API functions for GraphQL mutations; Socket.IO listeners should only handle notifications, playback state, or explicit realtime playback commands.
