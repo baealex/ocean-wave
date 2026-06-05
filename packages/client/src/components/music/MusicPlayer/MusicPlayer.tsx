@@ -2,11 +2,13 @@ import classNames from 'classnames';
 import { useNavigate } from 'react-router-dom';
 
 import { Image } from '~/components/shared';
+import MusicActionPanelContent from '../MusicActionPanelContent';
 import { useStoreValue } from '~/hooks';
 import * as Icon from '~/icon';
 import { useAppStore as useStore } from '~/store/base-store';
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
+import { panel } from '~/modules/panel';
 
 const controlButtonClassName = 'relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent !text-[var(--b-color-text)] transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:!text-white active:scale-95 [&_svg]:h-[1.125rem] [&_svg]:w-[1.125rem] [&_svg]:opacity-100 [&_svg]:text-current';
 const secondaryControlClassName = '!text-[var(--b-color-text-secondary)] hover:!text-[var(--b-color-text)]';
@@ -24,6 +26,23 @@ const MusicPlayer = () => {
     const currentMusic = currentTrackId
         ? musicMap.get(currentTrackId)
         : null;
+
+    const openCurrentMusicActions = () => {
+        if (!currentMusic) {
+            return;
+        }
+
+        panel.open({
+            title: 'More actions',
+            content: (
+                <MusicActionPanelContent
+                    id={currentMusic.id}
+                    onAlbumClick={() => navigate(`/album/${currentMusic.album.id}`)}
+                    onArtistClick={() => navigate(`/artist/${currentMusic.artist.id}`)}
+                />
+            )
+        });
+    };
 
     // TODO: Fix type
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -107,25 +126,40 @@ const MusicPlayer = () => {
                     </button>
                     <button
                         type="button"
-                        className={classNames(controlButtonClassName, 'h-11 w-11 !bg-[var(--b-color-point)] !text-black hover:!bg-[var(--b-color-point-dark)] hover:!text-black [&_svg]:h-5 [&_svg]:w-5')}
+                        className={classNames(controlButtonClassName, 'h-11 w-11 !bg-[var(--b-color-point)] !text-black hover:!bg-[var(--b-color-point-dark)] hover:!text-black max-[768px]:order-2 [&_svg]:h-5 [&_svg]:w-5')}
                         onClick={() => isPlaying ? queueStore.pause() : queueStore.play()}>
                         {isPlaying ? <Icon.Pause /> : <Icon.Play />}
                     </button>
                     <button
                         type="button"
-                        className={classNames(controlButtonClassName, secondaryControlClassName)}
+                        className={classNames(controlButtonClassName, secondaryControlClassName, 'max-[768px]:hidden')}
                         onClick={() => queueStore.next()}>
                         <Icon.SkipForward />
                     </button>
                     <button
                         type="button"
-                        className={classNames(controlButtonClassName, secondaryControlClassName, shuffle && '!text-[var(--b-color-point)] hover:!text-[var(--b-color-point)] [&_svg]:!stroke-[var(--b-color-point)] [&_path]:!stroke-[var(--b-color-point)]')}
+                        className={classNames(controlButtonClassName, secondaryControlClassName, 'max-[768px]:hidden', shuffle && '!text-[var(--b-color-point)] hover:!text-[var(--b-color-point)] [&_svg]:!stroke-[var(--b-color-point)] [&_path]:!stroke-[var(--b-color-point)]')}
                         onClick={() => queueStore.toggleShuffle()}>
                         <Icon.Shuffle />
                     </button>
                     <button
                         type="button"
-                        className={classNames(controlButtonClassName, secondaryControlClassName, 'max-[768px]:hidden lg:flex')}
+                        className={classNames(
+                            controlButtonClassName,
+                            secondaryControlClassName,
+                            'max-[768px]:order-3',
+                            currentMusic?.isLiked && '!text-[var(--b-color-point)] hover:!text-[var(--b-color-point)] [&_svg]:!fill-[var(--b-color-point)] [&_svg]:!stroke-[var(--b-color-point)]'
+                        )}
+                        aria-label={currentMusic?.isLiked ? 'Open more actions for liked current music' : 'Open more actions for current music'}
+                        aria-haspopup="dialog"
+                        disabled={!currentMusic}
+                        onClick={openCurrentMusicActions}>
+                        <Icon.Heart />
+                    </button>
+                    <button
+                        type="button"
+                        className={classNames(controlButtonClassName, secondaryControlClassName, 'max-[768px]:order-4')}
+                        aria-label="Open queue"
                         onClick={() => navigate('/queue')}>
                         <Icon.ListMusic />
                     </button>

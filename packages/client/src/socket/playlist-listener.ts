@@ -79,8 +79,8 @@ export class PlaylistListener implements Listener {
         socket.on(PLAYLIST_CHANGE_MUSIC_ORDER, this.handler.onChangeMusicOrder);
     }
 
-    static create(name: string) {
-        socket.emit(PLAYLIST_CREATE, { name });
+    static create(name: string, musics?: string[]) {
+        socket.emit(PLAYLIST_CREATE, { name, musics });
     }
 
     static update(id: string, name: string) {

@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore as useStore } from '~/store/base-store';
 
 import {
+    MusicActionPanelContent,
     MusicPlayerDiskStyle,
     MusicPlayerVisualizerStyle
 } from '~/components/music';
@@ -21,6 +22,7 @@ import * as Icon from '~/icon';
 import { useBack, useStoreValue } from '~/hooks';
 
 import { getImage } from '~/modules/image';
+import { panel } from '~/modules/panel';
 import { makePlayTime } from '~/modules/time';
 
 import { musicStore } from '~/store/music';
@@ -226,6 +228,23 @@ export default function PlayerDetail() {
 
     const playerEffectMode = playerVisualizerMode;
     const isVisualizerEffect = playerEffectMode !== 'disk';
+    const openCurrentMusicActions = () => {
+        if (!currentMusic) {
+            return;
+        }
+
+        setIsAudioMenuOpen(false);
+        panel.open({
+            title: 'More actions',
+            content: (
+                <MusicActionPanelContent
+                    id={currentMusic.id}
+                    onAlbumClick={() => navigate(`/album/${currentMusic.album.id}`)}
+                    onArtistClick={() => navigate(`/artist/${currentMusic.artist.id}`)}
+                />
+            )
+        });
+    };
 
     useEffect(() => {
         if (!isAudioMenuOpen) {
@@ -252,7 +271,7 @@ export default function PlayerDetail() {
     }, [currentMusic]);
 
     return (
-        <div className="relative h-full min-h-full w-full overflow-hidden bg-[var(--b-gradient-page)]">
+        <div className="relative h-full min-h-full w-full overflow-hidden bg-[var(--b-gradient-page)] max-sm:overflow-y-auto max-sm:overflow-x-hidden">
             {currentMusic && <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-[var(--b-color-background)]" aria-hidden="true" />}
 
             <div className="relative z-[1] flex min-h-full flex-col px-4 pb-6 pt-4 max-lg:pt-0">
@@ -273,7 +292,7 @@ export default function PlayerDetail() {
                             aria-haspopup="dialog"
                             aria-expanded={isAudioMenuOpen}
                             onClick={() => setIsAudioMenuOpen(true)}>
-                            <Icon.Menu />
+                            <Icon.Settings />
                         </button>
                     )}
                 </div>
@@ -534,26 +553,39 @@ export default function PlayerDetail() {
                             <IconTextButton
                                 className={playerSecondaryActionClass}
                                 size="sm"
-                                icon={<Icon.Music />}
-                                label="Artist"
-                                onClick={() => navigate(`/artist/${currentMusic.artist.id}`)}
-                            />
-                            <IconTextButton
-                                className={playerSecondaryActionClass}
-                                size="sm"
-                                icon={<Icon.Disc />}
-                                label="Album"
-                                onClick={() => navigate(`/album/${currentMusic.album.id}`)}
+                                icon={<Icon.Menu />}
+                                label="More"
+                                onClick={openCurrentMusicActions}
                             />
                             {queuePosition !== null && (
                                 <IconTextButton
                                     className={playerSecondaryActionClass}
                                     size="sm"
                                     icon={<Icon.ListMusic />}
-                                    label={`Queue ${queuePosition}/${queueLength}`}
+                                    label={(
+                                        <>
+                                            <span className="sm:hidden">Queue</span>
+                                            <span className="max-sm:hidden">Queue {queuePosition}/{queueLength}</span>
+                                        </>
+                                    )}
+                                    aria-label={`Open queue, ${queuePosition} of ${queueLength}`}
                                     onClick={() => navigate('/queue')}
                                 />
                             )}
+                            <IconTextButton
+                                className={cx(playerSecondaryActionClass, 'max-sm:hidden')}
+                                size="sm"
+                                icon={<Icon.Music />}
+                                label="Artist"
+                                onClick={() => navigate(`/artist/${currentMusic.artist.id}`)}
+                            />
+                            <IconTextButton
+                                className={cx(playerSecondaryActionClass, 'max-sm:hidden')}
+                                size="sm"
+                                icon={<Icon.Disc />}
+                                label="Album"
+                                onClick={() => navigate(`/album/${currentMusic.album.id}`)}
+                            />
                         </div>
                     </PageContainer>
                 ) : (
