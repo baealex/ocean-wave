@@ -102,6 +102,7 @@ export default function MusicActionPanelContent({
                             title: 'Add to Playlist',
                             content: (
                                 <PlaylistPanelContent
+                                    createAndAddMusicIds={[music.id]}
                                     onClick={(id) => {
                                         PlaylistListener.addMusic(id, [music.id]);
                                         toast('Added to playlist');
