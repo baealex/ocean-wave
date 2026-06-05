@@ -154,6 +154,49 @@ class MusicStore extends BaseStore<MusicStoreState> {
         });
     }
 
+    replaceTag(tag: Tag) {
+        this.set((prevState) => {
+            const musics = prevState.musics.map((music) => {
+                const tags = music.tags.map((musicTag) => musicTag.id === tag.id ? {
+                    ...musicTag,
+                    ...tag
+                } : musicTag);
+
+                return {
+                    ...music,
+                    tags
+                };
+            });
+
+            return {
+                musics,
+                musicMap: createMusicMap(musics)
+            };
+        });
+    }
+
+    removeTagFromMusics(tagId: string, affectedMusicIds?: string[]) {
+        const affectedMusicIdSet = affectedMusicIds ? new Set(affectedMusicIds) : null;
+
+        this.set((prevState) => {
+            const musics = prevState.musics.map((music) => {
+                if (affectedMusicIdSet && !affectedMusicIdSet.has(music.id)) {
+                    return music;
+                }
+
+                return {
+                    ...music,
+                    tags: music.tags.filter(tag => tag.id !== tagId)
+                };
+            });
+
+            return {
+                musics,
+                musicMap: createMusicMap(musics)
+            };
+        });
+    }
+
     get sortItems() {
         return [{
             text: 'Name (A-Z)',
