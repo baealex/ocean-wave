@@ -72,19 +72,6 @@ export const setMusicLiked = async ({
     };
 };
 
-export const toggleMusicLiked = async ({ id }: { id: string }): Promise<MusicLikedResult> => {
-    const musicId = parseMusicId(id);
-
-    await getMusicOrThrow(musicId);
-
-    const like = await models.musicLike.findFirst({ where: { musicId } });
-
-    return setMusicLiked({
-        id,
-        isLiked: !like
-    });
-};
-
 export const setMusicHated = async ({
     id,
     isHated
@@ -110,19 +97,6 @@ export const setMusicHated = async ({
         id: musicId.toString(),
         isHated
     };
-};
-
-export const toggleMusicHated = async ({ id }: { id: string }): Promise<MusicHatedResult> => {
-    const musicId = parseMusicId(id);
-
-    await getMusicOrThrow(musicId);
-
-    const hate = await models.musicHate.findFirst({ where: { musicId } });
-
-    return setMusicHated({
-        id,
-        isHated: !hate
-    });
 };
 
 export const isMusicPreferenceServiceError = (error: unknown): error is MusicPreferenceServiceError => {

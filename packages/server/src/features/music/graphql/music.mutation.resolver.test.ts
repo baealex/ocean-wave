@@ -42,4 +42,28 @@ describe('music mutation resolvers', () => {
         expect(notifySpy).toHaveBeenCalledWith(MUSIC_COUNT, result);
         expect(broadcastSpy).not.toHaveBeenCalled();
     });
+
+    it('does not notify playback count updates for deduped records', async () => {
+        const result = {
+            id: '1',
+            playCount: 1,
+            lastPlayedAt: '2026-06-06T11:00:00.000Z',
+            totalPlayedMs: 35_000,
+            countedAsPlay: true,
+            deduped: true
+        };
+        const input = {
+            id: '1',
+            playedMs: 35_000,
+            startedAt: '2026-06-06T10:59:25.000Z',
+            clientSessionId: 'session-1'
+        };
+        const record = jest.fn().mockResolvedValue(result);
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
+        const resolver = createRecordPlaybackMutationResolver(record);
+
+        await expect(resolver(null, { input })).resolves.toEqual(result);
+        expect(record).toHaveBeenCalledWith(input);
+        expect(notifySpy).not.toHaveBeenCalled();
+    });
 });
