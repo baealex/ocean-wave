@@ -43,7 +43,7 @@ const SUPPORTED_AUDIO_EXTENSIONS = new Set([
     '.flac'
 ]);
 
-const SYNC_EVENT = 'sync-music';
+export const SYNC_EVENT = 'sync-music';
 
 interface ParsedTrackMetadata {
     title: string;
