@@ -44,7 +44,7 @@ export const like = async ({ id = '', isLiked }: { id?: string; isLiked?: boolea
             ? await setMusicLiked({ id, isLiked })
             : await toggleMusicLiked({ id });
 
-        connectors.broadcast(MUSIC_LIKE, result);
+        connectors.notify(MUSIC_LIKE, result);
     } catch (error) {
         console.error(error);
     }
@@ -60,7 +60,7 @@ export const hate = async ({ id = '', isHated }: { id?: string; isHated?: boolea
             ? await setMusicHated({ id, isHated })
             : await toggleMusicHated({ id });
 
-        connectors.broadcast(MUSIC_HATE, result);
+        connectors.notify(MUSIC_HATE, result);
     } catch (error) {
         console.error(error);
     }
@@ -70,7 +70,7 @@ export const count = async (payload: PlaybackRecordInput): Promise<PlaybackRecor
     const result = await recordPlayback(payload);
 
     if (result && !result.deduped) {
-        void connectors.broadcast(MUSIC_COUNT, result).catch(console.error);
+        connectors.notify(MUSIC_COUNT, result);
     }
 
     return result;

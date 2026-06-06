@@ -27,6 +27,7 @@ describe('music mutation resolvers', () => {
         const broadcastSpy = jest
             .spyOn(connectors, 'broadcast')
             .mockReturnValue(new Promise(() => {}) as ReturnType<typeof connectors.broadcast>);
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
         const resolver = createRecordPlaybackMutationResolver(record);
 
         await expect(Promise.race([
@@ -38,6 +39,7 @@ describe('music mutation resolvers', () => {
             })
         ])).resolves.toEqual(result);
         expect(record).toHaveBeenCalledWith(input);
-        expect(broadcastSpy).toHaveBeenCalledWith(MUSIC_COUNT, result);
+        expect(notifySpy).toHaveBeenCalledWith(MUSIC_COUNT, result);
+        expect(broadcastSpy).not.toHaveBeenCalled();
     });
 });

@@ -64,14 +64,14 @@ export const playlistListener = (socket: Socket) => {
 const handleCreatePlaylist = async ({ name = '', musics = [] }: PlaylistCreatePayload) => {
     const playlist = await createPlaylist({ name, musicIds: musics });
 
-    connectors.broadcast(PLAYLIST_CREATE, await resolvePlaylistSummary(playlist));
+    connectors.notify(PLAYLIST_CREATE, await resolvePlaylistSummary(playlist));
 };
 
 const handleDeletePlaylist = async ({ id = '' }: PlaylistIdPayload) => {
     try {
         const result = await deletePlaylist({ id });
 
-        connectors.broadcast(PLAYLIST_DELETE, result.id);
+        connectors.notify(PLAYLIST_DELETE, result.id);
     } catch (e) {
         console.error(e);
     }
@@ -84,7 +84,7 @@ const handleChangePlaylistMusicOrder = async ({ id = '', musicIds = [] }: Playli
 
     const result = await reorderPlaylistMusics({ id, musicIds });
 
-    connectors.broadcast(PLAYLIST_CHANGE_MUSIC_ORDER, result);
+    connectors.notify(PLAYLIST_CHANGE_MUSIC_ORDER, result);
 };
 
 const handleUpdatePlaylist = async ({
@@ -97,7 +97,7 @@ const handleUpdatePlaylist = async ({
 
     const result = await renamePlaylist({ id, name });
 
-    connectors.broadcast(PLAYLIST_UPDATE, result);
+    connectors.notify(PLAYLIST_UPDATE, result);
 };
 
 const handleAddMusicToPlaylist = async ({
@@ -110,7 +110,7 @@ const handleAddMusicToPlaylist = async ({
 
     const result = await addMusicToPlaylist({ id, musicIds });
 
-    connectors.broadcast(PLAYLIST_ADD_MUSIC, result);
+    connectors.notify(PLAYLIST_ADD_MUSIC, result);
 };
 
 const handleMoveMusicToPlaylist = async ({
@@ -124,7 +124,7 @@ const handleMoveMusicToPlaylist = async ({
 
     const result = await moveMusicToPlaylist({ fromId, toId, musicIds });
 
-    connectors.broadcast(PLAYLIST_MOVE_MUSIC, result);
+    connectors.notify(PLAYLIST_MOVE_MUSIC, result);
 };
 
 const handleRemoveMusicFromPlaylist = async ({
@@ -137,7 +137,7 @@ const handleRemoveMusicFromPlaylist = async ({
 
     const result = await removeMusicFromPlaylist({ id, musicIds });
 
-    connectors.broadcast(PLAYLIST_REMOVE_MUSIC, result);
+    connectors.notify(PLAYLIST_REMOVE_MUSIC, result);
 };
 
 const handleChangePlaylistOrder = async ({ ids = [] }: PlaylistOrderPayload) => {
@@ -147,5 +147,5 @@ const handleChangePlaylistOrder = async ({ ids = [] }: PlaylistOrderPayload) => 
 
     const result = await reorderPlaylists({ ids });
 
-    connectors.broadcast(PLAYLIST_CHANGE_ORDER, result.ids);
+    connectors.notify(PLAYLIST_CHANGE_ORDER, result.ids);
 };

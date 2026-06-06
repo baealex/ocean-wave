@@ -48,7 +48,7 @@ export const createSetMusicLikedMutationResolver = (
     return async (_: unknown, { id, isLiked }: { id: string; isLiked: boolean }) => withMusicErrorHandling(async () => {
         const result = await setLiked({ id, isLiked });
 
-        connectors.broadcast(MUSIC_LIKE, result);
+        connectors.notify(MUSIC_LIKE, result);
 
         return result;
     });
@@ -60,7 +60,7 @@ export const createSetMusicHatedMutationResolver = (
     return async (_: unknown, { id, isHated }: { id: string; isHated: boolean }) => withMusicErrorHandling(async () => {
         const result = await setHated({ id, isHated });
 
-        connectors.broadcast(MUSIC_HATE, result);
+        connectors.notify(MUSIC_HATE, result);
 
         return result;
     });
@@ -74,7 +74,7 @@ export const createRecordPlaybackMutationResolver = (
         const result = await record(input);
 
         if (result && !result.deduped) {
-            void connectors.broadcast(MUSIC_COUNT, result).catch(console.error);
+            connectors.notify(MUSIC_COUNT, result);
         }
 
         return result;

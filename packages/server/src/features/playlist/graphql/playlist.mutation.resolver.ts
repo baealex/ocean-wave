@@ -59,7 +59,7 @@ export const createCreatePlaylistMutationResolver = (
     return async (_: unknown, { name, musicIds = [] }: { name: string; musicIds?: string[] }) => withPlaylistErrorHandling(async () => {
         const playlist = await create({ name, musicIds });
 
-        connectors.broadcast(PLAYLIST_CREATE, await resolvePlaylistSummary(playlist));
+        connectors.notify(PLAYLIST_CREATE, await resolvePlaylistSummary(playlist));
 
         return playlist;
     });
@@ -71,7 +71,7 @@ export const createDeletePlaylistMutationResolver = (
     return async (_: unknown, { id }: { id: string }) => withPlaylistErrorHandling(async () => {
         const result = await deleteById({ id });
 
-        connectors.broadcast(PLAYLIST_DELETE, result.id);
+        connectors.notify(PLAYLIST_DELETE, result.id);
 
         return result;
     });
@@ -83,7 +83,7 @@ export const createRenamePlaylistMutationResolver = (
     return async (_: unknown, { id, name }: { id: string; name: string }) => withPlaylistErrorHandling(async () => {
         const result = await rename({ id, name });
 
-        connectors.broadcast(PLAYLIST_UPDATE, result);
+        connectors.notify(PLAYLIST_UPDATE, result);
 
         return result;
     });
@@ -95,7 +95,7 @@ export const createReorderPlaylistsMutationResolver = (
     return async (_: unknown, { ids }: { ids: string[] }) => withPlaylistErrorHandling(async () => {
         const result = await reorder({ ids });
 
-        connectors.broadcast(PLAYLIST_CHANGE_ORDER, result.ids);
+        connectors.notify(PLAYLIST_CHANGE_ORDER, result.ids);
 
         return result;
     });
@@ -107,7 +107,7 @@ export const createAddMusicToPlaylistMutationResolver = (
     return async (_: unknown, { id, musicIds }: { id: string; musicIds: string[] }) => withPlaylistErrorHandling(async () => {
         const result = await add({ id, musicIds });
 
-        connectors.broadcast(PLAYLIST_ADD_MUSIC, result);
+        connectors.notify(PLAYLIST_ADD_MUSIC, result);
 
         return result;
     });
@@ -119,7 +119,7 @@ export const createMoveMusicToPlaylistMutationResolver = (
     return async (_: unknown, { fromId, toId, musicIds }: { fromId: string; toId: string; musicIds: string[] }) => withPlaylistErrorHandling(async () => {
         const result = await move({ fromId, toId, musicIds });
 
-        connectors.broadcast(PLAYLIST_MOVE_MUSIC, result);
+        connectors.notify(PLAYLIST_MOVE_MUSIC, result);
 
         return result;
     });
@@ -131,7 +131,7 @@ export const createRemoveMusicFromPlaylistMutationResolver = (
     return async (_: unknown, { id, musicIds }: { id: string; musicIds: string[] }) => withPlaylistErrorHandling(async () => {
         const result = await remove({ id, musicIds });
 
-        connectors.broadcast(PLAYLIST_REMOVE_MUSIC, result);
+        connectors.notify(PLAYLIST_REMOVE_MUSIC, result);
 
         return result;
     });
@@ -143,7 +143,7 @@ export const createReorderPlaylistMusicsMutationResolver = (
     return async (_: unknown, { id, musicIds }: { id: string; musicIds: string[] }) => withPlaylistErrorHandling(async () => {
         const result = await reorder({ id, musicIds });
 
-        connectors.broadcast(PLAYLIST_CHANGE_MUSIC_ORDER, result);
+        connectors.notify(PLAYLIST_CHANGE_MUSIC_ORDER, result);
 
         return result;
     });
