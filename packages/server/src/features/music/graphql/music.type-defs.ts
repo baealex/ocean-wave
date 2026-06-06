@@ -39,6 +39,24 @@ export const musicType: string = gql`
         isHated: Boolean!
     }
 
+    type PlaybackRecordPayload {
+        id: ID!
+        playCount: Int!
+        lastPlayedAt: String
+        totalPlayedMs: Float!
+        countedAsPlay: Boolean!
+        deduped: Boolean!
+    }
+
+    input RecordPlaybackInput {
+        id: ID!
+        playedMs: Float!
+        completionRate: Float
+        startedAt: String
+        source: String
+        clientSessionId: String
+    }
+
     enum TagFilterMode {
         ALL
         ANY
@@ -66,6 +84,7 @@ export const musicMutation = gql`
     type Mutation {
         setMusicLiked(id: ID!, isLiked: Boolean!): MusicLikedPayload!
         setMusicHated(id: ID!, isHated: Boolean!): MusicHatedPayload!
+        recordPlayback(input: RecordPlaybackInput!): PlaybackRecordPayload
     }
 `;
 

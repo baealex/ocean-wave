@@ -56,6 +56,10 @@ export default function AuthenticatedAppRuntime({
         };
 
         socket.connect();
+        void (async () => {
+            await MusicListener.count();
+            await MusicListener.recoverPlaybackCheckpoints();
+        })();
         socket.on('connect', handleConnect);
         socket.on('connect_error', handleConnectError);
         window.addEventListener('focus', handleWindowFocus);

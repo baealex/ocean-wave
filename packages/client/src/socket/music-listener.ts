@@ -1,4 +1,5 @@
 import {
+    recordPlayback,
     setMusicHated,
     setMusicLiked
 } from '~/api/music';
@@ -15,7 +16,7 @@ import {
 export const MUSIC_LIKE = 'music-like';
 export const MUSIC_HATE = 'music-hate';
 export const MUSIC_COUNT = 'music-count';
-const MUSIC_COUNT_ACK_TIMEOUT_MS = 5_000;
+const PLAYBACK_RECORD_TIMEOUT_MS = 5_000;
 
 const getGraphQueryErrorMessage = (response: GraphQueryErrorResponse) => {
     return response.errors[0]?.message ?? 'Music preference update failed';
@@ -57,6 +58,7 @@ interface MusicListenerEventHandler {
 export class MusicListener implements Listener {
     static pendingCountEvents: CountPayload[] = [];
     static isFlushing = false;
+    static isRecovering = false;
     private static handlers = new Set<MusicListenerEventHandler>();
 
     handler: MusicListenerEventHandler | null;
@@ -90,7 +92,7 @@ export class MusicListener implements Listener {
             this.pendingCountEvents.push(payload);
         }
 
-        if (!socket.connected || this.isFlushing) {
+        if (this.isFlushing) {
             return false;
         }
 
@@ -105,7 +107,7 @@ export class MusicListener implements Listener {
                     break;
                 }
 
-                const delivered = await this.emitCount(item);
+                const delivered = await this.commitPlaybackRecord(item);
 
                 if (!delivered) {
                     this.pendingCountEvents.unshift(item);
@@ -124,24 +126,30 @@ export class MusicListener implements Listener {
     }
 
     static async recoverPlaybackCheckpoints() {
-        if (!socket.connected) {
+        if (this.isRecovering) {
             return;
         }
 
-        const checkpoints = await listPlaybackCheckpoints();
+        this.isRecovering = true;
 
-        for (const checkpoint of checkpoints) {
-            const delivered = await this.emitCount({
-                id: checkpoint.trackId,
-                playedMs: checkpoint.accumulatedPlayedMs,
-                startedAt: checkpoint.startedAt,
-                source: 'queue-recovery',
-                clientSessionId: checkpoint.clientSessionId
-            });
+        try {
+            const checkpoints = await listPlaybackCheckpoints();
 
-            if (delivered) {
-                await deletePlaybackCheckpoint(checkpoint.clientSessionId);
+            for (const checkpoint of checkpoints) {
+                const delivered = await this.commitPlaybackRecord({
+                    id: checkpoint.trackId,
+                    playedMs: checkpoint.accumulatedPlayedMs,
+                    startedAt: checkpoint.startedAt,
+                    source: 'queue-recovery',
+                    clientSessionId: checkpoint.clientSessionId
+                });
+
+                if (delivered) {
+                    await deletePlaybackCheckpoint(checkpoint.clientSessionId);
+                }
             }
+        } finally {
+            this.isRecovering = false;
         }
     }
 
@@ -155,7 +163,6 @@ export class MusicListener implements Listener {
 
         this.handler = null;
     }
-
 
     private static async commitLikedState(id: string, isLiked: boolean) {
         const response = await setMusicLiked({ id, isLiked });
@@ -193,20 +200,39 @@ export class MusicListener implements Listener {
         }
     }
 
-    private static async emitCount(payload: CountPayload) {
-        if (!socket.connected) {
+    private static async commitPlaybackRecord(payload: CountPayload) {
+        const response = await this.recordPlaybackWithTimeout(payload);
+
+        if (!response || response.type === 'error' || !response.recordPlayback) {
             return false;
         }
 
-        return new Promise<boolean>((resolve) => {
-            const timer = globalThis.setTimeout(() => {
-                resolve(false);
-            }, MUSIC_COUNT_ACK_TIMEOUT_MS);
+        this.notifyCount(response.recordPlayback);
+        return true;
+    }
 
-            socket.emit(MUSIC_COUNT, payload, (response?: { ok?: boolean }) => {
-                globalThis.clearTimeout(timer);
-                resolve(response?.ok !== false);
-            });
-        });
+    private static async recordPlaybackWithTimeout(payload: CountPayload) {
+        let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+
+        try {
+            return await Promise.race([
+                recordPlayback(payload),
+                new Promise<null>((resolve) => {
+                    timeoutId = globalThis.setTimeout(() => {
+                        resolve(null);
+                    }, PLAYBACK_RECORD_TIMEOUT_MS);
+                })
+            ]);
+        } finally {
+            if (timeoutId !== undefined) {
+                globalThis.clearTimeout(timeoutId);
+            }
+        }
+    }
+
+    private static notifyCount(data: Count) {
+        for (const handler of this.handlers) {
+            handler.onCount(data);
+        }
     }
 }
