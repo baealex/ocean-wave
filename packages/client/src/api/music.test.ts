@@ -8,6 +8,7 @@ import {
 } from 'vitest';
 
 import {
+    recordPlayback,
     setMusicHated,
     setMusicLiked
 } from './music';
@@ -67,5 +68,46 @@ describe('music API requests', () => {
             isHated: true
         });
         expect(payload.query).toContain('setMusicHated(id: $id, isHated: $isHated)');
+    });
+
+    it('records playback through GraphQL variables', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({
+            data: {
+                data: {
+                    recordPlayback: {
+                        id: '7',
+                        playCount: 1,
+                        lastPlayedAt: '2026-04-10T10:00:15.000Z',
+                        totalPlayedMs: 35_000,
+                        countedAsPlay: true,
+                        deduped: false
+                    }
+                }
+            }
+        });
+
+        await recordPlayback({
+            id: '7',
+            playedMs: 35_000,
+            completionRate: 0.5,
+            startedAt: '2026-04-10T10:00:00.000Z',
+            source: 'queue-track-change',
+            clientSessionId: 'session-1'
+        });
+
+        const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
+
+        expect(payload.variables).toEqual({
+            input: {
+                id: '7',
+                playedMs: 35_000,
+                completionRate: 0.5,
+                startedAt: '2026-04-10T10:00:00.000Z',
+                source: 'queue-track-change',
+                clientSessionId: 'session-1'
+            }
+        });
+        expect(payload.query).toContain('recordPlayback(input: $input)');
+        expect(payload.query).not.toContain('session-1');
     });
 });

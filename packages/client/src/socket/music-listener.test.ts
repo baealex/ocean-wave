@@ -8,17 +8,20 @@ import {
 
 const {
     emitMock,
+    recordPlaybackMock,
     setMusicHatedMock,
     setMusicLikedMock,
     toastErrorMock
 } = vi.hoisted(() => ({
     emitMock: vi.fn(),
+    recordPlaybackMock: vi.fn(),
     setMusicHatedMock: vi.fn(),
     setMusicLikedMock: vi.fn(),
     toastErrorMock: vi.fn()
 }));
 
 vi.mock('~/api/music', () => ({
+    recordPlayback: recordPlaybackMock,
     setMusicHated: setMusicHatedMock,
     setMusicLiked: setMusicLikedMock
 }));
@@ -44,7 +47,7 @@ import {
     savePlaybackCheckpoint
 } from '~/modules/playback-checkpoint-store';
 import { socket } from './socket';
-import { MUSIC_COUNT, MusicListener } from './music-listener';
+import { MusicListener } from './music-listener';
 
 const createCheckpoint = () => ({
     clientSessionId: 'session-1',
@@ -62,16 +65,33 @@ describe('MusicListener playback recovery', () => {
         await clearPlaybackCheckpoints();
         MusicListener.pendingCountEvents = [];
         MusicListener.isFlushing = false;
+        MusicListener.isRecovering = false;
         socket.connected = true;
         emitMock.mockReset();
+        recordPlaybackMock.mockReset();
         setMusicHatedMock.mockReset();
         setMusicLikedMock.mockReset();
         toastErrorMock.mockReset();
     });
 
-    it('flushes pending count events and reports successful delivery after ack', async () => {
-        emitMock.mockImplementation((_event, _payload, ack) => {
-            ack?.({ ok: true });
+    it('flushes pending count events and reports successful delivery after GraphQL success', async () => {
+        const onCount = vi.fn();
+        const listener = new MusicListener();
+        recordPlaybackMock.mockResolvedValue({
+            type: 'success',
+            recordPlayback: {
+                id: 'track-1',
+                playCount: 1,
+                lastPlayedAt: '2026-04-10T10:00:15.000Z',
+                totalPlayedMs: 15_000,
+                countedAsPlay: true,
+                deduped: false
+            }
+        });
+        listener.connect({
+            onLike: vi.fn(),
+            onHate: vi.fn(),
+            onCount
         });
 
         const delivered = await MusicListener.count({
@@ -85,40 +105,143 @@ describe('MusicListener playback recovery', () => {
 
         expect(delivered).toBe(true);
         expect(MusicListener.pendingCountEvents).toEqual([]);
-        expect(emitMock).toHaveBeenCalledWith(
-            MUSIC_COUNT,
-            expect.objectContaining({
-                id: 'track-1',
-                clientSessionId: 'session-1'
-            }),
-            expect.any(Function)
-        );
+        expect(recordPlaybackMock).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'track-1',
+            clientSessionId: 'session-1'
+        }));
+        expect(onCount).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'track-1',
+            playCount: 1
+        }));
+        listener.disconnect();
     });
 
-    it('deletes recovered checkpoints after a successful recovery ack', async () => {
-        emitMock.mockImplementation((_event, _payload, ack) => {
-            ack?.({ ok: true });
+    it('records playback through GraphQL even when the socket is disconnected', async () => {
+        const onCount = vi.fn();
+        const listener = new MusicListener();
+        socket.connected = false;
+        recordPlaybackMock.mockResolvedValue({
+            type: 'success',
+            recordPlayback: {
+                id: 'track-1',
+                playCount: 2,
+                lastPlayedAt: '2026-04-10T10:00:15.000Z',
+                totalPlayedMs: 30_000,
+                countedAsPlay: true,
+                deduped: false
+            }
+        });
+        listener.connect({
+            onLike: vi.fn(),
+            onHate: vi.fn(),
+            onCount
+        });
+
+        const delivered = await MusicListener.count({
+            id: 'track-1',
+            clientSessionId: 'session-1',
+            playedMs: 15_000,
+            startedAt: '2026-04-10T10:00:00.000Z'
+        });
+
+        expect(delivered).toBe(true);
+        expect(recordPlaybackMock).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'track-1',
+            clientSessionId: 'session-1'
+        }));
+        expect(onCount).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'track-1',
+            playCount: 2
+        }));
+        listener.disconnect();
+    });
+
+    it('requeues playback count when the GraphQL record request times out', async () => {
+        vi.useFakeTimers();
+        const payload = {
+            id: 'track-1',
+            clientSessionId: 'session-timeout',
+            playedMs: 15_000,
+            startedAt: '2026-04-10T10:00:00.000Z'
+        };
+        recordPlaybackMock.mockReturnValue(new Promise(() => {}));
+
+        try {
+            const deliveredPromise = MusicListener.count(payload);
+
+            await vi.advanceTimersByTimeAsync(5_000);
+
+            await expect(deliveredPromise).resolves.toBe(false);
+            expect(MusicListener.pendingCountEvents).toEqual([payload]);
+            expect(MusicListener.isFlushing).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('runs only one checkpoint recovery at a time', async () => {
+        let resolveRecord: (value: unknown) => void = () => {};
+        recordPlaybackMock.mockReturnValue(new Promise((resolve) => {
+            resolveRecord = resolve;
+        }));
+        await savePlaybackCheckpoint(createCheckpoint());
+
+        const firstRecovery = MusicListener.recoverPlaybackCheckpoints();
+        const secondRecovery = MusicListener.recoverPlaybackCheckpoints();
+
+        await vi.waitFor(() => {
+            expect(recordPlaybackMock).toHaveBeenCalledTimes(1);
+        });
+
+        resolveRecord({
+            type: 'success',
+            recordPlayback: {
+                id: 'track-1',
+                playCount: 0,
+                lastPlayedAt: '2026-04-10T10:00:12.000Z',
+                totalPlayedMs: 12_000,
+                countedAsPlay: false,
+                deduped: false
+            }
+        });
+        await Promise.all([firstRecovery, secondRecovery]);
+
+        expect(await getPlaybackCheckpoint('session-1')).toBeNull();
+    });
+
+    it('deletes recovered checkpoints after a successful recovery commit', async () => {
+        recordPlaybackMock.mockResolvedValue({
+            type: 'success',
+            recordPlayback: {
+                id: 'track-1',
+                playCount: 0,
+                lastPlayedAt: '2026-04-10T10:00:12.000Z',
+                totalPlayedMs: 12_000,
+                countedAsPlay: false,
+                deduped: false
+            }
         });
         await savePlaybackCheckpoint(createCheckpoint());
 
         await MusicListener.recoverPlaybackCheckpoints();
 
-        expect(emitMock).toHaveBeenCalledWith(
-            MUSIC_COUNT,
-            expect.objectContaining({
-                id: 'track-1',
-                clientSessionId: 'session-1',
-                playedMs: 12_000,
-                source: 'queue-recovery'
-            }),
-            expect.any(Function)
-        );
+        expect(recordPlaybackMock).toHaveBeenCalledWith(expect.objectContaining({
+            id: 'track-1',
+            clientSessionId: 'session-1',
+            playedMs: 12_000,
+            source: 'queue-recovery'
+        }));
         expect(await getPlaybackCheckpoint('session-1')).toBeNull();
     });
 
     it('keeps checkpoints for the next startup when recovery delivery fails', async () => {
-        emitMock.mockImplementation((_event, _payload, ack) => {
-            ack?.({ ok: false });
+        recordPlaybackMock.mockResolvedValue({
+            type: 'error',
+            category: 'network',
+            errors: [{
+                code: 'NETWORK_ERROR',
+                message: 'Network request failed'
+            }]
         });
         await savePlaybackCheckpoint(createCheckpoint());
 
@@ -127,7 +250,6 @@ describe('MusicListener playback recovery', () => {
         expect(await getPlaybackCheckpoint('session-1')).toEqual(createCheckpoint());
     });
 });
-
 
 describe('MusicListener music preference writes', () => {
     beforeEach(() => {

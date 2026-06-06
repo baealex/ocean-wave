@@ -2,6 +2,7 @@ import type { IResolvers } from '@graphql-tools/utils';
 
 import { connectors } from '~/socket/connectors';
 import {
+    MUSIC_COUNT,
     MUSIC_HATE,
     MUSIC_LIKE
 } from '~/socket/music';
@@ -11,6 +12,7 @@ import {
     setMusicHated,
     setMusicLiked
 } from '../services/preferences';
+import { recordPlayback } from '../services/playback-records';
 
 class MusicGraphQLError extends Error {
     extensions: {
@@ -64,9 +66,25 @@ export const createSetMusicHatedMutationResolver = (
     });
 };
 
+
+export const createRecordPlaybackMutationResolver = (
+    record = recordPlayback
+) => {
+    return async (_: unknown, { input }: { input: Parameters<typeof recordPlayback>[0] }) => withMusicErrorHandling(async () => {
+        const result = await record(input);
+
+        if (result && !result.deduped) {
+            void connectors.broadcast(MUSIC_COUNT, result).catch(console.error);
+        }
+
+        return result;
+    });
+};
+
 type MusicMutationResolvers = NonNullable<IResolvers['Mutation']>;
 
 export const musicMutationResolvers: MusicMutationResolvers = {
     setMusicLiked: createSetMusicLikedMutationResolver(),
-    setMusicHated: createSetMusicHatedMutationResolver()
+    setMusicHated: createSetMusicHatedMutationResolver(),
+    recordPlayback: createRecordPlaybackMutationResolver()
 };

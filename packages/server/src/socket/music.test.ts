@@ -100,6 +100,29 @@ describe('music playback counting', () => {
         }));
     });
 
+    it('returns count result without waiting for realtime broadcast acknowledgements', async () => {
+        const broadcastSpy = jest
+            .spyOn(connectors, 'broadcast')
+            .mockReturnValue(new Promise(() => {}) as ReturnType<typeof connectors.broadcast>);
+        const music = await createMusic({ duration: 180 });
+
+        await expect(count({
+            id: music.id.toString(),
+            playedMs: 35_000,
+            completionRate: 35_000 / 180_000,
+            source: 'queue-track-change'
+        })).resolves.toMatchObject({
+            id: music.id.toString(),
+            playCount: 1,
+            countedAsPlay: true,
+            deduped: false
+        });
+        expect(broadcastSpy).toHaveBeenCalledWith('music-count', expect.objectContaining({
+            id: music.id.toString(),
+            playCount: 1
+        }));
+    });
+
     it('clamps playedMs to the session wall-clock duration when startedAt is provided', async () => {
         const broadcastSpy = jest.spyOn(connectors, 'broadcast').mockResolvedValue([]);
         const music = await createMusic({ duration: 180 });
@@ -159,6 +182,41 @@ describe('music playback counting', () => {
         });
         expect(updatedMusic.playCount).toBe(1);
         expect(updatedMusic.totalPlayedMs).toBe(35_000);
+        expect(broadcastSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('dedupes concurrent recovery commits with the same clientSessionId', async () => {
+        const broadcastSpy = jest.spyOn(connectors, 'broadcast').mockResolvedValue([]);
+        const music = await createMusic({ duration: 180 });
+        const clientSessionId = 'session-dedupe-race';
+
+        const results = await Promise.all([
+            count({
+                id: music.id.toString(),
+                clientSessionId,
+                playedMs: 35_000,
+                completionRate: 35_000 / 180_000,
+                source: 'queue-recovery'
+            }),
+            count({
+                id: music.id.toString(),
+                clientSessionId,
+                playedMs: 35_000,
+                completionRate: 35_000 / 180_000,
+                source: 'queue-recovery'
+            })
+        ]);
+
+        const updatedMusic = await models.music.findUniqueOrThrow({ where: { id: music.id } });
+        const events = await models.playbackEvent.findMany({ where: { musicId: music.id } });
+
+        expect(events).toHaveLength(1);
+        expect(updatedMusic.playCount).toBe(1);
+        expect(updatedMusic.totalPlayedMs).toBe(35_000);
+        expect(results).toEqual(expect.arrayContaining([
+            expect.objectContaining({ deduped: false }),
+            expect.objectContaining({ deduped: true })
+        ]));
         expect(broadcastSpy).toHaveBeenCalledTimes(1);
     });
 });
