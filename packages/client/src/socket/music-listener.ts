@@ -12,10 +12,12 @@ import {
     deletePlaybackCheckpoint,
     listPlaybackCheckpoints
 } from '~/modules/playback-checkpoint-store';
+import type { Tag } from '~/models/type';
 
-export const MUSIC_LIKE = 'music-like';
-export const MUSIC_HATE = 'music-hate';
-export const MUSIC_COUNT = 'music-count';
+export const MUSIC_LIKE = 'music:like-updated';
+export const MUSIC_HATE = 'music:hate-updated';
+export const MUSIC_COUNT = 'music:play-count-updated';
+export const MUSIC_TAGS_UPDATED = 'music:tags-updated';
 const PLAYBACK_RECORD_TIMEOUT_MS = 5_000;
 
 const getGraphQueryErrorMessage = (response: GraphQueryErrorResponse) => {
@@ -49,10 +51,16 @@ interface Count {
     countedAsPlay: boolean;
 }
 
+interface TagsUpdated {
+    musicId: string;
+    tags: Tag[];
+}
+
 interface MusicListenerEventHandler {
     onLike: (data: Like) => void;
     onHate: (data: Hate) => void;
     onCount: (data: Count) => void;
+    onTagsUpdated?: (data: TagsUpdated) => void;
 }
 
 export class MusicListener implements Listener {
@@ -77,6 +85,9 @@ export class MusicListener implements Listener {
         socket.on(MUSIC_LIKE, this.handler.onLike);
         socket.on(MUSIC_HATE, this.handler.onHate);
         socket.on(MUSIC_COUNT, this.handler.onCount);
+        if (this.handler.onTagsUpdated) {
+            socket.on(MUSIC_TAGS_UPDATED, this.handler.onTagsUpdated);
+        }
     }
 
     static like(id: string, isLiked: boolean) {
@@ -159,6 +170,9 @@ export class MusicListener implements Listener {
         socket.off(MUSIC_LIKE, this.handler.onLike);
         socket.off(MUSIC_HATE, this.handler.onHate);
         socket.off(MUSIC_COUNT, this.handler.onCount);
+        if (this.handler.onTagsUpdated) {
+            socket.off(MUSIC_TAGS_UPDATED, this.handler.onTagsUpdated);
+        }
         MusicListener.handlers.delete(this.handler);
 
         this.handler = null;

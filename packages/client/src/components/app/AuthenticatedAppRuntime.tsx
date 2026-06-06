@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { useAppStore as useStore } from '~/store/base-store';
 
@@ -6,7 +7,12 @@ import { redirectToLogin } from '~/modules/auth-redirect';
 import { albumStore } from '~/store/album';
 import { artistStore } from '~/store/artist';
 import { musicStore } from '~/store/music';
-import { MusicListener, socket } from '~/socket';
+import {
+    MusicListener,
+    socket,
+    TagListener
+} from '~/socket';
+import { createTagNotificationHandlers } from '~/socket/tag-notification-handler';
 import StartupSplash from './StartupSplash';
 
 interface AuthenticatedAppRuntimeProps {
@@ -16,7 +22,9 @@ interface AuthenticatedAppRuntimeProps {
 export default function AuthenticatedAppRuntime({
     children
 }: AuthenticatedAppRuntimeProps) {
+    const queryClient = useQueryClient();
     const [{ loaded }] = useStore(musicStore);
+
     useEffect(() => {
         const handleResync = () => {
             musicStore.init = false;
@@ -30,6 +38,16 @@ export default function AuthenticatedAppRuntime({
             socket.off('resync', handleResync);
         };
     }, []);
+
+    useEffect(() => {
+        const listener = new TagListener();
+
+        listener.connect(createTagNotificationHandlers({ queryClient }));
+
+        return () => {
+            listener.disconnect();
+        };
+    }, [queryClient]);
 
     useEffect(() => {
         const handleConnect = () => {

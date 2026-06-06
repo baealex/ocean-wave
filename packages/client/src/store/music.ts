@@ -107,6 +107,9 @@ class MusicStore extends BaseStore<MusicStoreState> {
                         musicMap: createMusicMap(nextMusics)
                     };
                 });
+            },
+            onTagsUpdated: ({ musicId, tags }) => {
+                this.updateMusicTags(musicId, tags);
             }
         });
     }
