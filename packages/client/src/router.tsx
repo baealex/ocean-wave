@@ -59,6 +59,10 @@ const router = createBrowserRouter([
                 element: <Playlist />
             },
             {
+                path: '/tags',
+                element: <TagList />
+            },
+            {
                 path: '/tag',
                 element: <TagList />
             },

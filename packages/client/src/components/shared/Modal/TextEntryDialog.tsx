@@ -12,6 +12,7 @@ interface TextEntryDialogProps {
     placeholder?: string;
     confirmLabel: string;
     cancelLabel?: string;
+    pending?: boolean;
     onValueChange: (value: string) => void;
     onConfirm: (value: string) => void;
     onClose: () => void;
@@ -36,6 +37,7 @@ export default function TextEntryDialog({
     placeholder,
     confirmLabel,
     cancelLabel = 'Cancel',
+    pending = false,
     onValueChange,
     onConfirm,
     onClose
@@ -59,7 +61,7 @@ export default function TextEntryDialog({
                         onSubmit={(event) => {
                             event.preventDefault();
 
-                            if (!trimmedValue) {
+                            if (pending || !trimmedValue) {
                                 return;
                             }
 
@@ -100,7 +102,7 @@ export default function TextEntryDialog({
                                 type="submit"
                                 className={dialogClass.button}
                                 variant="primary"
-                                disabled={!trimmedValue}>
+                                disabled={pending || !trimmedValue}>
                                 {confirmLabel}
                             </Button>
                         </div>

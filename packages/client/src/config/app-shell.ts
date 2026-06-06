@@ -72,7 +72,7 @@ export const appShell = {
             {
                 id: 'tags',
                 label: 'Tags',
-                path: '/tag',
+                path: '/tags',
                 icon: Tags
             }
         ] satisfies AppShellNavigationItem[],

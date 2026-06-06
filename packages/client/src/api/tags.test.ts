@@ -9,7 +9,9 @@ import {
 
 import {
     createAndAddTagToMusic,
-    fetchTags
+    deleteTag,
+    fetchTags,
+    renameTag
 } from './tags';
 
 interface GraphqlPayload {
@@ -52,6 +54,54 @@ describe('tag API requests', () => {
         });
         expect(payload.query).toContain('$searchFilter: SearchFilterInput');
         expect(payload.query).not.toContain('focus');
+    });
+
+    it('renames a tag through GraphQL variables', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({
+            data: {
+                data: {
+                    renameTag: {
+                        id: '7',
+                        name: 'Focus'
+                    }
+                }
+            }
+        });
+
+        await renameTag({
+            id: '7',
+            name: 'Focus'
+        });
+
+        const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
+
+        expect(payload.variables).toEqual({
+            id: '7',
+            name: 'Focus'
+        });
+        expect(payload.query).toContain('renameTag(id: $id, name: $name)');
+        expect(payload.query).not.toContain('Focus');
+    });
+
+    it('deletes a tag through GraphQL variables', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({
+            data: {
+                data: {
+                    deleteTag: {
+                        id: '7',
+                        affectedMusicIds: ['1'],
+                        affectedSmartViewIds: []
+                    }
+                }
+            }
+        });
+
+        await deleteTag('7');
+
+        const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
+
+        expect(payload.variables).toEqual({ id: '7' });
+        expect(payload.query).toContain('deleteTag(id: $id)');
     });
 
     it('adds a new tag to music through GraphQL variables', async () => {
