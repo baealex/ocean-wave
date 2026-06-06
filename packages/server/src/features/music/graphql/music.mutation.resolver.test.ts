@@ -31,7 +31,7 @@ describe('music mutation resolvers', () => {
         const resolver = createRecordPlaybackMutationResolver(record);
 
         await expect(Promise.race([
-            resolver(null, { input }),
+            resolver(null, { input, originClientId: 'client-1' }),
             new Promise((resolve) => {
                 setTimeout(() => {
                     resolve('timed-out');
@@ -39,7 +39,10 @@ describe('music mutation resolvers', () => {
             })
         ])).resolves.toEqual(result);
         expect(record).toHaveBeenCalledWith(input);
-        expect(notifySpy).toHaveBeenCalledWith(MUSIC_COUNT, result);
+        expect(notifySpy).toHaveBeenCalledWith(MUSIC_COUNT, {
+            ...result,
+            originClientId: 'client-1'
+        });
         expect(broadcastSpy).not.toHaveBeenCalled();
     });
 

@@ -4,6 +4,7 @@ import models, { type Tag } from '~/models';
 import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
 import { connectors } from '~/socket/connectors';
 import { MUSIC_TAGS_UPDATED } from '~/socket/music';
+import { withOriginClientId } from '~/socket/origin-client';
 import {
     TAG_CREATED,
     TAG_LIST_INVALIDATED,
@@ -78,28 +79,31 @@ const resolveRealtimeMusicTags = async (musicId: string | number) => {
     return Promise.all(tags.map(toRealtimeTag));
 };
 
-const notifyTagCreated = (tag: Tag) => notifySafely(async () => {
-    connectors.notify(TAG_CREATED, await toRealtimeTag(tag));
+const notifyTagCreated = (tag: Tag, originClientId?: string | null) => notifySafely(async () => {
+    connectors.notify(TAG_CREATED, withOriginClientId(await toRealtimeTag(tag), originClientId));
 });
 
-const notifyTagRenamed = (tag: Tag) => notifySafely(async () => {
-    connectors.notify(TAG_RENAMED, await toRealtimeTag(tag));
+const notifyTagRenamed = (tag: Tag, originClientId?: string | null) => notifySafely(async () => {
+    connectors.notify(TAG_RENAMED, withOriginClientId(await toRealtimeTag(tag), originClientId));
 });
 
-const notifyTagListInvalidated = (payload: {
-    reason: 'tag-deleted' | 'music-tags-changed';
-    affectedTagIds?: string[];
-    affectedMusicIds?: string[];
-    affectedSmartViewIds?: string[];
-}) => notifySafely(() => {
-    connectors.notify(TAG_LIST_INVALIDATED, payload);
+const notifyTagListInvalidated = (
+    payload: {
+        reason: 'tag-deleted' | 'music-tags-changed';
+        affectedTagIds?: string[];
+        affectedMusicIds?: string[];
+        affectedSmartViewIds?: string[];
+    },
+    originClientId?: string | null
+) => notifySafely(() => {
+    connectors.notify(TAG_LIST_INVALIDATED, withOriginClientId(payload, originClientId));
 });
 
-const notifyMusicTagsUpdated = (musicId: string | number) => notifySafely(async () => {
-    connectors.notify(MUSIC_TAGS_UPDATED, {
+const notifyMusicTagsUpdated = (musicId: string | number, originClientId?: string | null) => notifySafely(async () => {
+    connectors.notify(MUSIC_TAGS_UPDATED, withOriginClientId({
         musicId: musicId.toString(),
         tags: await resolveRealtimeMusicTags(musicId)
-    });
+    }, originClientId));
 });
 
 export const createCreateTagMutationResolver = (
@@ -108,16 +112,18 @@ export const createCreateTagMutationResolver = (
     return async (_: unknown, {
         name,
         color,
-        description
+        description,
+        originClientId
     }: {
         name: string;
         color?: string | null;
         description?: string | null;
+        originClientId?: string | null;
     }) => {
         try {
             const tag = await createTag({ name, color, description });
 
-            await notifyTagCreated(tag);
+            await notifyTagCreated(tag, originClientId);
 
             return tag;
         } catch (error) {
@@ -129,11 +135,15 @@ export const createCreateTagMutationResolver = (
 export const createRenameTagMutationResolver = (
     renameTag = renameMusicTag
 ) => {
-    return async (_: unknown, { id, name }: { id: string; name: string }) => {
+    return async (_: unknown, {
+        id,
+        name,
+        originClientId
+    }: { id: string; name: string; originClientId?: string | null }) => {
         try {
             const tag = await renameTag({ id, name });
 
-            await notifyTagRenamed(tag);
+            await notifyTagRenamed(tag, originClientId);
 
             return tag;
         } catch (error) {
@@ -145,7 +155,10 @@ export const createRenameTagMutationResolver = (
 export const createDeleteTagMutationResolver = (
     deleteTag = deleteMusicTag
 ) => {
-    return async (_: unknown, { id }: { id: string }) => {
+    return async (_: unknown, {
+        id,
+        originClientId
+    }: { id: string; originClientId?: string | null }) => {
         try {
             const result = await deleteTag({ id });
 
@@ -154,7 +167,7 @@ export const createDeleteTagMutationResolver = (
                 affectedTagIds: [result.id],
                 affectedMusicIds: result.affectedMusicIds,
                 affectedSmartViewIds: result.affectedSmartViewIds
-            });
+            }, originClientId);
 
             return result;
         } catch (error) {
@@ -166,16 +179,20 @@ export const createDeleteTagMutationResolver = (
 export const createAddTagToMusicMutationResolver = (
     addTagToMusic = addMusicTagToMusic
 ) => {
-    return async (_: unknown, { musicId, tagId }: { musicId: string; tagId: string }) => {
+    return async (_: unknown, {
+        musicId,
+        tagId,
+        originClientId
+    }: { musicId: string; tagId: string; originClientId?: string | null }) => {
         try {
             const music = await addTagToMusic({ musicId, tagId });
 
-            await notifyMusicTagsUpdated(music.id);
+            await notifyMusicTagsUpdated(music.id, originClientId);
             await notifyTagListInvalidated({
                 reason: 'music-tags-changed',
                 affectedTagIds: [tagId],
                 affectedMusicIds: [music.id.toString()]
-            });
+            }, originClientId);
 
             return music;
         } catch (error) {
@@ -187,15 +204,19 @@ export const createAddTagToMusicMutationResolver = (
 export const createCreateAndAddTagToMusicMutationResolver = (
     createAndAddTagToMusic = createAndAddMusicTagToMusic
 ) => {
-    return async (_: unknown, { musicId, name }: { musicId: string; name: string }) => {
+    return async (_: unknown, {
+        musicId,
+        name,
+        originClientId
+    }: { musicId: string; name: string; originClientId?: string | null }) => {
         try {
             const music = await createAndAddTagToMusic({ musicId, name });
 
-            await notifyMusicTagsUpdated(music.id);
+            await notifyMusicTagsUpdated(music.id, originClientId);
             await notifyTagListInvalidated({
                 reason: 'music-tags-changed',
                 affectedMusicIds: [music.id.toString()]
-            });
+            }, originClientId);
 
             return music;
         } catch (error) {
@@ -207,16 +228,20 @@ export const createCreateAndAddTagToMusicMutationResolver = (
 export const createRemoveTagFromMusicMutationResolver = (
     removeTagFromMusic = removeMusicTagFromMusic
 ) => {
-    return async (_: unknown, { musicId, tagId }: { musicId: string; tagId: string }) => {
+    return async (_: unknown, {
+        musicId,
+        tagId,
+        originClientId
+    }: { musicId: string; tagId: string; originClientId?: string | null }) => {
         try {
             const music = await removeTagFromMusic({ musicId, tagId });
 
-            await notifyMusicTagsUpdated(music.id);
+            await notifyMusicTagsUpdated(music.id, originClientId);
             await notifyTagListInvalidated({
                 reason: 'music-tags-changed',
                 affectedTagIds: [tagId],
                 affectedMusicIds: [music.id.toString()]
-            });
+            }, originClientId);
 
             return music;
         } catch (error) {

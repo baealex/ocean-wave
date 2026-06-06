@@ -1,6 +1,6 @@
 import { gql } from '~/modules/graphql';
-import { artistType } from '../../../schema/artist';
 import { albumType } from '../../../schema/album';
+import { artistType } from '../../../schema/artist';
 
 export const musicType: string = gql`
     type Music {
@@ -82,9 +82,9 @@ export const musicQuery = gql`
 
 export const musicMutation = gql`
     type Mutation {
-        setMusicLiked(id: ID!, isLiked: Boolean!): MusicLikedPayload!
-        setMusicHated(id: ID!, isHated: Boolean!): MusicHatedPayload!
-        recordPlayback(input: RecordPlaybackInput!): PlaybackRecordPayload
+        setMusicLiked(id: ID!, isLiked: Boolean!, originClientId: String): MusicLikedPayload!
+        setMusicHated(id: ID!, isHated: Boolean!, originClientId: String): MusicHatedPayload!
+        recordPlayback(input: RecordPlaybackInput!, originClientId: String): PlaybackRecordPayload
     }
 `;
 

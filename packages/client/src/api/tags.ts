@@ -4,6 +4,10 @@ import type {
 } from '~/models/type';
 
 import { graphQuery } from './graphql';
+import {
+    type OriginClientVariables,
+    withOriginClientId
+} from './origin-client';
 
 const TAG_FIELDS = `
     id
@@ -80,32 +84,34 @@ export function createTag({
     color = null,
     description = null
 }: CreateTagParams) {
-    return graphQuery<{ createTag: Tag }, CreateTagParams>(
+    return graphQuery<{ createTag: Tag }, CreateTagParams & OriginClientVariables>(
         `mutation CreateTag(
             $name: String!,
             $color: String,
-            $description: String
+            $description: String,
+            $originClientId: String
         ) {
             createTag(
                 name: $name,
                 color: $color,
-                description: $description
+                description: $description,
+                originClientId: $originClientId
             ) {
                 ${TAG_FIELDS}
             }
         }`,
-        { name, color, description }
+        withOriginClientId({ name, color, description })
     );
 }
 
 export function renameTag({ id, name }: { id: string; name: string }) {
-    return graphQuery<{ renameTag: Tag }, { id: string; name: string }>(
-        `mutation RenameTag($id: ID!, $name: String!) {
-            renameTag(id: $id, name: $name) {
+    return graphQuery<{ renameTag: Tag }, { id: string; name: string } & OriginClientVariables>(
+        `mutation RenameTag($id: ID!, $name: String!, $originClientId: String) {
+            renameTag(id: $id, name: $name, originClientId: $originClientId) {
                 ${TAG_FIELDS}
             }
         }`,
-        { id, name }
+        withOriginClientId({ id, name })
     );
 }
 
@@ -116,47 +122,53 @@ export function deleteTag(id: string) {
             affectedMusicIds: string[];
             affectedSmartViewIds: string[];
         };
-    }, { id: string }>(
-        `mutation DeleteTag($id: ID!) {
-            deleteTag(id: $id) {
+    }, { id: string } & OriginClientVariables>(
+        `mutation DeleteTag($id: ID!, $originClientId: String) {
+            deleteTag(id: $id, originClientId: $originClientId) {
                 id
                 affectedMusicIds
                 affectedSmartViewIds
             }
         }`,
-        { id }
+        withOriginClientId({ id })
     );
 }
 
 export function addTagToMusic({ musicId, tagId }: { musicId: string; tagId: string }) {
-    return graphQuery<{ addTagToMusic: Pick<Music, 'id' | 'tags'> }, { musicId: string; tagId: string }>(
-        `mutation AddTagToMusic($musicId: ID!, $tagId: ID!) {
-            addTagToMusic(musicId: $musicId, tagId: $tagId) {
+    return graphQuery<{
+        addTagToMusic: Pick<Music, 'id' | 'tags'>;
+    }, { musicId: string; tagId: string } & OriginClientVariables>(
+        `mutation AddTagToMusic($musicId: ID!, $tagId: ID!, $originClientId: String) {
+            addTagToMusic(musicId: $musicId, tagId: $tagId, originClientId: $originClientId) {
                 ${MUSIC_TAG_FIELDS}
             }
         }`,
-        { musicId, tagId }
+        withOriginClientId({ musicId, tagId })
     );
 }
 
 export function createAndAddTagToMusic({ musicId, name }: { musicId: string; name: string }) {
-    return graphQuery<{ createAndAddTagToMusic: Pick<Music, 'id' | 'tags'> }, { musicId: string; name: string }>(
-        `mutation CreateAndAddTagToMusic($musicId: ID!, $name: String!) {
-            createAndAddTagToMusic(musicId: $musicId, name: $name) {
+    return graphQuery<{
+        createAndAddTagToMusic: Pick<Music, 'id' | 'tags'>;
+    }, { musicId: string; name: string } & OriginClientVariables>(
+        `mutation CreateAndAddTagToMusic($musicId: ID!, $name: String!, $originClientId: String) {
+            createAndAddTagToMusic(musicId: $musicId, name: $name, originClientId: $originClientId) {
                 ${MUSIC_TAG_FIELDS}
             }
         }`,
-        { musicId, name }
+        withOriginClientId({ musicId, name })
     );
 }
 
 export function removeTagFromMusic({ musicId, tagId }: { musicId: string; tagId: string }) {
-    return graphQuery<{ removeTagFromMusic: Pick<Music, 'id' | 'tags'> }, { musicId: string; tagId: string }>(
-        `mutation RemoveTagFromMusic($musicId: ID!, $tagId: ID!) {
-            removeTagFromMusic(musicId: $musicId, tagId: $tagId) {
+    return graphQuery<{
+        removeTagFromMusic: Pick<Music, 'id' | 'tags'>;
+    }, { musicId: string; tagId: string } & OriginClientVariables>(
+        `mutation RemoveTagFromMusic($musicId: ID!, $tagId: ID!, $originClientId: String) {
+            removeTagFromMusic(musicId: $musicId, tagId: $tagId, originClientId: $originClientId) {
                 ${MUSIC_TAG_FIELDS}
             }
         }`,
-        { musicId, tagId }
+        withOriginClientId({ musicId, tagId })
     );
 }

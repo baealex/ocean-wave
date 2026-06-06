@@ -8,17 +8,33 @@ import {
 
 const {
     emitMock,
+    offMock,
+    onMock,
     recordPlaybackMock,
     setMusicHatedMock,
     setMusicLikedMock,
+    socketMock,
     toastErrorMock
-} = vi.hoisted(() => ({
-    emitMock: vi.fn(),
-    recordPlaybackMock: vi.fn(),
-    setMusicHatedMock: vi.fn(),
-    setMusicLikedMock: vi.fn(),
-    toastErrorMock: vi.fn()
-}));
+} = vi.hoisted(() => {
+    const socketMock = {
+        id: 'client-1',
+        connected: true,
+        on: vi.fn(),
+        off: vi.fn(),
+        emit: vi.fn()
+    };
+
+    return {
+        emitMock: socketMock.emit,
+        offMock: socketMock.off,
+        onMock: socketMock.on,
+        recordPlaybackMock: vi.fn(),
+        setMusicHatedMock: vi.fn(),
+        setMusicLikedMock: vi.fn(),
+        socketMock,
+        toastErrorMock: vi.fn()
+    };
+});
 
 vi.mock('~/api/music', () => ({
     recordPlayback: recordPlaybackMock,
@@ -33,11 +49,9 @@ vi.mock('~/modules/toast', () => ({
 }));
 
 vi.mock('./socket', () => ({
-    socket: {
-        connected: true,
-        on: vi.fn(),
-        off: vi.fn(),
-        emit: emitMock
+    socket: socketMock,
+    isOwnRealtimeNotification: (payload?: { originClientId?: string | null }) => {
+        return Boolean(payload?.originClientId && payload.originClientId === socketMock.id);
     }
 }));
 
@@ -46,8 +60,11 @@ import {
     getPlaybackCheckpoint,
     savePlaybackCheckpoint
 } from '~/modules/playback-checkpoint-store';
+import {
+    MUSIC_LIKE,
+    MusicListener
+} from './music-listener';
 import { socket } from './socket';
-import { MusicListener } from './music-listener';
 
 const createCheckpoint = () => ({
     clientSessionId: 'session-1',
@@ -66,8 +83,11 @@ describe('MusicListener playback recovery', () => {
         MusicListener.pendingCountEvents = [];
         MusicListener.isFlushing = false;
         MusicListener.isRecovering = false;
+        socket.id = 'client-1';
         socket.connected = true;
         emitMock.mockReset();
+        onMock.mockReset();
+        offMock.mockReset();
         recordPlaybackMock.mockReset();
         setMusicHatedMock.mockReset();
         setMusicLikedMock.mockReset();
@@ -253,6 +273,9 @@ describe('MusicListener playback recovery', () => {
 
 describe('MusicListener music preference writes', () => {
     beforeEach(() => {
+        socket.id = 'client-1';
+        onMock.mockReset();
+        offMock.mockReset();
         setMusicHatedMock.mockReset();
         setMusicLikedMock.mockReset();
         toastErrorMock.mockReset();
@@ -282,6 +305,42 @@ describe('MusicListener music preference writes', () => {
                 id: 'track-1',
                 isLiked: true
             });
+        });
+        listener.disconnect();
+    });
+
+
+
+    it('ignores realtime preference notifications from the same socket client', () => {
+        const onLike = vi.fn();
+        const listener = new MusicListener();
+
+        listener.connect({
+            onLike,
+            onHate: vi.fn(),
+            onCount: vi.fn()
+        });
+
+        const likeHandler = onMock.mock.calls.find(([event]) => event === MUSIC_LIKE)?.[1] as (
+            payload: { id: string; isLiked: boolean; originClientId?: string }
+        ) => void;
+
+        likeHandler({
+            id: 'track-1',
+            isLiked: true,
+            originClientId: 'client-1'
+        });
+        likeHandler({
+            id: 'track-1',
+            isLiked: true,
+            originClientId: 'client-2'
+        });
+
+        expect(onLike).toHaveBeenCalledTimes(1);
+        expect(onLike).toHaveBeenCalledWith({
+            id: 'track-1',
+            isLiked: true,
+            originClientId: 'client-2'
         });
         listener.disconnect();
     });

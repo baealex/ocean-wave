@@ -6,13 +6,13 @@ import {
     MUSIC_HATE,
     MUSIC_LIKE
 } from '~/socket/music';
-
+import { withOriginClientId } from '~/socket/origin-client';
+import { recordPlayback } from '../services/playback-records';
 import {
     isMusicPreferenceServiceError,
     setMusicHated,
     setMusicLiked
 } from '../services/preferences';
-import { recordPlayback } from '../services/playback-records';
 
 class MusicGraphQLError extends Error {
     extensions: {
@@ -34,6 +34,15 @@ const toGraphQLError = (error: unknown) => {
     return error;
 };
 
+
+const notifySafely = async (callback: () => Promise<void> | void) => {
+    try {
+        await callback();
+    } catch (error) {
+        console.error(error);
+    }
+};
+
 const withMusicErrorHandling = async <T>(callback: () => Promise<T>) => {
     try {
         return await callback();
@@ -45,10 +54,14 @@ const withMusicErrorHandling = async <T>(callback: () => Promise<T>) => {
 export const createSetMusicLikedMutationResolver = (
     setLiked = setMusicLiked
 ) => {
-    return async (_: unknown, { id, isLiked }: { id: string; isLiked: boolean }) => withMusicErrorHandling(async () => {
+    return async (_: unknown, {
+        id,
+        isLiked,
+        originClientId
+    }: { id: string; isLiked: boolean; originClientId?: string | null }) => withMusicErrorHandling(async () => {
         const result = await setLiked({ id, isLiked });
 
-        connectors.notify(MUSIC_LIKE, result);
+        await notifySafely(() => connectors.notify(MUSIC_LIKE, withOriginClientId(result, originClientId)));
 
         return result;
     });
@@ -57,10 +70,14 @@ export const createSetMusicLikedMutationResolver = (
 export const createSetMusicHatedMutationResolver = (
     setHated = setMusicHated
 ) => {
-    return async (_: unknown, { id, isHated }: { id: string; isHated: boolean }) => withMusicErrorHandling(async () => {
+    return async (_: unknown, {
+        id,
+        isHated,
+        originClientId
+    }: { id: string; isHated: boolean; originClientId?: string | null }) => withMusicErrorHandling(async () => {
         const result = await setHated({ id, isHated });
 
-        connectors.notify(MUSIC_HATE, result);
+        await notifySafely(() => connectors.notify(MUSIC_HATE, withOriginClientId(result, originClientId)));
 
         return result;
     });
@@ -70,11 +87,14 @@ export const createSetMusicHatedMutationResolver = (
 export const createRecordPlaybackMutationResolver = (
     record = recordPlayback
 ) => {
-    return async (_: unknown, { input }: { input: Parameters<typeof recordPlayback>[0] }) => withMusicErrorHandling(async () => {
+    return async (_: unknown, {
+        input,
+        originClientId
+    }: { input: Parameters<typeof recordPlayback>[0]; originClientId?: string | null }) => withMusicErrorHandling(async () => {
         const result = await record(input);
 
         if (result && !result.deduped) {
-            connectors.notify(MUSIC_COUNT, result);
+            await notifySafely(() => connectors.notify(MUSIC_COUNT, withOriginClientId(result, originClientId)));
         }
 
         return result;

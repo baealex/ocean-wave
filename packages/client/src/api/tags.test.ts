@@ -7,6 +7,14 @@ import {
     vi
 } from 'vitest';
 
+const socketState = vi.hoisted(() => ({
+    id: 'client-1'
+}));
+
+vi.mock('~/socket/socket', () => ({
+    getOriginClientId: () => socketState.id
+}));
+
 import {
     createAndAddTagToMusic,
     deleteTag,
@@ -77,9 +85,10 @@ describe('tag API requests', () => {
 
         expect(payload.variables).toEqual({
             id: '7',
-            name: 'Focus'
+            name: 'Focus',
+            originClientId: 'client-1'
         });
-        expect(payload.query).toContain('renameTag(id: $id, name: $name)');
+        expect(payload.query).toContain('renameTag(id: $id, name: $name, originClientId: $originClientId)');
         expect(payload.query).not.toContain('Focus');
     });
 
@@ -100,8 +109,11 @@ describe('tag API requests', () => {
 
         const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
 
-        expect(payload.variables).toEqual({ id: '7' });
-        expect(payload.query).toContain('deleteTag(id: $id)');
+        expect(payload.variables).toEqual({
+            id: '7',
+            originClientId: 'client-1'
+        });
+        expect(payload.query).toContain('deleteTag(id: $id, originClientId: $originClientId)');
     });
 
     it('adds a new tag to music through GraphQL variables', async () => {
@@ -125,9 +137,10 @@ describe('tag API requests', () => {
 
         expect(payload.variables).toEqual({
             musicId: '1',
-            name: 'Night Drive'
+            name: 'Night Drive',
+            originClientId: 'client-1'
         });
-        expect(payload.query).toContain('createAndAddTagToMusic(musicId: $musicId, name: $name)');
+        expect(payload.query).toContain('createAndAddTagToMusic(musicId: $musicId, name: $name, originClientId: $originClientId)');
         expect(payload.query).not.toContain('Night Drive');
     });
 

@@ -43,12 +43,12 @@ export const tagQuery = gql`
 
 export const tagMutation = gql`
     type Mutation {
-        createTag(name: String!, color: String, description: String): Tag!
-        renameTag(id: ID!, name: String!): Tag!
-        deleteTag(id: ID!): TagDeleteResult!
-        addTagToMusic(musicId: ID!, tagId: ID!): Music!
-        createAndAddTagToMusic(musicId: ID!, name: String!): Music!
-        removeTagFromMusic(musicId: ID!, tagId: ID!): Music!
+        createTag(name: String!, color: String, description: String, originClientId: String): Tag!
+        renameTag(id: ID!, name: String!, originClientId: String): Tag!
+        deleteTag(id: ID!, originClientId: String): TagDeleteResult!
+        addTagToMusic(musicId: ID!, tagId: ID!, originClientId: String): Music!
+        createAndAddTagToMusic(musicId: ID!, name: String!, originClientId: String): Music!
+        removeTagFromMusic(musicId: ID!, tagId: ID!, originClientId: String): Music!
     }
 `;
 

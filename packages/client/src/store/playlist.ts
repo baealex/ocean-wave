@@ -1,7 +1,7 @@
-import { BaseStore } from './base-store';
 import { getPlaylists } from '~/api/library';
 import type { Playlist } from '~/models/type';
 import { PlaylistListener } from '~/socket';
+import { BaseStore } from './base-store';
 
 interface PlaylistStoreState {
     loaded: boolean;
@@ -21,9 +21,17 @@ class PlaylistStore extends BaseStore<PlaylistStoreState> {
         this.listener = new PlaylistListener();
         this.listener.connect({
             onCreate: (playlist) => {
-                this.set({ playlists: [playlist, ...this.state.playlists] });
+                this.set((prevState) => {
+                    const exists = prevState.playlists.some(({ id }) => id === playlist.id);
+
+                    return {
+                        playlists: exists
+                            ? prevState.playlists.map(item => item.id === playlist.id ? playlist : item)
+                            : [playlist, ...prevState.playlists]
+                    };
+                });
             },
-            onDelete: (id) => {
+            onDelete: ({ id }) => {
                 this.set({ playlists: this.state.playlists.filter((playlist) => playlist.id !== id) });
             },
             onUpdate: ({ id, name }) => {
@@ -34,7 +42,7 @@ class PlaylistStore extends BaseStore<PlaylistStoreState> {
                     } : playlist)
                 });
             },
-            onChangeOrder: (ids) => {
+            onChangeOrder: ({ ids }) => {
                 this.set({ playlists: this.state.playlists.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id)) });
             },
             onAddMusic: ({ id, musicCount, headerMusics }) => {
@@ -47,7 +55,7 @@ class PlaylistStore extends BaseStore<PlaylistStoreState> {
                 });
             },
             onMoveMusic: ({
-                fromId, formHeaderMusics, toId, toMusicCount, toHeaderMusics, musicIds
+                fromId, formHeaderMusics, fromMusicCount, toId, toMusicCount, toHeaderMusics
             }) => {
                 this.set({
                     playlists: this.state.playlists.map((playlist) => {
@@ -55,7 +63,7 @@ class PlaylistStore extends BaseStore<PlaylistStoreState> {
                             return {
                                 ...playlist,
                                 headerMusics: formHeaderMusics,
-                                musicCount: playlist.musicCount - musicIds.length
+                                musicCount: fromMusicCount
                             };
                         }
                         if (playlist.id === toId) {
@@ -69,12 +77,12 @@ class PlaylistStore extends BaseStore<PlaylistStoreState> {
                     })
                 });
             },
-            onRemoveMusic: ({ id, headerMusics, musicIds }) => {
+            onRemoveMusic: ({ id, headerMusics, musicCount }) => {
                 this.set({
                     playlists: this.state.playlists.map((playlist) => playlist.id === id ? {
                         ...playlist,
                         headerMusics,
-                        musicCount: playlist.musicCount - musicIds.length
+                        musicCount
                     } : playlist)
                 });
             },

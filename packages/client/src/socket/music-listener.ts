@@ -1,18 +1,21 @@
+import type { GraphQueryErrorResponse } from '~/api/graphql';
 import {
     recordPlayback,
     setMusicHated,
     setMusicLiked
 } from '~/api/music';
-import type { GraphQueryErrorResponse } from '~/api/graphql';
-import { toast } from '~/modules/toast';
-
-import { socket } from './socket';
-import type { Listener } from './listener';
+import type { Tag } from '~/models/type';
 import {
     deletePlaybackCheckpoint,
     listPlaybackCheckpoints
 } from '~/modules/playback-checkpoint-store';
-import type { Tag } from '~/models/type';
+import { toast } from '~/modules/toast';
+import type { Listener } from './listener';
+import {
+    isOwnRealtimeNotification,
+    type OriginClientNotificationPayload,
+    socket
+} from './socket';
 
 export const MUSIC_LIKE = 'music:like-updated';
 export const MUSIC_HATE = 'music:hate-updated';
@@ -33,17 +36,17 @@ export interface CountPayload {
     clientSessionId?: string;
 }
 
-interface Like {
+interface Like extends OriginClientNotificationPayload {
     id: string;
     isLiked: boolean;
 }
 
-interface Hate {
+interface Hate extends OriginClientNotificationPayload {
     id: string;
     isHated: boolean;
 }
 
-interface Count {
+interface Count extends OriginClientNotificationPayload {
     id: string;
     playCount: number;
     lastPlayedAt: string | null;
@@ -51,7 +54,7 @@ interface Count {
     countedAsPlay: boolean;
 }
 
-interface TagsUpdated {
+interface TagsUpdated extends OriginClientNotificationPayload {
     musicId: string;
     tags: Tag[];
 }
@@ -70,9 +73,11 @@ export class MusicListener implements Listener {
     private static handlers = new Set<MusicListenerEventHandler>();
 
     handler: MusicListenerEventHandler | null;
+    private socketHandler: MusicListenerEventHandler | null;
 
     constructor() {
         this.handler = null;
+        this.socketHandler = null;
     }
 
     connect(handler: MusicListenerEventHandler) {
@@ -80,13 +85,14 @@ export class MusicListener implements Listener {
             this.disconnect();
         }
         this.handler = handler;
+        this.socketHandler = this.createSocketHandler(handler);
         MusicListener.handlers.add(handler);
 
-        socket.on(MUSIC_LIKE, this.handler.onLike);
-        socket.on(MUSIC_HATE, this.handler.onHate);
-        socket.on(MUSIC_COUNT, this.handler.onCount);
-        if (this.handler.onTagsUpdated) {
-            socket.on(MUSIC_TAGS_UPDATED, this.handler.onTagsUpdated);
+        socket.on(MUSIC_LIKE, this.socketHandler.onLike);
+        socket.on(MUSIC_HATE, this.socketHandler.onHate);
+        socket.on(MUSIC_COUNT, this.socketHandler.onCount);
+        if (this.socketHandler.onTagsUpdated) {
+            socket.on(MUSIC_TAGS_UPDATED, this.socketHandler.onTagsUpdated);
         }
     }
 
@@ -165,17 +171,45 @@ export class MusicListener implements Listener {
     }
 
     disconnect() {
-        if (this.handler === null) return;
+        if (this.handler === null || this.socketHandler === null) return;
 
-        socket.off(MUSIC_LIKE, this.handler.onLike);
-        socket.off(MUSIC_HATE, this.handler.onHate);
-        socket.off(MUSIC_COUNT, this.handler.onCount);
-        if (this.handler.onTagsUpdated) {
-            socket.off(MUSIC_TAGS_UPDATED, this.handler.onTagsUpdated);
+        socket.off(MUSIC_LIKE, this.socketHandler.onLike);
+        socket.off(MUSIC_HATE, this.socketHandler.onHate);
+        socket.off(MUSIC_COUNT, this.socketHandler.onCount);
+        if (this.socketHandler.onTagsUpdated) {
+            socket.off(MUSIC_TAGS_UPDATED, this.socketHandler.onTagsUpdated);
         }
         MusicListener.handlers.delete(this.handler);
 
         this.handler = null;
+        this.socketHandler = null;
+    }
+
+    private createSocketHandler(handler: MusicListenerEventHandler): MusicListenerEventHandler {
+        return {
+            onLike: (data) => {
+                if (!isOwnRealtimeNotification(data)) {
+                    handler.onLike(data);
+                }
+            },
+            onHate: (data) => {
+                if (!isOwnRealtimeNotification(data)) {
+                    handler.onHate(data);
+                }
+            },
+            onCount: (data) => {
+                if (!isOwnRealtimeNotification(data)) {
+                    handler.onCount(data);
+                }
+            },
+            onTagsUpdated: handler.onTagsUpdated
+                ? (data) => {
+                    if (!isOwnRealtimeNotification(data)) {
+                        handler.onTagsUpdated?.(data);
+                    }
+                }
+                : undefined
+        };
     }
 
     private static async commitLikedState(id: string, isLiked: boolean) {
