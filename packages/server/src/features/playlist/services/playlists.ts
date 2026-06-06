@@ -41,6 +41,7 @@ export interface PlaylistMusicChangeResult {
 export interface PlaylistMoveMusicResult {
     fromId: string;
     formHeaderMusics: Array<{ id: string }>;
+    fromMusicCount: number;
     toId: string;
     toMusicCount: number;
     toHeaderMusics: Array<{ id: string }>;
@@ -308,6 +309,7 @@ export const moveMusicToPlaylist = async ({
     return {
         fromId,
         formHeaderMusics: await getHeaderMusics(fromPlaylistId),
+        fromMusicCount: await getActiveMusicCount(fromPlaylistId),
         toId,
         toMusicCount: await getActiveMusicCount(toPlaylistId),
         toHeaderMusics: await getHeaderMusics(toPlaylistId),

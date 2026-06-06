@@ -35,6 +35,7 @@ export const playlistType = gql`
     type PlaylistMoveMusicPayload {
         fromId: ID!
         formHeaderMusics: [Music!]!
+        fromMusicCount: Int!
         toId: ID!
         toMusicCount: Int!
         toHeaderMusics: [Music!]!
@@ -59,14 +60,14 @@ export const playlistQuery = gql`
 
 export const playlistMutation = gql`
     type Mutation {
-        createPlaylist(name: String!, musicIds: [ID!]): Playlist!
-        deletePlaylist(id: ID!): PlaylistDeletePayload!
-        renamePlaylist(id: ID!, name: String!): PlaylistUpdatePayload!
-        reorderPlaylists(ids: [ID!]!): PlaylistOrderPayload!
-        addMusicToPlaylist(id: ID!, musicIds: [ID!]!): PlaylistMusicChangePayload!
-        moveMusicToPlaylist(fromId: ID!, toId: ID!, musicIds: [ID!]!): PlaylistMoveMusicPayload!
-        removeMusicFromPlaylist(id: ID!, musicIds: [ID!]!): PlaylistMusicChangePayload!
-        reorderPlaylistMusics(id: ID!, musicIds: [ID!]!): PlaylistMusicOrderPayload!
+        createPlaylist(name: String!, musicIds: [ID!], originClientId: String): Playlist!
+        deletePlaylist(id: ID!, originClientId: String): PlaylistDeletePayload!
+        renamePlaylist(id: ID!, name: String!, originClientId: String): PlaylistUpdatePayload!
+        reorderPlaylists(ids: [ID!]!, originClientId: String): PlaylistOrderPayload!
+        addMusicToPlaylist(id: ID!, musicIds: [ID!]!, originClientId: String): PlaylistMusicChangePayload!
+        moveMusicToPlaylist(fromId: ID!, toId: ID!, musicIds: [ID!]!, originClientId: String): PlaylistMoveMusicPayload!
+        removeMusicFromPlaylist(id: ID!, musicIds: [ID!]!, originClientId: String): PlaylistMusicChangePayload!
+        reorderPlaylistMusics(id: ID!, musicIds: [ID!]!, originClientId: String): PlaylistMusicOrderPayload!
     }
 `;
 

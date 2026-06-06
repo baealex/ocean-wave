@@ -1,13 +1,18 @@
 import type { Tag } from '~/models/type';
-
-import { socket } from './socket';
 import type { Listener } from './listener';
+import {
+    isOwnRealtimeNotification,
+    type OriginClientNotificationPayload,
+    socket
+} from './socket';
 
 export const TAG_CREATED = 'tag:created';
 export const TAG_RENAMED = 'tag:renamed';
 export const TAG_LIST_INVALIDATED = 'tag:list-invalidated';
 
-export interface TagListInvalidatedPayload {
+type TagNotificationPayload = Tag & OriginClientNotificationPayload;
+
+export interface TagListInvalidatedPayload extends OriginClientNotificationPayload {
     reason: 'tag-deleted' | 'music-tags-changed';
     affectedTagIds?: string[];
     affectedMusicIds?: string[];
@@ -15,16 +20,18 @@ export interface TagListInvalidatedPayload {
 }
 
 interface TagListenerEventHandler {
-    onCreated: (tag: Tag) => void;
-    onRenamed: (tag: Tag) => void;
+    onCreated: (tag: TagNotificationPayload) => void;
+    onRenamed: (tag: TagNotificationPayload) => void;
     onListInvalidated: (payload: TagListInvalidatedPayload) => void;
 }
 
 export class TagListener implements Listener {
     handler: TagListenerEventHandler | null;
+    private socketHandler: TagListenerEventHandler | null;
 
     constructor() {
         this.handler = null;
+        this.socketHandler = null;
     }
 
     connect(handler: TagListenerEventHandler) {
@@ -33,19 +40,41 @@ export class TagListener implements Listener {
         }
 
         this.handler = handler;
+        this.socketHandler = this.createSocketHandler(handler);
 
-        socket.on(TAG_CREATED, this.handler.onCreated);
-        socket.on(TAG_RENAMED, this.handler.onRenamed);
-        socket.on(TAG_LIST_INVALIDATED, this.handler.onListInvalidated);
+        socket.on(TAG_CREATED, this.socketHandler.onCreated);
+        socket.on(TAG_RENAMED, this.socketHandler.onRenamed);
+        socket.on(TAG_LIST_INVALIDATED, this.socketHandler.onListInvalidated);
     }
 
     disconnect() {
-        if (this.handler === null) return;
+        if (this.handler === null || this.socketHandler === null) return;
 
-        socket.off(TAG_CREATED, this.handler.onCreated);
-        socket.off(TAG_RENAMED, this.handler.onRenamed);
-        socket.off(TAG_LIST_INVALIDATED, this.handler.onListInvalidated);
+        socket.off(TAG_CREATED, this.socketHandler.onCreated);
+        socket.off(TAG_RENAMED, this.socketHandler.onRenamed);
+        socket.off(TAG_LIST_INVALIDATED, this.socketHandler.onListInvalidated);
 
         this.handler = null;
+        this.socketHandler = null;
+    }
+
+    private createSocketHandler(handler: TagListenerEventHandler): TagListenerEventHandler {
+        return {
+            onCreated: (tag) => {
+                if (!isOwnRealtimeNotification(tag)) {
+                    handler.onCreated(tag);
+                }
+            },
+            onRenamed: (tag) => {
+                if (!isOwnRealtimeNotification(tag)) {
+                    handler.onRenamed(tag);
+                }
+            },
+            onListInvalidated: (payload) => {
+                if (!isOwnRealtimeNotification(payload)) {
+                    handler.onListInvalidated(payload);
+                }
+            }
+        };
     }
 }

@@ -7,6 +7,14 @@ import {
     vi
 } from 'vitest';
 
+const socketState = vi.hoisted(() => ({
+    id: 'client-1'
+}));
+
+vi.mock('~/socket/socket', () => ({
+    getOriginClientId: () => socketState.id
+}));
+
 import {
     addMusicToPlaylist,
     createPlaylist,
@@ -47,9 +55,10 @@ describe('playlist API requests', () => {
 
         expect(payload.variables).toEqual({
             name: 'Road',
-            musicIds: ['7']
+            musicIds: ['7'],
+            originClientId: 'client-1'
         });
-        expect(payload.query).toContain('createPlaylist(name: $name, musicIds: $musicIds)');
+        expect(payload.query).toContain('createPlaylist(name: $name, musicIds: $musicIds, originClientId: $originClientId)');
         expect(payload.query).not.toContain('Road');
     });
 
@@ -73,9 +82,10 @@ describe('playlist API requests', () => {
 
         expect(payload.variables).toEqual({
             id: '1',
-            musicIds: ['7']
+            musicIds: ['7'],
+            originClientId: 'client-1'
         });
-        expect(payload.query).toContain('addMusicToPlaylist(id: $id, musicIds: $musicIds)');
+        expect(payload.query).toContain('addMusicToPlaylist(id: $id, musicIds: $musicIds, originClientId: $originClientId)');
     });
 
     it('moves music between playlists through GraphQL variables', async () => {
@@ -101,9 +111,10 @@ describe('playlist API requests', () => {
         expect(payload.variables).toEqual({
             fromId: '1',
             toId: '2',
-            musicIds: ['7']
+            musicIds: ['7'],
+            originClientId: 'client-1'
         });
-        expect(payload.query).toContain('moveMusicToPlaylist(fromId: $fromId, toId: $toId, musicIds: $musicIds)');
+        expect(payload.query).toContain('originClientId: $originClientId');
     });
 
     it('reorders playlists and playlist music through GraphQL variables', async () => {
@@ -130,10 +141,14 @@ describe('playlist API requests', () => {
         await reorderPlaylists(['2', '1']);
         await reorderPlaylistMusics({ id: '1', musicIds: ['8', '7'] });
 
-        expect((post.mock.calls[0]?.[1] as GraphqlPayload).variables).toEqual({ ids: ['2', '1'] });
+        expect((post.mock.calls[0]?.[1] as GraphqlPayload).variables).toEqual({
+            ids: ['2', '1'],
+            originClientId: 'client-1'
+        });
         expect((post.mock.calls[1]?.[1] as GraphqlPayload).variables).toEqual({
             id: '1',
-            musicIds: ['8', '7']
+            musicIds: ['8', '7'],
+            originClientId: 'client-1'
         });
     });
 });

@@ -67,14 +67,18 @@ describe('tag mutation resolvers', () => {
         const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
         const resolver = createCreateTagMutationResolver();
 
-        const result = await resolver(null, { name: 'Focus' });
+        const result = await resolver(null, {
+            name: 'Focus',
+            originClientId: 'client-1'
+        });
 
         expect(result.name).toBe('Focus');
         expect(notifySpy).toHaveBeenCalledWith(TAG_CREATED, expect.objectContaining({
             id: result.id.toString(),
             name: 'Focus',
             normalizedName: 'focus',
-            musicCount: 0
+            musicCount: 0,
+            originClientId: 'client-1'
         }));
     });
 

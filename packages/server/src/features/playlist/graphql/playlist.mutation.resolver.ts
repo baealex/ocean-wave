@@ -1,6 +1,7 @@
 import type { IResolvers } from '@graphql-tools/utils';
 
 import { connectors } from '~/socket/connectors';
+import { withOriginClientId } from '~/socket/origin-client';
 import {
     PLAYLIST_ADD_MUSIC,
     PLAYLIST_CHANGE_MUSIC_ORDER,
@@ -20,9 +21,9 @@ import {
     moveMusicToPlaylist,
     removeMusicFromPlaylist,
     renamePlaylist,
-    resolvePlaylistSummary,
     reorderPlaylistMusics,
-    reorderPlaylists
+    reorderPlaylists,
+    resolvePlaylistSummary
 } from '../services/playlists';
 
 class PlaylistGraphQLError extends Error {
@@ -45,6 +46,15 @@ const toGraphQLError = (error: unknown) => {
     return error;
 };
 
+
+const notifySafely = async (callback: () => Promise<void> | void) => {
+    try {
+        await callback();
+    } catch (error) {
+        console.error(error);
+    }
+};
+
 const withPlaylistErrorHandling = async <T>(callback: () => Promise<T>) => {
     try {
         return await callback();
@@ -56,10 +66,16 @@ const withPlaylistErrorHandling = async <T>(callback: () => Promise<T>) => {
 export const createCreatePlaylistMutationResolver = (
     create = createPlaylist
 ) => {
-    return async (_: unknown, { name, musicIds = [] }: { name: string; musicIds?: string[] }) => withPlaylistErrorHandling(async () => {
+    return async (_: unknown, {
+        name,
+        musicIds = [],
+        originClientId
+    }: { name: string; musicIds?: string[]; originClientId?: string | null }) => withPlaylistErrorHandling(async () => {
         const playlist = await create({ name, musicIds });
 
-        connectors.notify(PLAYLIST_CREATE, await resolvePlaylistSummary(playlist));
+        await notifySafely(async () => {
+            connectors.notify(PLAYLIST_CREATE, withOriginClientId(await resolvePlaylistSummary(playlist), originClientId));
+        });
 
         return playlist;
     });
@@ -68,10 +84,13 @@ export const createCreatePlaylistMutationResolver = (
 export const createDeletePlaylistMutationResolver = (
     deleteById = deletePlaylist
 ) => {
-    return async (_: unknown, { id }: { id: string }) => withPlaylistErrorHandling(async () => {
+    return async (_: unknown, {
+        id,
+        originClientId
+    }: { id: string; originClientId?: string | null }) => withPlaylistErrorHandling(async () => {
         const result = await deleteById({ id });
 
-        connectors.notify(PLAYLIST_DELETE, result.id);
+        await notifySafely(() => connectors.notify(PLAYLIST_DELETE, withOriginClientId(result, originClientId)));
 
         return result;
     });
@@ -80,10 +99,14 @@ export const createDeletePlaylistMutationResolver = (
 export const createRenamePlaylistMutationResolver = (
     rename = renamePlaylist
 ) => {
-    return async (_: unknown, { id, name }: { id: string; name: string }) => withPlaylistErrorHandling(async () => {
+    return async (_: unknown, {
+        id,
+        name,
+        originClientId
+    }: { id: string; name: string; originClientId?: string | null }) => withPlaylistErrorHandling(async () => {
         const result = await rename({ id, name });
 
-        connectors.notify(PLAYLIST_UPDATE, result);
+        await notifySafely(() => connectors.notify(PLAYLIST_UPDATE, withOriginClientId(result, originClientId)));
 
         return result;
     });
@@ -92,10 +115,13 @@ export const createRenamePlaylistMutationResolver = (
 export const createReorderPlaylistsMutationResolver = (
     reorder = reorderPlaylists
 ) => {
-    return async (_: unknown, { ids }: { ids: string[] }) => withPlaylistErrorHandling(async () => {
+    return async (_: unknown, {
+        ids,
+        originClientId
+    }: { ids: string[]; originClientId?: string | null }) => withPlaylistErrorHandling(async () => {
         const result = await reorder({ ids });
 
-        connectors.notify(PLAYLIST_CHANGE_ORDER, result.ids);
+        await notifySafely(() => connectors.notify(PLAYLIST_CHANGE_ORDER, withOriginClientId(result, originClientId)));
 
         return result;
     });
@@ -104,10 +130,14 @@ export const createReorderPlaylistsMutationResolver = (
 export const createAddMusicToPlaylistMutationResolver = (
     add = addMusicToPlaylist
 ) => {
-    return async (_: unknown, { id, musicIds }: { id: string; musicIds: string[] }) => withPlaylistErrorHandling(async () => {
+    return async (_: unknown, {
+        id,
+        musicIds,
+        originClientId
+    }: { id: string; musicIds: string[]; originClientId?: string | null }) => withPlaylistErrorHandling(async () => {
         const result = await add({ id, musicIds });
 
-        connectors.notify(PLAYLIST_ADD_MUSIC, result);
+        await notifySafely(() => connectors.notify(PLAYLIST_ADD_MUSIC, withOriginClientId(result, originClientId)));
 
         return result;
     });
@@ -116,10 +146,15 @@ export const createAddMusicToPlaylistMutationResolver = (
 export const createMoveMusicToPlaylistMutationResolver = (
     move = moveMusicToPlaylist
 ) => {
-    return async (_: unknown, { fromId, toId, musicIds }: { fromId: string; toId: string; musicIds: string[] }) => withPlaylistErrorHandling(async () => {
+    return async (_: unknown, {
+        fromId,
+        toId,
+        musicIds,
+        originClientId
+    }: { fromId: string; toId: string; musicIds: string[]; originClientId?: string | null }) => withPlaylistErrorHandling(async () => {
         const result = await move({ fromId, toId, musicIds });
 
-        connectors.notify(PLAYLIST_MOVE_MUSIC, result);
+        await notifySafely(() => connectors.notify(PLAYLIST_MOVE_MUSIC, withOriginClientId(result, originClientId)));
 
         return result;
     });
@@ -128,10 +163,14 @@ export const createMoveMusicToPlaylistMutationResolver = (
 export const createRemoveMusicFromPlaylistMutationResolver = (
     remove = removeMusicFromPlaylist
 ) => {
-    return async (_: unknown, { id, musicIds }: { id: string; musicIds: string[] }) => withPlaylistErrorHandling(async () => {
+    return async (_: unknown, {
+        id,
+        musicIds,
+        originClientId
+    }: { id: string; musicIds: string[]; originClientId?: string | null }) => withPlaylistErrorHandling(async () => {
         const result = await remove({ id, musicIds });
 
-        connectors.notify(PLAYLIST_REMOVE_MUSIC, result);
+        await notifySafely(() => connectors.notify(PLAYLIST_REMOVE_MUSIC, withOriginClientId(result, originClientId)));
 
         return result;
     });
@@ -140,10 +179,14 @@ export const createRemoveMusicFromPlaylistMutationResolver = (
 export const createReorderPlaylistMusicsMutationResolver = (
     reorder = reorderPlaylistMusics
 ) => {
-    return async (_: unknown, { id, musicIds }: { id: string; musicIds: string[] }) => withPlaylistErrorHandling(async () => {
+    return async (_: unknown, {
+        id,
+        musicIds,
+        originClientId
+    }: { id: string; musicIds: string[]; originClientId?: string | null }) => withPlaylistErrorHandling(async () => {
         const result = await reorder({ id, musicIds });
 
-        connectors.notify(PLAYLIST_CHANGE_MUSIC_ORDER, result);
+        await notifySafely(() => connectors.notify(PLAYLIST_CHANGE_MUSIC_ORDER, withOriginClientId(result, originClientId)));
 
         return result;
     });
