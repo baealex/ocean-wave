@@ -1,6 +1,6 @@
 import type { Socket } from 'socket.io';
 
-type Connector = Socket & {
+type Connector = Pick<Socket, 'disconnect' | 'emit' | 'id'> & {
     userAgent: string;
     connectedAt: number;
 };
@@ -8,7 +8,7 @@ type Connector = Socket & {
 export const connectors = (() => {
     let connectors: Connector[] = [];
 
-    return {
+    const api = {
         get: () => connectors,
         set: (newConnectors: Connector[]) => {
             connectors = newConnectors;
@@ -26,6 +26,17 @@ export const connectors = (() => {
                 });
             });
             return Promise.all(promises);
+        },
+        notify: <T>(event: string, data: T) => {
+            for (const connector of connectors) {
+                try {
+                    connector.emit(event, data);
+                } catch (error) {
+                    console.error(error);
+                }
+            }
         }
     };
+
+    return api;
 })();

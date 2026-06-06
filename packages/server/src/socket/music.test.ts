@@ -2,6 +2,8 @@ import models from '~/models';
 import { connectors } from './connectors';
 import { count } from './music';
 
+type TestConnector = Parameters<typeof connectors.set>[0][number];
+
 const createMusic = async (overrides?: { duration?: number }) => {
     const unique = Date.now().toString() + Math.random().toString(16).slice(2);
     const artist = await models.artist.create({ data: { name: `Artist ${unique}` } });
@@ -33,6 +35,7 @@ const createMusic = async (overrides?: { duration?: number }) => {
 describe('music playback counting', () => {
     beforeEach(async () => {
         jest.restoreAllMocks();
+        connectors.set([]);
 
         await models.playbackEvent.deleteMany();
         await models.musicLike.deleteMany();
@@ -44,7 +47,7 @@ describe('music playback counting', () => {
     });
 
     it('creates a playback event and updates aggregates for a meaningful listen', async () => {
-        const broadcastSpy = jest.spyOn(connectors, 'broadcast').mockResolvedValue([]);
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
         const music = await createMusic({ duration: 180 });
 
         await count({
@@ -67,7 +70,7 @@ describe('music playback counting', () => {
             countedAsPlay: true,
             source: 'queue-track-change'
         });
-        expect(broadcastSpy).toHaveBeenCalledWith('music-count', expect.objectContaining({
+        expect(notifySpy).toHaveBeenCalledWith('music-count', expect.objectContaining({
             id: music.id.toString(),
             playCount: 1,
             totalPlayedMs: 35_000,
@@ -76,7 +79,7 @@ describe('music playback counting', () => {
     });
 
     it('records partial playback without incrementing play count', async () => {
-        const broadcastSpy = jest.spyOn(connectors, 'broadcast').mockResolvedValue([]);
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
         const music = await createMusic({ duration: 240 });
 
         await count({
@@ -92,7 +95,7 @@ describe('music playback counting', () => {
         expect(updatedMusic.playCount).toBe(0);
         expect(updatedMusic.totalPlayedMs).toBe(10_000);
         expect(event.countedAsPlay).toBe(false);
-        expect(broadcastSpy).toHaveBeenCalledWith('music-count', expect.objectContaining({
+        expect(notifySpy).toHaveBeenCalledWith('music-count', expect.objectContaining({
             id: music.id.toString(),
             playCount: 0,
             totalPlayedMs: 10_000,
@@ -101,30 +104,43 @@ describe('music playback counting', () => {
     });
 
     it('returns count result without waiting for realtime broadcast acknowledgements', async () => {
-        const broadcastSpy = jest
-            .spyOn(connectors, 'broadcast')
-            .mockReturnValue(new Promise(() => {}) as ReturnType<typeof connectors.broadcast>);
+        const emit = jest.fn();
+        connectors.set([{
+            id: 'socket-1',
+            userAgent: 'test',
+            connectedAt: Date.now(),
+            disconnect: jest.fn(),
+            emit
+        } as TestConnector]);
         const music = await createMusic({ duration: 180 });
 
-        await expect(count({
-            id: music.id.toString(),
-            playedMs: 35_000,
-            completionRate: 35_000 / 180_000,
-            source: 'queue-track-change'
-        })).resolves.toMatchObject({
+        await expect(Promise.race([
+            count({
+                id: music.id.toString(),
+                playedMs: 35_000,
+                completionRate: 35_000 / 180_000,
+                source: 'queue-track-change'
+            }),
+            new Promise((resolve) => {
+                setTimeout(() => {
+                    resolve('timed-out');
+                }, 1000);
+            })
+        ])).resolves.toMatchObject({
             id: music.id.toString(),
             playCount: 1,
             countedAsPlay: true,
             deduped: false
         });
-        expect(broadcastSpy).toHaveBeenCalledWith('music-count', expect.objectContaining({
+        expect(emit).toHaveBeenCalledWith('music-count', expect.objectContaining({
             id: music.id.toString(),
             playCount: 1
         }));
+        expect(emit.mock.calls[0]).toHaveLength(2);
     });
 
     it('clamps playedMs to the session wall-clock duration when startedAt is provided', async () => {
-        const broadcastSpy = jest.spyOn(connectors, 'broadcast').mockResolvedValue([]);
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
         const music = await createMusic({ duration: 180 });
         const startedAt = new Date(Date.now() - 5_000).toISOString();
 
@@ -143,7 +159,7 @@ describe('music playback counting', () => {
         expect(updatedMusic.totalPlayedMs).toBeLessThanOrEqual(5_100);
         expect(event.playedMs).toBeLessThanOrEqual(5_100);
         expect(Math.abs(event.startedAt.getTime() - new Date(startedAt).getTime())).toBeLessThan(50);
-        expect(broadcastSpy).toHaveBeenCalledWith('music-count', expect.objectContaining({
+        expect(notifySpy).toHaveBeenCalledWith('music-count', expect.objectContaining({
             id: music.id.toString(),
             playCount: 0,
             countedAsPlay: false
@@ -151,7 +167,7 @@ describe('music playback counting', () => {
     });
 
     it('dedupes repeated recovery commits with the same clientSessionId', async () => {
-        const broadcastSpy = jest.spyOn(connectors, 'broadcast').mockResolvedValue([]);
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
         const music = await createMusic({ duration: 180 });
         const clientSessionId = 'session-dedupe-1';
 
@@ -182,11 +198,11 @@ describe('music playback counting', () => {
         });
         expect(updatedMusic.playCount).toBe(1);
         expect(updatedMusic.totalPlayedMs).toBe(35_000);
-        expect(broadcastSpy).toHaveBeenCalledTimes(1);
+        expect(notifySpy).toHaveBeenCalledTimes(1);
     });
 
     it('dedupes concurrent recovery commits with the same clientSessionId', async () => {
-        const broadcastSpy = jest.spyOn(connectors, 'broadcast').mockResolvedValue([]);
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
         const music = await createMusic({ duration: 180 });
         const clientSessionId = 'session-dedupe-race';
 
@@ -217,6 +233,6 @@ describe('music playback counting', () => {
             expect.objectContaining({ deduped: false }),
             expect.objectContaining({ deduped: true })
         ]));
-        expect(broadcastSpy).toHaveBeenCalledTimes(1);
+        expect(notifySpy).toHaveBeenCalledTimes(1);
     });
 });

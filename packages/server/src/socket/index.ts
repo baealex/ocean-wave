@@ -11,7 +11,7 @@ export const socketManager = (socket: Socket) => {
         userAgent: socket.handshake.headers['user-agent'] ?? '',
         connectedAt: Date.now()
     }));
-    connectors.broadcast('get-connectors', connectors.get().map((c) => ({
+    connectors.notify('get-connectors', connectors.get().map((c) => ({
         id: c.id,
         userAgent: c.userAgent,
         connectedAt: c.connectedAt
@@ -41,7 +41,7 @@ export const socketManager = (socket: Socket) => {
     socket.on('disconnect', () => {
         console.log(`${socket.id} : user disconnected`);
         connectors.remove(socket.id);
-        connectors.broadcast('get-connectors', connectors.get().map((c) => ({
+        connectors.notify('get-connectors', connectors.get().map((c) => ({
             id: c.id,
             userAgent: c.userAgent,
             connectedAt: c.connectedAt

@@ -435,7 +435,7 @@ export const syncListener = (socket: Socket) => {
         alreadySyncing = true;
         const syncResult = await syncMusic(socket, force);
         if (syncResult) {
-            connectors.broadcast('resync', '');
+            connectors.notify('resync', '');
         }
         alreadySyncing = false;
     });
