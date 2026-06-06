@@ -14,14 +14,14 @@ import type { Listener } from './listener';
 
 import type { Music, Playlist } from '../models/type';
 
-export const PLAYLIST_CREATE = 'playlist-create';
-export const PLAYLIST_DELETE = 'playlist-delete';
-export const PLAYLIST_UPDATE = 'playlist-update';
-export const PLAYLIST_CHANGE_ORDER = 'playlist-change-order';
-export const PLAYLIST_ADD_MUSIC = 'playlist-add-music';
-export const PLAYLIST_MOVE_MUSIC = 'playlist-move-music';
-export const PLAYLIST_REMOVE_MUSIC = 'playlist-remove-music';
-export const PLAYLIST_CHANGE_MUSIC_ORDER = 'playlist-change-music-order';
+export const PLAYLIST_CREATE = 'playlist:created';
+export const PLAYLIST_DELETE = 'playlist:deleted';
+export const PLAYLIST_UPDATE = 'playlist:renamed';
+export const PLAYLIST_CHANGE_ORDER = 'playlist:order-updated';
+export const PLAYLIST_ADD_MUSIC = 'playlist:music-added';
+export const PLAYLIST_MOVE_MUSIC = 'playlist:music-moved';
+export const PLAYLIST_REMOVE_MUSIC = 'playlist:music-removed';
+export const PLAYLIST_CHANGE_MUSIC_ORDER = 'playlist:music-order-updated';
 
 interface OnUpdateData {
     id: string;

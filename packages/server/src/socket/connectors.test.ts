@@ -1,4 +1,5 @@
 import { connectors } from './connectors';
+import { MUSIC_COUNT } from './music';
 
 type TestConnector = Parameters<typeof connectors.set>[0][number];
 
@@ -22,11 +23,11 @@ describe('socket connectors', () => {
             emit
         } as TestConnector]);
 
-        const result = connectors.notify('music-count', { id: '1' });
+        const result = connectors.notify(MUSIC_COUNT, { id: '1' });
 
         expect(result).toBeUndefined();
         expect(emit).toHaveBeenCalledWith(
-            'music-count',
+            MUSIC_COUNT,
             { id: '1' }
         );
     });
@@ -44,7 +45,7 @@ describe('socket connectors', () => {
             })
         } as TestConnector]);
 
-        connectors.notify('music-count', { id: '1' });
+        connectors.notify(MUSIC_COUNT, { id: '1' });
 
         expect(consoleErrorSpy).toHaveBeenCalledWith(error);
     });
