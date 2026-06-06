@@ -1,3 +1,10 @@
+import {
+    setMusicHated,
+    setMusicLiked
+} from '~/api/music';
+import type { GraphQueryErrorResponse } from '~/api/graphql';
+import { toast } from '~/modules/toast';
+
 import { socket } from './socket';
 import type { Listener } from './listener';
 import {
@@ -9,6 +16,10 @@ export const MUSIC_LIKE = 'music-like';
 export const MUSIC_HATE = 'music-hate';
 export const MUSIC_COUNT = 'music-count';
 const MUSIC_COUNT_ACK_TIMEOUT_MS = 5_000;
+
+const getGraphQueryErrorMessage = (response: GraphQueryErrorResponse) => {
+    return response.errors[0]?.message ?? 'Music preference update failed';
+};
 
 export interface CountPayload {
     id: string;
@@ -46,6 +57,7 @@ interface MusicListenerEventHandler {
 export class MusicListener implements Listener {
     static pendingCountEvents: CountPayload[] = [];
     static isFlushing = false;
+    private static handlers = new Set<MusicListenerEventHandler>();
 
     handler: MusicListenerEventHandler | null;
 
@@ -58,6 +70,7 @@ export class MusicListener implements Listener {
             this.disconnect();
         }
         this.handler = handler;
+        MusicListener.handlers.add(handler);
 
         socket.on(MUSIC_LIKE, this.handler.onLike);
         socket.on(MUSIC_HATE, this.handler.onHate);
@@ -65,14 +78,11 @@ export class MusicListener implements Listener {
     }
 
     static like(id: string, isLiked: boolean) {
-        socket.emit(MUSIC_LIKE, {
-            id,
-            isLiked
-        });
+        void this.commitLikedState(id, isLiked);
     }
 
-    static hate(id: string) {
-        socket.emit(MUSIC_HATE, { id });
+    static hate(id: string, isHated: boolean) {
+        void this.commitHatedState(id, isHated);
     }
 
     static async count(payload?: CountPayload) {
@@ -141,8 +151,46 @@ export class MusicListener implements Listener {
         socket.off(MUSIC_LIKE, this.handler.onLike);
         socket.off(MUSIC_HATE, this.handler.onHate);
         socket.off(MUSIC_COUNT, this.handler.onCount);
+        MusicListener.handlers.delete(this.handler);
 
         this.handler = null;
+    }
+
+
+    private static async commitLikedState(id: string, isLiked: boolean) {
+        const response = await setMusicLiked({ id, isLiked });
+
+        if (response.type === 'error') {
+            toast.error(getGraphQueryErrorMessage(response));
+            return false;
+        }
+
+        this.notifyLike(response.setMusicLiked);
+        return true;
+    }
+
+    private static async commitHatedState(id: string, isHated: boolean) {
+        const response = await setMusicHated({ id, isHated });
+
+        if (response.type === 'error') {
+            toast.error(getGraphQueryErrorMessage(response));
+            return false;
+        }
+
+        this.notifyHate(response.setMusicHated);
+        return true;
+    }
+
+    private static notifyLike(data: Like) {
+        for (const handler of this.handlers) {
+            handler.onLike(data);
+        }
+    }
+
+    private static notifyHate(data: Hate) {
+        for (const handler of this.handlers) {
+            handler.onHate(data);
+        }
     }
 
     private static async emitCount(payload: CountPayload) {

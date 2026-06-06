@@ -137,7 +137,7 @@ export default function MusicActionPanelContent({
                 {
                     icon: <Icon.Close />,
                     text: music.isHated ? 'Show again this music' : 'Hide this music',
-                    onClick: () => MusicListener.hate(music.id)
+                    onClick: () => MusicListener.hate(music.id, !music.isHated)
                 }
             ]}
             footer={(
