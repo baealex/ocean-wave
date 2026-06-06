@@ -6,7 +6,28 @@ import {
     vi
 } from 'vitest';
 
-const { emitMock } = vi.hoisted(() => ({ emitMock: vi.fn() }));
+const {
+    emitMock,
+    setMusicHatedMock,
+    setMusicLikedMock,
+    toastErrorMock
+} = vi.hoisted(() => ({
+    emitMock: vi.fn(),
+    setMusicHatedMock: vi.fn(),
+    setMusicLikedMock: vi.fn(),
+    toastErrorMock: vi.fn()
+}));
+
+vi.mock('~/api/music', () => ({
+    setMusicHated: setMusicHatedMock,
+    setMusicLiked: setMusicLikedMock
+}));
+
+vi.mock('~/modules/toast', () => ({
+    toast: {
+        error: toastErrorMock
+    }
+}));
 
 vi.mock('./socket', () => ({
     socket: {
@@ -43,6 +64,9 @@ describe('MusicListener playback recovery', () => {
         MusicListener.isFlushing = false;
         socket.connected = true;
         emitMock.mockReset();
+        setMusicHatedMock.mockReset();
+        setMusicLikedMock.mockReset();
+        toastErrorMock.mockReset();
     });
 
     it('flushes pending count events and reports successful delivery after ack', async () => {
@@ -101,5 +125,69 @@ describe('MusicListener playback recovery', () => {
         await MusicListener.recoverPlaybackCheckpoints();
 
         expect(await getPlaybackCheckpoint('session-1')).toEqual(createCheckpoint());
+    });
+});
+
+
+describe('MusicListener music preference writes', () => {
+    beforeEach(() => {
+        setMusicHatedMock.mockReset();
+        setMusicLikedMock.mockReset();
+        toastErrorMock.mockReset();
+    });
+
+    it('applies liked mutation response to connected handlers', async () => {
+        const onLike = vi.fn();
+        const listener = new MusicListener();
+        setMusicLikedMock.mockResolvedValue({
+            type: 'success',
+            setMusicLiked: {
+                id: 'track-1',
+                isLiked: true
+            }
+        });
+
+        listener.connect({
+            onLike,
+            onHate: vi.fn(),
+            onCount: vi.fn()
+        });
+
+        MusicListener.like('track-1', true);
+
+        await vi.waitFor(() => {
+            expect(onLike).toHaveBeenCalledWith({
+                id: 'track-1',
+                isLiked: true
+            });
+        });
+        listener.disconnect();
+    });
+
+    it('shows mutation errors without applying hated state', async () => {
+        const onHate = vi.fn();
+        const listener = new MusicListener();
+        setMusicHatedMock.mockResolvedValue({
+            type: 'error',
+            category: 'graphql',
+            errors: [{
+                code: 'MUSIC_NOT_FOUND',
+                message: 'Music not found.'
+            }]
+        });
+
+        listener.connect({
+            onLike: vi.fn(),
+            onHate,
+            onCount: vi.fn()
+        });
+
+        MusicListener.hate('track-1', true);
+
+        await vi.waitFor(() => {
+            expect(toastErrorMock).toHaveBeenCalledWith('Music not found.');
+        });
+        expect(onHate).not.toHaveBeenCalled();
+        listener.disconnect();
     });
 });

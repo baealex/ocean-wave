@@ -5,7 +5,7 @@ import { getAlbumCoverPath } from '~/modules/album-cover-cache';
 import { gql } from '~/modules/graphql';
 import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
 import { artistType } from '../artist';
-import { musicType } from '../music';
+import { musicType } from '../../features/music/graphql';
 
 export const albumType: string = gql`
     type Album {

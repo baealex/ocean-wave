@@ -1,5 +1,5 @@
 import { gql } from '~/modules/graphql';
-import { musicType } from '../../../schema/music';
+import { musicType } from '../../music/graphql';
 
 export const playlistType = gql`
     type Playlist {

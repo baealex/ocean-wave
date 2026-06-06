@@ -4,7 +4,7 @@ import models, { type Artist } from '~/models';
 import { gql } from '~/modules/graphql';
 import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
 import { albumType } from '../album';
-import { musicType } from '../music';
+import { musicType } from '../../features/music/graphql';
 
 export const artistType: string = gql`
     type Artist {

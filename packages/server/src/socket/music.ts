@@ -1,6 +1,12 @@
 import type { Socket } from 'socket.io';
 
 import models from '~/models';
+import {
+    setMusicHated,
+    setMusicLiked,
+    toggleMusicHated,
+    toggleMusicLiked
+} from '~/features/music/services/preferences';
 
 import { connectors } from './connectors';
 
@@ -66,57 +72,35 @@ export const musicListener = (socket: Socket) => {
     });
 };
 
-export const like = async ({ id = '' }) => {
+export const like = async ({ id = '', isLiked }: { id?: string; isLiked?: boolean }) => {
     if (!id) {
         return;
     }
 
-    let isLiked = false;
-    const $music = await models.music.findUnique({ where: { id: parseInt(id) } });
+    try {
+        const result = typeof isLiked === 'boolean'
+            ? await setMusicLiked({ id, isLiked })
+            : await toggleMusicLiked({ id });
 
-    if ($music) {
-        const $like = await models.musicLike.findFirst({ where: { musicId: $music.id } });
-
-        if ($like) {
-            isLiked = false;
-            await models.musicLike.delete({ where: { id: $like.id } });
-        } else {
-            isLiked = true;
-            await models.musicLike.create({ data: { musicId: $music.id } });
-        }
-
-        console.log('like update', $music.name, isLiked);
-        connectors.broadcast(MUSIC_LIKE, {
-            id: $music.id.toString(),
-            isLiked
-        });
+        connectors.broadcast(MUSIC_LIKE, result);
+    } catch (error) {
+        console.error(error);
     }
 };
 
-export const hate = async ({ id = '' }) => {
+export const hate = async ({ id = '', isHated }: { id?: string; isHated?: boolean }) => {
     if (!id) {
         return;
     }
 
-    let isHated = false;
-    const $music = await models.music.findUnique({ where: { id: parseInt(id) } });
+    try {
+        const result = typeof isHated === 'boolean'
+            ? await setMusicHated({ id, isHated })
+            : await toggleMusicHated({ id });
 
-    if ($music) {
-        const $hate = await models.musicHate.findFirst({ where: { musicId: $music.id } });
-
-        if ($hate) {
-            isHated = false;
-            await models.musicHate.delete({ where: { id: $hate.id } });
-        } else {
-            isHated = true;
-            await models.musicHate.create({ data: { musicId: $music.id } });
-        }
-
-        console.log('hate update', $music.name, isHated);
-        connectors.broadcast(MUSIC_HATE, {
-            id: $music.id.toString(),
-            isHated
-        });
+        connectors.broadcast(MUSIC_HATE, result);
+    } catch (error) {
+        console.error(error);
     }
 };
 

@@ -4,7 +4,7 @@ import path from 'path';
 import { parseBuffer } from '../modules/music-metadata';
 
 import models from '~/models';
-import { musicResolvers } from '~/schema/music';
+import { musicResolvers } from '~/features/music/graphql';
 
 jest.mock('../modules/file', () => ({ walk: jest.fn() }));
 
