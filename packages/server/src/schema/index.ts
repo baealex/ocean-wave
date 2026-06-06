@@ -2,7 +2,7 @@ import { makeExecutableSchema } from '@graphql-tools/schema';
 import { albumResolvers, albumTypeDefs } from './album';
 import { artistResolvers, artistTypeDefs } from './artist';
 import { musicResolvers, musicTypeDefs } from './music';
-import { playlistResolvers, playlistTypeDefs } from './playlist';
+import { playlistResolvers, playlistTypeDefs } from '../features/playlist/graphql';
 import { syncReportResolvers, syncReportTypeDefs } from './sync-report';
 import { tagResolvers, tagTypeDefs } from '../features/tag/graphql';
 

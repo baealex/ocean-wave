@@ -1,3 +1,14 @@
+import {
+    addMusicToPlaylist,
+    createPlaylist,
+    deletePlaylist,
+    moveMusicToPlaylist,
+    removeMusicFromPlaylist,
+    renamePlaylist,
+    reorderPlaylistMusics,
+    reorderPlaylists
+} from '~/api/playlists';
+
 import { socket } from './socket';
 import type { Listener } from './listener';
 
@@ -80,51 +91,35 @@ export class PlaylistListener implements Listener {
     }
 
     static create(name: string, musics?: string[]) {
-        socket.emit(PLAYLIST_CREATE, { name, musics });
+        void createPlaylist({ name, musicIds: musics ?? [] });
     }
 
     static update(id: string, name: string) {
-        socket.emit(PLAYLIST_UPDATE, {
-            id,
-            name
-        });
+        void renamePlaylist({ id, name });
     }
 
     static delete(id: string) {
-        socket.emit(PLAYLIST_DELETE, { id });
+        void deletePlaylist(id);
     }
 
     static changeOrder(ids: string[]) {
-        socket.emit(PLAYLIST_CHANGE_ORDER, { ids });
+        void reorderPlaylists(ids);
     }
 
     static addMusic(id: string, musicIds: string[]) {
-        socket.emit(PLAYLIST_ADD_MUSIC, {
-            id,
-            musicIds
-        });
+        void addMusicToPlaylist({ id, musicIds });
     }
 
     static moveMusic(fromId: string, toId: string, musicIds: string[]) {
-        socket.emit(PLAYLIST_MOVE_MUSIC, {
-            fromId,
-            toId,
-            musicIds
-        });
+        void moveMusicToPlaylist({ fromId, toId, musicIds });
     }
 
     static removeMusic(id: string, musicIds: string[]) {
-        socket.emit(PLAYLIST_REMOVE_MUSIC, {
-            id,
-            musicIds
-        });
+        void removeMusicFromPlaylist({ id, musicIds });
     }
 
     static changeMusicOrder(id: string, musicIds: string[]) {
-        socket.emit(PLAYLIST_CHANGE_MUSIC_ORDER, {
-            id,
-            musicIds
-        });
+        void reorderPlaylistMusics({ id, musicIds });
     }
 
     disconnect() {
