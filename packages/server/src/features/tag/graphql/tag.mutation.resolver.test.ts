@@ -78,6 +78,7 @@ describe('tag mutation resolvers', () => {
             name: 'Focus',
             normalizedName: 'focus',
             musicCount: 0,
+            smartViewCount: 0,
             originClientId: 'client-1'
         }));
     });

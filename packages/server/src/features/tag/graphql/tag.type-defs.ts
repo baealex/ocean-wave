@@ -8,6 +8,7 @@ export const tagType = gql`
 
     input SearchFilterInput {
         query: String!
+        unusedOnly: Boolean
     }
 
     type Tag {
@@ -19,6 +20,7 @@ export const tagType = gql`
         description: String
         order: Int!
         musicCount: Int!
+        smartViewCount: Int!
         createdAt: String!
         updatedAt: String!
     }

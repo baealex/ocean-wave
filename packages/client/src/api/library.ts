@@ -42,6 +42,7 @@ export function getMusics() {
                 'description',
                 'order',
                 'musicCount',
+                'smartViewCount',
                 'createdAt',
                 'updatedAt'
             ])

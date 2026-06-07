@@ -18,6 +18,7 @@ const TAG_FIELDS = `
     description
     order
     musicCount
+    smartViewCount
     createdAt
     updatedAt
 `;
@@ -33,12 +34,14 @@ export interface FetchTagsParams {
     query?: string;
     limit?: number;
     offset?: number;
+    unusedOnly?: boolean;
 }
 
 export function fetchTags({
     query = '',
     limit = 100,
-    offset = 0
+    offset = 0,
+    unusedOnly = false
 }: FetchTagsParams = {}) {
     return graphQuery<{
         allTags: {
@@ -46,7 +49,10 @@ export function fetchTags({
             tags: Tag[];
         };
     }, {
-        searchFilter: { query: string };
+        searchFilter: {
+            query: string;
+            unusedOnly?: boolean;
+        };
         pagination: { limit: number; offset: number };
     }>(
         `query FetchTags(
@@ -64,7 +70,9 @@ export function fetchTags({
             }
         }`,
         {
-            searchFilter: { query },
+            searchFilter: unusedOnly
+                ? { query, unusedOnly }
+                : { query },
             pagination: {
                 limit,
                 offset

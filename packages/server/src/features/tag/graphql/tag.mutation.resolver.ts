@@ -63,6 +63,11 @@ const toRealtimeTag = async (tag: Tag) => ({
             Music: { syncStatus: TRACK_SYNC_STATUS.active }
         }
     }),
+    smartViewCount: await models.smartViewTag.count({
+        where: {
+            tagId: tag.id
+        }
+    }),
     createdAt: tag.createdAt.toISOString(),
     updatedAt: tag.updatedAt.toISOString()
 });

@@ -47,6 +47,7 @@ const createTag = (originClientId?: string) => ({
     description: null,
     order: 0,
     musicCount: 1,
+    smartViewCount: 0,
     createdAt: '2026-06-07T00:00:00.000Z',
     updatedAt: '2026-06-07T00:00:00.000Z',
     originClientId

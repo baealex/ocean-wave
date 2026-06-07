@@ -4,6 +4,7 @@ import { cva } from 'class-variance-authority';
 import classNames from 'classnames';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { useModal } from '~/components/app/ModalProvider';
 import {
     Badge,
     Button,
@@ -26,8 +27,10 @@ import {
 import { queryKeys } from '~/api/query-keys';
 import { toast } from '~/modules/toast';
 import {
+    buildTagDeleteConfirmationMessage,
     createMusicTagFilterSearchParams,
     DEFAULT_MUSIC_TAG_FILTER_MODE,
+    getTagUsageSummary,
     type MusicTagFilterMode
 } from '~/modules/music-tags';
 import type { Tag } from '~/models/type';
@@ -77,10 +80,6 @@ const getGraphQueryErrorMessage = (response: {
     errors: { message: string }[];
 }) => response.errors[0]?.message ?? 'Tag request failed';
 
-const getSongCountLabel = (count: number) => {
-    return count === 1 ? '1 song' : `${count} songs`;
-};
-
 function TagListItem({
     tag,
     isSelectMode,
@@ -113,7 +112,9 @@ function TagListItem({
                     </Text>
                 )}
             </span>
-            <Badge>{getSongCountLabel(tag.musicCount)}</Badge>
+            <span className="flex min-w-0 flex-wrap justify-end gap-1">
+                <Badge>{getTagUsageSummary(tag)}</Badge>
+            </span>
         </>
     );
 
@@ -165,6 +166,7 @@ function TagListItem({
 
 export default function TagList() {
     const navigate = useNavigate();
+    const { confirm } = useModal();
     const queryClient = useQueryClient();
     const [searchParams, setSearchParams] = useSearchParams();
     const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -176,16 +178,19 @@ export default function TagList() {
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
     const query = searchParams.get('q') || '';
+    const unusedOnly = searchParams.get('unused') === '1';
     const deferredQuery = useDeferredValue(query.trim());
 
     const tagsQuery = useQuery({
         queryKey: queryKeys.tags.list({
             query: deferredQuery,
-            limit: TAG_LIST_LIMIT
+            limit: TAG_LIST_LIMIT,
+            unusedOnly
         }),
         queryFn: () => fetchTags({
             query: deferredQuery,
-            limit: TAG_LIST_LIMIT
+            limit: TAG_LIST_LIMIT,
+            unusedOnly
         })
     });
 
@@ -204,6 +209,21 @@ export default function TagList() {
                 nextSearchParams.set('q', value);
             } else {
                 nextSearchParams.delete('q');
+            }
+
+            nextSearchParams.delete('py');
+            return nextSearchParams;
+        }, { replace: true });
+    };
+
+    const handleUnusedOnlyToggle = () => {
+        setSearchParams((currentSearchParams) => {
+            const nextSearchParams = new URLSearchParams(currentSearchParams);
+
+            if (unusedOnly) {
+                nextSearchParams.delete('unused');
+            } else {
+                nextSearchParams.set('unused', '1');
             }
 
             nextSearchParams.delete('py');
@@ -307,12 +327,13 @@ export default function TagList() {
         })();
     };
 
-    const handleDelete = (tag: Tag) => {
-        const message = tag.musicCount > 0
-            ? `Delete “${tag.name}”? This will remove it from ${getSongCountLabel(tag.musicCount)}.`
-            : `Delete “${tag.name}”?`;
-
-        if (!window.confirm(message)) {
+    const handleDelete = async (tag: Tag) => {
+        if (!(await confirm({
+            title: `Delete “${tag.name}”?`,
+            description: buildTagDeleteConfirmationMessage(tag),
+            confirmLabel: 'Delete tag',
+            tone: 'danger'
+        }))) {
             return;
         }
 
@@ -330,7 +351,9 @@ export default function TagList() {
                 musicStore.removeTagFromMusics(response.deleteTag.id, response.deleteTag.affectedMusicIds);
                 setSelectedTagIds((currentTagIds) => currentTagIds.filter(id => id !== response.deleteTag.id));
                 invalidateTagLists();
-                toast.success('Deleted tag');
+                toast.success(response.deleteTag.affectedSmartViewIds.length > 0
+                    ? 'Deleted tag and updated saved views'
+                    : 'Deleted tag');
             } finally {
                 setPendingAction(null);
             }
@@ -362,6 +385,14 @@ export default function TagList() {
                                 disabled={pendingAction === 'create'}
                                 onClick={() => setIsCreateDialogOpen(true)}>
                                 <Icon.Plus /> Create
+                            </Button>
+                            <Button
+                                aria-pressed={unusedOnly}
+                                className={unusedOnly
+                                    ? 'border-[var(--b-color-focus)] bg-[var(--b-color-active)] !text-[var(--b-color-point)] [&_svg]:!text-[var(--b-color-point)]'
+                                    : undefined}
+                                onClick={handleUnusedOnlyToggle}>
+                                <Icon.Filter /> Unused
                             </Button>
                             <Button onClick={handleStartSelect}>
                                 <Icon.CheckBox /> Select
@@ -422,7 +453,7 @@ export default function TagList() {
                 ) : (
                     <div className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
                         <Text as="p" variant="muted" size="sm">
-                            No tags.
+                            {unusedOnly ? 'No unused tags.' : 'No tags.'}
                         </Text>
                     </div>
                 )

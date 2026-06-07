@@ -11,6 +11,7 @@ import { fetchTags } from '~/api/tags';
 import { queryKeys } from '~/api/query-keys';
 import {
     DEFAULT_MUSIC_TAG_FILTER_MODE,
+    pruneUnavailableMusicTagIds,
     type MusicTagFilterMode
 } from '~/modules/music-tags';
 
@@ -50,7 +51,23 @@ export default function MusicTagFilterPanelContent({
     const tags = tagsQuery.data?.type === 'success'
         ? tagsQuery.data.allTags.tags
         : [];
+    const hasCompleteTagList = tagsQuery.data?.type === 'success'
+        && tagsQuery.data.allTags.totalCount === tags.length;
     const selectedSet = new Set(draftTagIds);
+
+    useEffect(() => {
+        if (!hasCompleteTagList) {
+            return;
+        }
+
+        setDraftTagIds((currentTagIds) => {
+            const nextTagIds = pruneUnavailableMusicTagIds(currentTagIds, tags.map(tag => tag.id));
+
+            return nextTagIds.length === currentTagIds.length
+                ? currentTagIds
+                : nextTagIds;
+        });
+    }, [hasCompleteTagList, tags]);
 
     const toggleTag = (tagId: string) => {
         setDraftTagIds((currentTagIds) => {

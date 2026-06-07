@@ -23,16 +23,19 @@ export const queryKeys = {
         list: ({
             query = '',
             limit = 100,
-            offset = 0
+            offset = 0,
+            unusedOnly = false
         }: {
             query?: string;
             limit?: number;
             offset?: number;
+            unusedOnly?: boolean;
         } = {}) => ['tags', {
             scope: 'list',
             query,
             limit,
-            offset
+            offset,
+            unusedOnly
         }] as const
     }
 };

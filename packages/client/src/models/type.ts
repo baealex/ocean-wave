@@ -30,6 +30,7 @@ export interface Tag {
     description: string | null;
     order: number;
     musicCount: number;
+    smartViewCount: number;
     createdAt: string;
     updatedAt: string;
 }
