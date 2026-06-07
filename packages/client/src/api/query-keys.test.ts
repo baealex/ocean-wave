@@ -26,7 +26,18 @@ describe('queryKeys', () => {
                 scope: 'list',
                 query: 'focus',
                 limit: 20,
-                offset: 10
+                offset: 10,
+                unusedOnly: false
+            }
+        ]);
+        expect(queryKeys.tags.list({ unusedOnly: true })).toEqual([
+            'tags',
+            {
+                scope: 'list',
+                query: '',
+                limit: 100,
+                offset: 0,
+                unusedOnly: true
             }
         ]);
     });

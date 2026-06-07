@@ -64,6 +64,36 @@ describe('tag API requests', () => {
         expect(payload.query).not.toContain('focus');
     });
 
+    it('fetches unused tags through GraphQL variables', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({
+            data: {
+                data: {
+                    allTags: {
+                        totalCount: 0,
+                        tags: []
+                    }
+                }
+            }
+        });
+
+        await fetchTags({
+            unusedOnly: true
+        });
+
+        const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
+
+        expect(payload.variables).toEqual({
+            searchFilter: {
+                query: '',
+                unusedOnly: true
+            },
+            pagination: {
+                limit: 100,
+                offset: 0
+            }
+        });
+    });
+
     it('renames a tag through GraphQL variables', async () => {
         const post = vi.spyOn(axios, 'post').mockResolvedValue({
             data: {
@@ -99,7 +129,7 @@ describe('tag API requests', () => {
                     deleteTag: {
                         id: '7',
                         affectedMusicIds: ['1'],
-                        affectedSmartViewIds: []
+                        affectedSmartViewIds: ['3']
                     }
                 }
             }

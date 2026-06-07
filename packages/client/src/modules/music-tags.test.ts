@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    buildTagDeleteConfirmationMessage,
     createMusicTagFilterSearchParams,
     filterMusicsByTagIds,
     getMusicTagFilterLabel,
+    getTagUsageSummary,
+    isUnusedTag,
     parseMusicTagIdsParam,
+    pruneUnavailableMusicTagIds,
     resolveMusicTagFilterMode
 } from './music-tags';
 
@@ -42,6 +46,43 @@ describe('music tag filters', () => {
         expect(getMusicTagFilterLabel(0)).toBe('Tags');
         expect(getMusicTagFilterLabel(1)).toBe('1 Tag');
         expect(getMusicTagFilterLabel(2)).toBe('2 Tags');
+    });
+
+    it('prunes deleted tag ids from draft filter state', () => {
+        expect(pruneUnavailableMusicTagIds(['1', '2', '3'], ['1', '3'])).toEqual(['1', '3']);
+    });
+
+    it('summarizes tag usage across music and saved views', () => {
+        expect(getTagUsageSummary({
+            musicCount: 2,
+            smartViewCount: 1
+        })).toBe('2 songs · 1 saved view');
+        expect(getTagUsageSummary({
+            musicCount: 0,
+            smartViewCount: 0
+        })).toBe('Unused');
+    });
+
+    it('detects unused tags across music and saved views', () => {
+        expect(isUnusedTag({
+            musicCount: 0,
+            smartViewCount: 0
+        })).toBe(true);
+        expect(isUnusedTag({
+            musicCount: 0,
+            smartViewCount: 1
+        })).toBe(false);
+    });
+
+    it('builds explicit delete confirmation copy', () => {
+        expect(buildTagDeleteConfirmationMessage({
+            musicCount: 3,
+            smartViewCount: 2
+        })).toContain('3 songs and 2 saved views');
+        expect(buildTagDeleteConfirmationMessage({
+            musicCount: 0,
+            smartViewCount: 0
+        })).toContain('This tag is unused');
     });
 
     it('builds library search params for tag filters', () => {

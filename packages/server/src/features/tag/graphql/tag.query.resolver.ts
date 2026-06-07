@@ -1,6 +1,7 @@
 import type { IResolvers } from '@graphql-tools/utils';
 
 import models, { type Prisma } from '~/models';
+import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
 
 import {
     normalizeTagName,
@@ -14,6 +15,7 @@ interface PaginationInput {
 
 interface SearchFilterInput {
     query: string;
+    unusedOnly?: boolean;
 }
 
 type TagQueryResolvers = NonNullable<IResolvers['Query']>;
@@ -43,6 +45,7 @@ export const tagQueryResolvers: TagQueryResolvers = {
         const query = searchFilter?.query ?? '';
         const hasQuery = query.trim().length > 0;
         const normalizedQuery = hasQuery ? normalizeTagName(query) : null;
+        const unusedOnly = searchFilter?.unusedOnly === true;
         const { take, skip } = resolvePagination(pagination);
 
         if (hasQuery && !normalizedQuery) {
@@ -56,6 +59,18 @@ export const tagQueryResolvers: TagQueryResolvers = {
             scopeKey: TAG_SCOPE_KEY,
             ...(normalizedQuery
                 ? { normalizedName: { contains: normalizedQuery.normalizedName } }
+                : {}),
+            ...(unusedOnly
+                ? {
+                    MusicTag: {
+                        none: {
+                            Music: { syncStatus: TRACK_SYNC_STATUS.active }
+                        }
+                    },
+                    SmartViewTag: {
+                        none: {}
+                    }
+                }
                 : {})
         };
         const tags = models.tag.findMany({

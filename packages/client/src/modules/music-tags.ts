@@ -6,6 +6,11 @@ interface MusicTagFilterTarget {
     }[];
 }
 
+interface TagUsageTarget {
+    musicCount: number;
+    smartViewCount?: number;
+}
+
 const MUSIC_TAG_FILTER_MODES = new Set<MusicTagFilterMode>(['all', 'any']);
 
 export const DEFAULT_MUSIC_TAG_FILTER_MODE: MusicTagFilterMode = 'all';
@@ -59,6 +64,73 @@ export const getMusicTagFilterLabel = (selectedCount: number) => {
     }
 
     return selectedCount === 1 ? '1 Tag' : `${selectedCount} Tags`;
+};
+
+export const pruneUnavailableMusicTagIds = (
+    tagIds: string[],
+    availableTagIds: Iterable<string>
+) => {
+    const availableTagIdSet = new Set(availableTagIds);
+
+    return tagIds.filter(tagId => availableTagIdSet.has(tagId));
+};
+
+const getCountLabel = (count: number, singular: string, plural: string) => {
+    return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
+};
+
+export const getTagUsageSummary = ({
+    musicCount,
+    smartViewCount = 0
+}: Pick<TagUsageTarget, 'musicCount' | 'smartViewCount'>) => {
+    const usages: string[] = [];
+
+    if (musicCount > 0) {
+        usages.push(getCountLabel(musicCount, 'song', 'songs'));
+    }
+
+    if (smartViewCount > 0) {
+        usages.push(getCountLabel(smartViewCount, 'saved view', 'saved views'));
+    }
+
+    return usages.length > 0 ? usages.join(' · ') : 'Unused';
+};
+
+export const buildTagDeleteConfirmationMessage = ({
+    musicCount,
+    smartViewCount = 0
+}: Pick<TagUsageTarget, 'musicCount' | 'smartViewCount'>) => {
+    const affectedTargets: string[] = [];
+
+    if (musicCount > 0) {
+        affectedTargets.push(`${getCountLabel(musicCount, 'song', 'songs')}`);
+    }
+
+    if (smartViewCount > 0) {
+        affectedTargets.push(`${getCountLabel(smartViewCount, 'saved view', 'saved views')}`);
+    }
+
+    if (affectedTargets.length === 0) {
+        return 'This tag is unused. This cannot be undone.';
+    }
+
+    const messageLines = [
+        `This will remove the tag from ${affectedTargets.join(' and ')}.`,
+        'This cannot be undone.'
+    ];
+
+    if (smartViewCount > 0) {
+        messageLines.splice(1, 0, 'Saved views using this tag may change their results.');
+    }
+
+    return messageLines.join(' ');
+};
+
+export const isUnusedTag = ({
+    musicCount,
+    smartViewCount = 0
+}: Pick<TagUsageTarget, 'musicCount' | 'smartViewCount'>) => {
+    return musicCount === 0 && smartViewCount === 0;
 };
 
 export const createMusicTagFilterSearchParams = (

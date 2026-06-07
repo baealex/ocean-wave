@@ -76,4 +76,32 @@ describe('tag field resolvers', () => {
 
         expect(musicCount).toBe(1);
     });
+
+    it('counts smart views using the tag', async () => {
+        const tag = await models.tag.create({
+            data: {
+                name: 'Focus',
+                normalizedName: 'focus'
+            }
+        });
+        const smartView = await models.smartView.create({
+            data: {
+                name: 'Focus View',
+                normalizedName: 'focus view'
+            }
+        });
+
+        await models.smartViewTag.create({
+            data: {
+                smartViewId: smartView.id,
+                tagId: tag.id
+            }
+        });
+
+        const smartViewCount = await (tagFieldResolvers as {
+            smartViewCount: (tag: Tag) => Promise<number>;
+        }).smartViewCount(tag);
+
+        expect(smartViewCount).toBe(1);
+    });
 });

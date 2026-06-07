@@ -19,6 +19,7 @@ const createTag = (overrides?: Partial<Tag>): Tag => ({
     description: null,
     order: 0,
     musicCount: 1,
+    smartViewCount: 0,
     createdAt: '2026-06-07T00:00:00.000Z',
     updatedAt: '2026-06-07T00:00:00.000Z',
     ...overrides
@@ -96,4 +97,3 @@ describe('createTagNotificationHandlers', () => {
         expect(removeTagFromMusics).toHaveBeenCalledWith('tag-2', ['music-1', 'music-2']);
     });
 });
-
