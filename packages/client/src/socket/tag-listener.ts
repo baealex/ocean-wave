@@ -13,7 +13,7 @@ export const TAG_LIST_INVALIDATED = 'tag:list-invalidated';
 type TagNotificationPayload = Tag & OriginClientNotificationPayload;
 
 export interface TagListInvalidatedPayload extends OriginClientNotificationPayload {
-    reason: 'tag-deleted' | 'music-tags-changed';
+    reason: 'tag-deleted' | 'music-tags-changed' | 'tag-views-changed';
     affectedTagIds?: string[];
     affectedMusicIds?: string[];
     affectedSmartViewIds?: string[];

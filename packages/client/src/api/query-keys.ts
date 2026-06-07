@@ -37,5 +37,9 @@ export const queryKeys = {
             offset,
             unusedOnly
         }] as const
+    },
+    tagViews: {
+        all: () => ['tag-views'] as const,
+        list: () => ['tag-views', { scope: 'list' }] as const
     }
 };

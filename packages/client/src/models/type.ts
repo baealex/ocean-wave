@@ -35,6 +35,19 @@ export interface Tag {
     updatedAt: string;
 }
 
+export interface TagView {
+    id: string;
+    scopeKey: string;
+    name: string;
+    normalizedName: string;
+    tagMode: 'all' | 'any';
+    sortKey: string | null;
+    tags: Tag[];
+    tagIds: string[];
+    createdAt: string;
+    updatedAt: string;
+}
+
 export interface Album {
     id: string;
     name: string;

@@ -93,7 +93,36 @@ describe('createTagNotificationHandlers', () => {
             queryKey: ['tags'],
             exact: false
         });
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['tag-views'],
+            exact: false
+        });
         expect(removeTagFromMusics).toHaveBeenCalledWith('tag-1', ['music-1', 'music-2']);
         expect(removeTagFromMusics).toHaveBeenCalledWith('tag-2', ['music-1', 'music-2']);
+    });
+
+    it('invalidates tag views after view change notifications', () => {
+        const handlers = createTagNotificationHandlers({
+            queryClient: { invalidateQueries },
+            musicStore: {
+                replaceTag,
+                removeTagFromMusics
+            }
+        });
+
+        handlers.onListInvalidated({
+            reason: 'tag-views-changed',
+            affectedSmartViewIds: ['view-1']
+        });
+
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['tags'],
+            exact: false
+        });
+        expect(invalidateQueries).toHaveBeenCalledWith({
+            queryKey: ['tag-views'],
+            exact: false
+        });
+        expect(removeTagFromMusics).not.toHaveBeenCalled();
     });
 });
