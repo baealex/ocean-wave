@@ -14,6 +14,7 @@ import Loading from '../shared/Loading';
 import PageContainer from '../shared/PageContainer';
 import type { PageContainerProps } from '../shared/PageContainer';
 import PanelProvider from '../app/PanelProvider';
+import ToastProvider from '../app/ToastProvider';
 import {
     isSubPagePath,
     resolveSubPagePresentation,
@@ -76,6 +77,7 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
     const subPagePresentation = resolveSubPagePresentation(location.pathname);
     const hasSubPageHeader = shouldRenderSubPageHeader(location.pathname);
     const hideMiniPlayer = shouldHideMiniPlayer(location.pathname);
+    const shouldAvoidMiniPlayerForToast = !disablePlayer && !hideMiniPlayer;
     const pageFrame = resolvePageFrame(matches);
 
     const renderOutlet = () => {
@@ -180,6 +182,7 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                 )}
             </div>
             {!disablePlayer && !hideMiniPlayer && <MusicPlayer />}
+            <ToastProvider avoidMiniPlayer={shouldAvoidMiniPlayerForToast} />
             </main>
         </PanelProvider>
     );
