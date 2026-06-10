@@ -85,7 +85,7 @@ const EqualizerSlider = ({
 
     if (isVertical) {
         return (
-            <div className="flex h-full min-h-[22rem] min-w-0 flex-col items-center justify-between gap-3 rounded-[var(--b-radius-lg)] px-1 py-2">
+            <div className="flex h-full min-h-[352px] min-w-0 flex-col items-center justify-between gap-3 rounded-[var(--b-radius-lg)] px-1 py-2">
                 <div className="flex min-w-0 flex-col items-center gap-1 text-center">
                     <span className="max-w-full truncate text-sm font-semibold text-[var(--b-color-text)]">{displayName}</span>
                     <span className="max-w-full truncate text-xs text-[var(--b-color-text-muted)]">
@@ -111,7 +111,7 @@ const EqualizerSlider = ({
     }
 
     return (
-        <div className="grid grid-cols-[minmax(7rem,0.8fr)_minmax(8rem,1.5fr)_auto] items-center gap-4 py-3 max-md:grid-cols-1 max-md:gap-2">
+        <div className="grid grid-cols-[minmax(112px,0.8fr)_minmax(128px,1.5fr)_auto] items-center gap-4 py-3 max-md:grid-cols-1 max-md:gap-2">
             <div className="flex min-w-0 flex-col gap-1">
                 <span className="text-sm font-semibold text-[var(--b-color-text)]">{displayName}</span>
                 <span className="text-xs text-[var(--b-color-text-muted)]">

@@ -55,7 +55,7 @@ const IconTextButton = React.forwardRef<HTMLButtonElement, IconTextButtonProps>(
             {icon && <span className="inline-flex shrink-0 items-center justify-start [&_svg]:h-4 [&_svg]:w-4">{icon}</span>}
             <span className="flex min-w-0 flex-col gap-0.5">
                 <span className="truncate text-inherit">{label}</span>
-                {meta && <span className={cx('truncate text-[0.6875rem] font-normal text-[var(--b-color-text-tertiary)]', variant === 'primary' && 'text-black/60')}>{meta}</span>}
+                {meta && <span className={cx('truncate text-[11px] font-normal text-[var(--b-color-text-tertiary)]', variant === 'primary' && 'text-black/60')}>{meta}</span>}
             </span>
         </button>
     );

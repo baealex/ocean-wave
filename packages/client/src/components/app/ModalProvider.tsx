@@ -11,12 +11,12 @@ import { Button, Text } from '~/components/shared';
 
 const modalClass = {
     overlay: 'fixed inset-0 z-[120] bg-[var(--b-color-overlay-default)] animate-[fade-in_180ms_ease]',
-    content: 'fixed left-1/2 top-1/2 z-[121] w-[min(calc(100vw_-_1.5rem),26rem)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-modal)] p-3.5 text-[var(--b-color-text)] shadow-[0_12px_28px_rgba(2,8,11,0.22)] focus:outline-none max-sm:w-[min(calc(100vw_-_1rem),26rem)]',
+    content: 'fixed left-1/2 top-1/2 z-[121] w-[min(calc(100vw_-_24px),416px)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-modal)] p-3.5 text-[var(--b-color-text)] shadow-[0_12px_28px_rgba(2,8,11,0.22)] focus:outline-none max-sm:w-[min(calc(100vw_-_16px),416px)]',
     header: 'flex flex-col gap-2',
     title: 'tracking-normal',
     description: 'leading-[1.45]',
     actions: 'mt-4 flex justify-end gap-2.5 max-sm:flex-col-reverse',
-    button: 'min-w-[5.5rem] max-sm:w-full'
+    button: 'min-w-[88px] max-sm:w-full'
 };
 
 const AlertModal = ({ open, options, onClose }: AlertComponentProps) => {

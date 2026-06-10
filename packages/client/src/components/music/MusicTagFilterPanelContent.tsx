@@ -92,7 +92,7 @@ export default function MusicTagFilterPanelContent({
                     <Icon.DoubleCheck />
                     <span className="flex min-w-0 flex-col gap-0.5">
                         <span>AND filter</span>
-                        <span className="text-[0.6875rem] font-medium leading-tight text-[var(--b-color-text-muted)]">
+                        <span className="text-[11px] font-medium leading-tight text-[var(--b-color-text-muted)]">
                             Music with every selected tag
                         </span>
                     </span>
@@ -107,7 +107,7 @@ export default function MusicTagFilterPanelContent({
                     <Icon.Check />
                     <span className="flex min-w-0 flex-col gap-0.5">
                         <span>OR filter</span>
-                        <span className="text-[0.6875rem] font-medium leading-tight text-[var(--b-color-text-muted)]">
+                        <span className="text-[11px] font-medium leading-tight text-[var(--b-color-text-muted)]">
                             Music with any selected tag
                         </span>
                     </span>

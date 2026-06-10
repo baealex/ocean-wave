@@ -50,11 +50,11 @@ export const SettingSection = ({ title, description, icon, children }: SettingSe
         <section className="p-0">
             <div className="mb-[var(--b-spacing-md)] grid grid-cols-1 gap-[var(--b-spacing-xs)]">
                 <Text as="h3" size="md" weight="semibold" className="m-0 flex items-center gap-[var(--b-spacing-sm)] text-[var(--b-color-text)] tracking-[-0.015em]">
-                    {icon && <span className="flex w-[1.2rem] items-center text-[var(--b-color-point-light)] [&_svg]:h-[1.1rem] [&_svg]:w-[1.1rem]">{icon}</span>}
+                    {icon && <span className="flex w-[19.2px] items-center text-[var(--b-color-point-light)] [&_svg]:h-[17.6px] [&_svg]:w-[17.6px]">{icon}</span>}
                     <span>{title}</span>
                 </Text>
                 {description && (
-                    <Text as="p" variant="secondary" size="sm" className="max-w-[42rem] leading-[1.45]">
+                    <Text as="p" variant="secondary" size="sm" className="max-w-[672px] leading-[1.45]">
                         {description}
                     </Text>
                 )}

@@ -31,7 +31,7 @@ const EqualizerPreset = ({
 
     return (
         <div className="w-full">
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] gap-2 max-sm:grid-cols-1">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-2 max-sm:grid-cols-1">
                 {presets.map((preset) => (
                     <div key={preset.id} className="min-w-0 overflow-hidden rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] transition-[border-color,background-color] duration-150 hover:border-[var(--b-color-border)]">
                         <button

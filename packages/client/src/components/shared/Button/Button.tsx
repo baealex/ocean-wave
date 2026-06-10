@@ -10,13 +10,14 @@ const buttonVariants = cva(
         'transition-[color,background-color,border-color,transform]',
         'focus-visible:border-[var(--b-color-focus)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--b-color-focus-ring)]',
         'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40',
-        '[&_svg]:h-[0.95rem] [&_svg]:w-[0.95rem] [&_svg]:shrink-0'
+        '[&_svg]:h-[15.2px] [&_svg]:w-[15.2px] [&_svg]:shrink-0'
     ],
     {
         variants: {
             variant: {
                 primary: 'border-[var(--b-color-point)] bg-[var(--b-color-point)] text-[var(--b-color-background)] hover:border-[var(--b-color-point-dark)] hover:bg-[var(--b-color-point-dark)] hover:text-[var(--b-color-background)]',
                 secondary: 'border-transparent bg-[var(--b-color-secondary-button)] text-[var(--b-color-text-secondary)] hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
+                ghost: 'border-transparent bg-transparent text-[var(--b-color-text-secondary)] hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
                 danger: 'border-transparent bg-red-500/15 text-red-100/90 hover:bg-red-400/20 hover:text-[var(--b-color-text)]'
             },
             size: {

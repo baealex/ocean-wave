@@ -99,7 +99,7 @@ export const SynchronizationSection = ({ onSyncMusic }: SynchronizationSectionPr
                 divider={!latestSyncReport}>
                 <div>
                     {progressMessage && (
-                        <div className="mb-[var(--b-spacing-sm)] w-[min(18rem,100%)]">
+                        <div className="mb-[var(--b-spacing-sm)] w-[min(288px,100%)]">
                             <div className="mb-[var(--b-spacing-sm)] h-[3px] overflow-hidden rounded-full bg-[var(--b-color-hover)]">
                                 <div
                                     className={`h-full w-[30%] rounded-full bg-[var(--b-gradient-primary)] ${isSyncing ? 'animate-[progress_1.5s_ease-in-out_infinite]' : ''}`}
@@ -123,7 +123,7 @@ export const SynchronizationSection = ({ onSyncMusic }: SynchronizationSectionPr
             </SettingItem>
 
             {latestSyncReport && (
-                <div className="flex min-h-[4.25rem] items-center justify-between gap-[var(--b-spacing-md)] border-b border-[var(--b-color-border-subtle)] py-[var(--b-spacing-md)] max-[720px]:flex-col max-[720px]:items-start">
+                <div className="flex min-h-[68px] items-center justify-between gap-[var(--b-spacing-md)] border-b border-[var(--b-color-border-subtle)] py-[var(--b-spacing-md)] max-[720px]:flex-col max-[720px]:items-start">
                     <div className="flex min-w-0 flex-col gap-1">
                         <Text as="span" size="sm" weight="semibold">
                             Latest sync

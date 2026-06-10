@@ -17,9 +17,9 @@ export default function AuthGate({
 }: AuthGateProps) {
     return (
         <div className="grid min-h-dvh w-full place-items-center overflow-auto bg-[var(--b-gradient-page)] p-6 max-sm:p-4">
-            <section className="w-[min(27.5rem,calc(100vw-2rem))] rounded-[var(--b-radius-2xl)] border border-[var(--b-color-border-subtle)] bg-[var(--b-gradient-layer)] p-[var(--b-spacing-xl)] shadow-none [backdrop-filter:var(--b-backdrop-filter-panel-background)] max-sm:w-full max-sm:rounded-[var(--b-radius-xl)] max-sm:p-[var(--b-spacing-lg)]">
-                <div className="mb-[1.125rem] flex items-center gap-3">
-                    <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[0.875rem] bg-[var(--b-gradient-primary)] text-[var(--b-color-background)] shadow-none [&_svg]:h-[1.375rem] [&_svg]:w-[1.375rem]" aria-hidden="true">
+            <section className="w-[min(440px,calc(100vw-32px))] rounded-[var(--b-radius-2xl)] border border-[var(--b-color-border-subtle)] bg-[var(--b-gradient-layer)] p-[var(--b-spacing-xl)] shadow-none [backdrop-filter:var(--b-backdrop-filter-panel-background)] max-sm:w-full max-sm:rounded-[var(--b-radius-xl)] max-sm:p-[var(--b-spacing-lg)]">
+                <div className="mb-[18px] flex items-center gap-3">
+                    <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-[var(--b-gradient-primary)] text-[var(--b-color-background)] shadow-none [&_svg]:h-[22px] [&_svg]:w-[22px]" aria-hidden="true">
                         <Music />
                     </span>
                     <Text as="span" variant="secondary" size="xs" weight="bold" className="inline-flex text-[var(--b-color-point-light)] tracking-normal uppercase">
@@ -28,7 +28,7 @@ export default function AuthGate({
                             : 'Session Check Failed'}
                     </Text>
                 </div>
-                <Text as="h1" size="2xl" weight="bold" className="m-0 text-[clamp(2rem,5vw,2.5rem)] leading-[1.12] tracking-normal text-[var(--b-color-text)]">
+                <Text as="h1" size="2xl" weight="bold" className="m-0 text-[clamp(32px,5vw,40px)] leading-[1.12] tracking-normal text-[var(--b-color-text)]">
                     {appShell.brand.name}
                 </Text>
                 <Text as="p" variant="secondary" className="mt-[var(--b-spacing-md)] mb-0 leading-[1.6] text-[var(--b-color-text-secondary)]">

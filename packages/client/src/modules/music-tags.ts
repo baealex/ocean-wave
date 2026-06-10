@@ -90,7 +90,7 @@ export const getTagUsageSummary = ({
     }
 
     if (smartViewCount > 0) {
-        usages.push(getCountLabel(smartViewCount, 'saved view', 'saved views'));
+        usages.push(getCountLabel(smartViewCount, 'saved filter', 'saved filters'));
     }
 
     return usages.length > 0 ? usages.join(' · ') : 'Unused';
@@ -107,7 +107,7 @@ export const buildTagDeleteConfirmationMessage = ({
     }
 
     if (smartViewCount > 0) {
-        affectedTargets.push(`${getCountLabel(smartViewCount, 'saved view', 'saved views')}`);
+        affectedTargets.push(`${getCountLabel(smartViewCount, 'saved filter', 'saved filters')}`);
     }
 
     if (affectedTargets.length === 0) {
@@ -120,7 +120,7 @@ export const buildTagDeleteConfirmationMessage = ({
     ];
 
     if (smartViewCount > 0) {
-        messageLines.splice(1, 0, 'Saved views using this tag may change their results.');
+        messageLines.splice(1, 0, 'Saved filters using this tag may change their results.');
     }
 
     return messageLines.join(' ');

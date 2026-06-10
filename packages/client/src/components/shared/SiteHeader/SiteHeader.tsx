@@ -74,7 +74,7 @@ export default function SiteHeader() {
                                                 'relative flex min-h-11 items-center gap-[var(--b-spacing-sm)] rounded-full border border-transparent px-3.5 text-sm font-medium no-underline transition-[color,background-color,border-color] duration-150',
                                                 'text-[var(--b-color-text-secondary)] hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-surface-subtle)] hover:text-[var(--b-color-text)]',
                                                 'lg:rounded-[var(--b-radius-lg)] lg:text-[var(--b-color-text-tertiary)] lg:before:absolute lg:before:left-0 lg:before:h-[18px] lg:before:w-[3px] lg:before:rounded-full lg:before:bg-transparent lg:before:content-[""]',
-                                                '[&_svg]:h-[1.18rem] [&_svg]:w-[1.18rem] [&_svg]:shrink-0 [&_svg]:transition-colors [&_svg]:duration-150',
+                                                '[&_svg]:h-[18.88px] [&_svg]:w-[18.88px] [&_svg]:shrink-0 [&_svg]:transition-colors [&_svg]:duration-150',
                                                 active && 'border-[var(--b-color-border-subtle)] bg-[var(--b-color-active)] !text-[var(--b-color-point)] [&_span]:!text-[var(--b-color-point)] [&_svg]:!text-[var(--b-color-point)] lg:before:bg-[var(--b-color-point)]'
                                             )}>
                                             <item.icon />

@@ -18,7 +18,7 @@ interface SelectProps {
 }
 
 const triggerClass = cva([
-    'inline-flex min-h-9 w-[min(100%,20rem)] min-w-56 items-center justify-between gap-3 rounded-[var(--b-radius-md)]',
+    'inline-flex min-h-9 w-[min(100%,320px)] min-w-56 items-center justify-between gap-3 rounded-[var(--b-radius-md)]',
     'border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] px-3 py-1.5',
     'text-xs font-semibold text-[var(--b-color-text-secondary)] transition-[border-color,background-color,box-shadow,color] duration-150',
     'hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
@@ -27,8 +27,8 @@ const triggerClass = cva([
 ]);
 
 const contentClass = cva([
-    'z-40 max-h-[min(18rem,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)]',
-    'max-w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)]',
+    'z-40 max-h-[min(288px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)]',
+    'max-w-[min(384px,calc(100vw-32px))] overflow-hidden rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)]',
     'bg-[var(--b-color-surface-dropdown)] text-[var(--b-color-text)] shadow-[var(--b-card-shadow-sub)] animate-[fade-in_140ms_ease]'
 ]);
 
@@ -69,7 +69,7 @@ export default function Select({ selected, options, onChange }: SelectProps) {
                                 <SelectPrimitive.ItemText>
                                     {option.label}
                                 </SelectPrimitive.ItemText>
-                                <SelectPrimitive.ItemIndicator className="absolute right-3.5 top-1/2 flex -translate-y-1/2 items-center justify-center text-[var(--b-color-point)] [&_svg]:h-[0.9375rem] [&_svg]:w-[0.9375rem]">
+                                <SelectPrimitive.ItemIndicator className="absolute right-3.5 top-1/2 flex -translate-y-1/2 items-center justify-center text-[var(--b-color-point)] [&_svg]:h-[15px] [&_svg]:w-[15px]">
                                     <Icon.Check />
                                 </SelectPrimitive.ItemIndicator>
                             </SelectPrimitive.Item>

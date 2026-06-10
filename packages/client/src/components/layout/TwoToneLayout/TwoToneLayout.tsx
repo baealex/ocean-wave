@@ -16,7 +16,7 @@ const TwoToneLayout = ({
     children
 }: TwoToneLayoutProps) => {
     return (
-        <div className="relative min-h-full">
+        <div className="relative min-h-full bg-[var(--b-color-background)]">
             <div className="relative z-[3] border-b border-[var(--b-color-border-subtle)]">
                 <div className="relative z-[1] px-[var(--b-spacing-lg)] py-[calc(var(--b-spacing-2xl)+var(--b-spacing-lg))]">
                     {header}

@@ -5,7 +5,7 @@ import type {
 
 import classNames from 'classnames';
 
-import { Image, Text } from '~/components/shared';
+import { Image, SelectionCheckButton, Text } from '~/components/shared';
 import * as Icon from '~/icon';
 
 import type { Music } from '~/models/type';
@@ -54,20 +54,19 @@ export default function QueueItem({
             data-queue-index={index}
             style={style}
             className={cx(
-                'flex min-h-[4.25rem] items-center gap-2 rounded-2xl border border-transparent bg-[var(--b-color-surface-subtle)] transition-[background-color,border-color,opacity] duration-150 hover:bg-[linear-gradient(90deg,var(--b-color-surface-subtle),var(--b-color-surface-subtle)),var(--b-gradient-row-hover)] max-sm:min-h-[4.125rem] max-sm:gap-1.5',
+                'flex min-h-[68px] items-center gap-2 rounded-2xl border border-transparent bg-[var(--b-color-surface-subtle)] transition-[background-color,border-color,opacity] duration-150 hover:bg-[linear-gradient(90deg,var(--b-color-surface-subtle),var(--b-color-surface-subtle)),var(--b-gradient-row-hover)] max-sm:min-h-[66px] max-sm:gap-1.5',
                 queueItemToneClass[tone],
                 isSelected && 'bg-[var(--b-color-surface-item)]',
                 className
             )}>
             {isSelectMode ? (
-                <button
-                    type="button"
-                    className={cx(iconButtonClass, 'ml-1', isSelected && '!bg-[rgba(139,92,246,0.18)] !text-[var(--b-color-point-light)] hover:!bg-[rgba(139,92,246,0.24)] hover:!text-[var(--b-color-point-light)] [&_svg]:fill-none [&_svg]:text-current')}
+                <SelectionCheckButton
+                    selected={isSelected}
+                    className="ml-1"
                     aria-label={isSelected ? `Unselect ${music.name}` : `Select ${music.name}`}
                     aria-pressed={isSelected}
-                    onClick={onSelect}>
-                    <Icon.CheckBox />
-                </button>
+                    onClick={onSelect}
+                />
             ) : (
                 <button
                     type="button"
@@ -90,7 +89,7 @@ export default function QueueItem({
                     }
                 }}>
                 <Image
-                    className="h-[3.25rem] w-[3.25rem] shrink-0 rounded-[0.95rem] object-cover shadow-[0_10px_20px_rgba(2,8,11,0.12)] max-sm:h-12 max-sm:w-12"
+                    className="h-[52px] w-[52px] shrink-0 rounded-[15.2px] object-cover shadow-[0_10px_20px_rgba(2,8,11,0.12)] max-sm:h-12 max-sm:w-12"
                     src={music.album.cover}
                     alt={music.album.name}
                     loading="eager"
@@ -107,7 +106,7 @@ export default function QueueItem({
                             {music.name}
                         </Text>
                         {tone === 'current' && (
-                            <span className="shrink-0 rounded-full bg-[var(--b-color-border-subtle)] px-2 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-normal text-[var(--b-color-text-secondary)]">Now</span>
+                            <span className="shrink-0 rounded-full bg-[var(--b-color-border-subtle)] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-normal text-[var(--b-color-text-secondary)]">Now</span>
                         )}
                     </div>
 

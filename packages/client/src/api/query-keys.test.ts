@@ -41,4 +41,9 @@ describe('queryKeys', () => {
             }
         ]);
     });
+
+    it('provides stable tag view keys', () => {
+        expect(queryKeys.tagViews.all()).toEqual(['tag-views']);
+        expect(queryKeys.tagViews.list()).toEqual(['tag-views', { scope: 'list' }]);
+    });
 });

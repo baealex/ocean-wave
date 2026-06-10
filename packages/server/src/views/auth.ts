@@ -159,7 +159,7 @@ const renderLoginPage = (input: {
         h1 {
             margin: 0;
             color: var(--text-primary);
-            font-size: clamp(1.75rem, 5vw, 2.25rem);
+            font-size: clamp(28px, 5vw, 36px);
             line-height: 1.08;
             letter-spacing: -0.04em;
         }
