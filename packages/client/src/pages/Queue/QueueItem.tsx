@@ -54,7 +54,7 @@ export default function QueueItem({
             data-queue-index={index}
             style={style}
             className={cx(
-                'flex min-h-[4.25rem] items-center gap-2 rounded-2xl border border-transparent bg-[var(--b-color-surface-subtle)] transition-[background-color,border-color,opacity] duration-150 hover:bg-[linear-gradient(90deg,var(--b-color-surface-subtle),var(--b-color-surface-subtle)),var(--b-gradient-row-hover)] [content-visibility:auto] [contain-intrinsic-size:4.25rem] max-sm:min-h-[4.125rem] max-sm:gap-1.5',
+                'flex min-h-[4.25rem] items-center gap-2 rounded-2xl border border-transparent bg-[var(--b-color-surface-subtle)] transition-[background-color,border-color,opacity] duration-150 hover:bg-[linear-gradient(90deg,var(--b-color-surface-subtle),var(--b-color-surface-subtle)),var(--b-gradient-row-hover)] max-sm:min-h-[4.125rem] max-sm:gap-1.5',
                 queueItemToneClass[tone],
                 isSelected && 'bg-[var(--b-color-surface-item)]',
                 className

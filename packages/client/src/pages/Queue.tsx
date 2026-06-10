@@ -6,7 +6,7 @@ import type {
     PointerEvent as ReactPointerEvent
 } from 'react';
 import { useAppStore as useStore } from '~/store/base-store';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ActionBar, ActionBarButton, Button, PageContainer, Text } from '~/components/shared';
 import { MusicActionPanelContent } from '~/components/music';
@@ -62,6 +62,7 @@ export default function Queue() {
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
+    const listOffsetTopRef = useRef(0);
     const [isSelectMode, setIsSelectMode] = useState(false);
     const [listViewport, setListViewport] = useState({
         scrollTop: 0,
@@ -113,6 +114,33 @@ export default function Queue() {
         dragStateRef.current = null;
         setDragState(null);
     };
+
+    const syncListViewport = useCallback(() => {
+        const scrollNode = scrollRef.current;
+
+        if (!scrollNode) {
+            return;
+        }
+
+        setListViewport({
+            scrollTop: Math.max(scrollNode.scrollTop - listOffsetTopRef.current, 0),
+            height: scrollNode.clientHeight
+        });
+    }, []);
+
+    const syncListMetrics = useCallback(() => {
+        const scrollNode = scrollRef.current;
+        const listNode = listRef.current;
+
+        if (!scrollNode || !listNode) {
+            return;
+        }
+
+        const containerRect = scrollNode.getBoundingClientRect();
+        const listRect = listNode.getBoundingClientRect();
+        listOffsetTopRef.current = listRect.top - containerRect.top + scrollNode.scrollTop;
+        syncListViewport();
+    }, [syncListViewport]);
 
     const syncDragPointer = (
         pointerClientY: number,
@@ -178,16 +206,7 @@ export default function Queue() {
 
         const updateViewport = () => {
             animationFrameId = 0;
-
-            const containerRect = scrollNode.getBoundingClientRect();
-            const listRect = listNode.getBoundingClientRect();
-            const visibleTop = Math.max(containerRect.top, listRect.top);
-            const visibleBottom = Math.min(containerRect.bottom, listRect.bottom);
-
-            setListViewport({
-                scrollTop: Math.max(containerRect.top - listRect.top, 0),
-                height: Math.max(visibleBottom - visibleTop, 0)
-            });
+            syncListViewport();
         };
 
         const scheduleViewportUpdate = () => {
@@ -198,12 +217,12 @@ export default function Queue() {
             animationFrameId = window.requestAnimationFrame(updateViewport);
         };
 
-        scheduleViewportUpdate();
+        syncListMetrics();
 
         scrollNode.addEventListener('scroll', scheduleViewportUpdate, { passive: true });
 
         const resizeObserver = new ResizeObserver(() => {
-            scheduleViewportUpdate();
+            syncListMetrics();
         });
 
         resizeObserver.observe(scrollNode);
@@ -217,19 +236,12 @@ export default function Queue() {
                 window.cancelAnimationFrame(animationFrameId);
             }
         };
-    }, [items.length, isSelectMode]);
+    }, [items.length, isSelectMode, syncListMetrics, syncListViewport]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         const scrollNode = scrollRef.current;
 
         if (selected === null || !scrollNode) {
-            return;
-        }
-
-        const containerRect = scrollNode.getBoundingClientRect();
-        const listNode = listRef.current;
-
-        if (!listNode) {
             return;
         }
 
@@ -237,13 +249,13 @@ export default function Queue() {
             return;
         }
 
-        const listRect = listNode.getBoundingClientRect();
         const nextTop = Math.max(
             0,
-            scrollNode.scrollTop + listRect.top - containerRect.top + selectedVirtualRow.top - 80
+            listOffsetTopRef.current + selectedVirtualRow.top - 80
         );
         scrollNode.scrollTop = nextTop;
-    }, [selectedVirtualRow?.top]);
+        syncListViewport();
+    }, [selectedVirtualRow?.top, syncListViewport]);
 
     useEffect(() => {
         if (!dragState) {
@@ -540,7 +552,7 @@ export default function Queue() {
                 </div>
             </div>
 
-            <PageContainer width="focus" padding="focus" className="flex min-h-0 flex-1 flex-col gap-4">
+            <PageContainer width="focus" padding="focus" className="flex min-h-0 flex-col gap-4">
                 {items.length > 0 ? (
                     <>
                         <div className="pb-2" ref={listRef}>
