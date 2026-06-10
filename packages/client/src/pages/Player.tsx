@@ -72,11 +72,11 @@ const PLAYER_PRIMARY_COLOR = {
     b: 246
 } as const;
 
-const playerUtilityButtonClass = 'inline-flex h-11 w-11 items-center justify-center rounded-full border-0 bg-transparent text-[var(--b-color-text-secondary)] transition-[color,background-color] duration-150 hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)] max-lg:h-10 max-lg:w-10 max-lg:text-inherit [&_svg]:h-[1.125rem] [&_svg]:w-[1.125rem] max-lg:[&_svg]:h-5 max-lg:[&_svg]:w-5';
-const playerControlButtonClass = 'inline-flex h-[clamp(2.75rem,10vw,3.25rem)] w-[clamp(2.75rem,10vw,3.25rem)] items-center justify-center justify-self-center rounded-full border-0 bg-transparent text-[var(--b-color-text-secondary)] transition-[color,background-color] duration-150 hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] [&_svg]:h-5 [&_svg]:w-5';
-const playerSecondaryActionClass = 'min-h-9 rounded-full border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--b-color-text-tertiary)] transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] [&_svg]:h-[0.95rem] [&_svg]:w-[0.95rem]';
+const playerUtilityButtonClass = 'inline-flex h-11 w-11 items-center justify-center rounded-full border-0 bg-transparent text-[var(--b-color-text-secondary)] transition-[color,background-color] duration-150 hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)] max-lg:h-10 max-lg:w-10 max-lg:text-inherit [&_svg]:h-[18px] [&_svg]:w-[18px] max-lg:[&_svg]:h-5 max-lg:[&_svg]:w-5';
+const playerControlButtonClass = 'inline-flex h-[clamp(44px,10vw,52px)] w-[clamp(44px,10vw,52px)] items-center justify-center justify-self-center rounded-full border-0 bg-transparent text-[var(--b-color-text-secondary)] transition-[color,background-color] duration-150 hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] [&_svg]:h-5 [&_svg]:w-5';
+const playerSecondaryActionClass = 'min-h-9 rounded-full border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] px-3 py-2 text-sm font-medium text-[var(--b-color-text-tertiary)] transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] [&_svg]:h-[15.2px] [&_svg]:w-[15.2px]';
 const playerEmptyButtonClass = 'min-h-11 rounded-full border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] px-4 py-3 text-[var(--b-color-text-secondary)] transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-surface-input)] hover:text-[var(--b-color-text)] max-sm:w-full [&_svg]:h-4 [&_svg]:w-4';
-const audioOptionBaseClass = 'flex min-h-[3.25rem] w-full items-center justify-between gap-3 rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] px-3 py-2.5 text-left text-[var(--b-color-text-secondary)] transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0';
+const audioOptionBaseClass = 'flex min-h-[52px] w-full items-center justify-between gap-3 rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] px-3 py-2.5 text-left text-[var(--b-color-text-secondary)] transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] disabled:cursor-not-allowed disabled:opacity-50 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0';
 
 interface AudioMenuSectionProps {
     titleId: string;
@@ -130,7 +130,7 @@ const AudioMenuOption = ({
         type="button"
         className={cx(
             audioOptionBaseClass,
-            variant === 'action' && 'justify-start [&>svg]:h-[1.125rem] [&>svg]:w-[1.125rem] [&>svg]:text-[var(--b-color-text-tertiary)]',
+            variant === 'action' && 'justify-start [&>svg]:h-[18px] [&>svg]:w-[18px] [&>svg]:text-[var(--b-color-text-tertiary)]',
             active && 'border-[var(--b-color-focus)] bg-[var(--b-color-active)] text-[var(--b-color-text)]',
             disabled && 'cursor-not-allowed opacity-50'
         )}
@@ -310,7 +310,7 @@ export default function PlayerDetail() {
                             as="aside"
                             variant="panel"
                             radius="none"
-                            className="relative z-[1] m-0 flex h-dvh w-[min(22rem,34vw)] min-w-80 flex-col gap-6 overflow-y-auto rounded-none border-l border-[var(--b-color-border-subtle)] bg-[var(--b-color-background)] p-5 text-[var(--b-color-text)] shadow-none max-sm:h-dvh max-sm:w-screen max-sm:min-w-0 max-sm:border-0 max-sm:p-4"
+                            className="relative z-[1] m-0 flex h-dvh w-[min(352px,34vw)] min-w-80 flex-col gap-6 overflow-y-auto rounded-none border-l border-[var(--b-color-border-subtle)] bg-[var(--b-color-background)] p-5 text-[var(--b-color-text)] shadow-none max-sm:h-dvh max-sm:w-screen max-sm:min-w-0 max-sm:border-0 max-sm:p-4"
                             role="dialog"
                             aria-modal="true"
                             aria-label="Audio menu">
@@ -403,8 +403,8 @@ export default function PlayerDetail() {
                     <PageContainer width="player" padding="none" className="m-auto flex flex-col items-center gap-6 max-sm:gap-5">
                         <div className="flex w-full justify-center">
                             <div className={cx(
-                                'relative aspect-square w-[min(100%,19rem)] max-sm:w-[min(100%,16rem)]',
-                                isVisualizerEffect && "overflow-hidden rounded-[2rem] after:pointer-events-none after:absolute after:inset-0 after:rounded-[2rem] after:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] after:content-['']"
+                                'relative aspect-square w-[min(100%,304px)] max-sm:w-[min(100%,256px)]',
+                                isVisualizerEffect && "overflow-hidden rounded-[32px] after:pointer-events-none after:absolute after:inset-0 after:rounded-[32px] after:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)] after:content-['']"
                             )}>
                                 {playerEffectMode === 'disk' && (
                                     <MusicPlayerDiskStyle
@@ -435,7 +435,7 @@ export default function PlayerDetail() {
                                 className="uppercase tracking-normal">
                                 Now playing
                             </Text>
-                            <Text as="h1" size="2xl" weight="bold" className="w-full max-w-[min(100%,24rem)] truncate leading-[1.08] tracking-normal max-sm:max-w-[min(100%,21rem)]">
+                            <Text as="h1" size="2xl" weight="bold" className="w-full max-w-[min(100%,384px)] truncate leading-[1.08] tracking-normal max-sm:max-w-[min(100%,336px)]">
                                 {currentMusic.name}
                             </Text>
 
@@ -444,11 +444,11 @@ export default function PlayerDetail() {
                                 variant="secondary"
                                 size="md"
                                 weight="medium"
-                                className="w-full max-w-[min(100%,22rem)] truncate max-sm:max-w-[min(100%,20rem)]">
+                                className="w-full max-w-[min(100%,352px)] truncate max-sm:max-w-[min(100%,320px)]">
                                 {currentMusic.artist.name}
                             </Text>
 
-                            <div className="flex w-full min-w-0 max-w-[min(100%,22rem)] flex-nowrap items-center justify-center gap-2.5 max-sm:max-w-[min(100%,20rem)] [&>*]:min-w-0 [&>*]:truncate [&>:first-child]:flex-[0_1_auto] [&>:last-child]:shrink-0">
+                            <div className="flex w-full min-w-0 max-w-[min(100%,352px)] flex-nowrap items-center justify-center gap-2.5 max-sm:max-w-[min(100%,320px)] [&>*]:min-w-0 [&>*]:truncate [&>:first-child]:flex-[0_1_auto] [&>:last-child]:shrink-0">
                                 <Text as="span" variant="tertiary" size="sm" weight="medium">
                                     {currentMusic.album.name}
                                 </Text>
@@ -513,7 +513,7 @@ export default function PlayerDetail() {
 
                             <button
                                 type="button"
-                                className="inline-flex h-[clamp(4.25rem,14vw,4.75rem)] w-[clamp(4.25rem,14vw,4.75rem)] items-center justify-center justify-self-center rounded-full border-0 bg-[var(--b-gradient-primary)] text-[var(--b-color-background)] transition-[color,background-color] duration-150 hover:text-[var(--b-color-background)] [&_svg]:h-7 [&_svg]:w-7"
+                                className="inline-flex h-[clamp(68px,14vw,76px)] w-[clamp(68px,14vw,76px)] items-center justify-center justify-self-center rounded-full border-0 bg-[var(--b-gradient-primary)] text-[var(--b-color-background)] transition-[color,background-color] duration-150 hover:text-[var(--b-color-background)] [&_svg]:h-7 [&_svg]:w-7"
                                 aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
                                 onClick={() => isPlaying ? queueStore.pause() : queueStore.play()}>
                                 {isPlaying ? <Icon.Pause /> : <Icon.Play />}
@@ -589,8 +589,8 @@ export default function PlayerDetail() {
                         </div>
                     </PageContainer>
                 ) : (
-                    <Surface variant="panel" radius="2xl" padding="lg" className="m-auto flex w-[min(100%,28rem)] flex-col items-center gap-6 text-center">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-[1.5rem] border border-[var(--b-color-border)] bg-[var(--b-color-surface-item)] text-[var(--b-color-point-light)] [&_svg]:h-8 [&_svg]:w-8">
+                    <Surface variant="panel" radius="2xl" padding="lg" className="m-auto flex w-[min(100%,448px)] flex-col items-center gap-6 text-center">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-[24px] border border-[var(--b-color-border)] bg-[var(--b-color-surface-item)] text-[var(--b-color-point-light)] [&_svg]:h-8 [&_svg]:w-8">
                             <Icon.Music />
                         </div>
 

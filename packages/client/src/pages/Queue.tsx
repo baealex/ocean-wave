@@ -8,7 +8,7 @@ import type {
 import { useAppStore as useStore } from '~/store/base-store';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ActionBar, ActionBarButton, Button, PageContainer, Text } from '~/components/shared';
+import { ActionBar, ActionBarButton, Button, ListSelectionToolbar, PageContainer, Text } from '~/components/shared';
 import { MusicActionPanelContent } from '~/components/music';
 import { PlaylistPanelContent } from '~/components/playlist';
 import * as Icon from '~/icon';
@@ -39,7 +39,7 @@ import type { QueueTone } from './Queue/QueueDndItem';
 import QueueItem from './Queue/QueueItem';
 
 
-const queueHeaderButtonClass = 'inline-flex h-11 w-11 items-center justify-center justify-self-start rounded-full border-0 bg-transparent text-[var(--b-color-text-secondary)] transition-[color,background-color] duration-150 hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)] max-lg:h-10 max-lg:w-10 max-lg:text-inherit [&_svg]:h-[1.125rem] [&_svg]:w-[1.125rem] max-lg:[&_svg]:h-5 max-lg:[&_svg]:w-5';
+const queueHeaderButtonClass = 'inline-flex h-11 w-11 items-center justify-center justify-self-start rounded-full border-0 bg-transparent text-[var(--b-color-text-secondary)] transition-[color,background-color] duration-150 hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)] max-lg:h-10 max-lg:w-10 max-lg:text-inherit [&_svg]:h-[18px] [&_svg]:w-[18px] max-lg:[&_svg]:h-5 max-lg:[&_svg]:w-5';
 
 interface QueueDragState {
     activeId: string;
@@ -444,7 +444,7 @@ export default function Queue() {
                         return (
                             <li
                                 key={row.key}
-                                className={cx('absolute left-0 w-full box-border px-1 pt-2 pb-0.5 text-[0.6875rem] font-medium uppercase tracking-normal text-[var(--b-color-text-muted)] max-sm:pt-2', row.current && 'text-[var(--b-color-text-tertiary)]')}
+                                className={cx('absolute left-0 w-full box-border px-1 pt-2 pb-0.5 text-[11px] font-medium uppercase tracking-normal text-[var(--b-color-text-muted)] max-sm:pt-2', row.current && 'text-[var(--b-color-text-tertiary)]')}
                                 style={{
                                     top: `${row.top}px`,
                                     height: `${row.height}px`
@@ -464,7 +464,7 @@ export default function Queue() {
                 })}
                 {dragIndicatorTop !== null && (
                     <li
-                        className="pointer-events-none absolute left-[4.5rem] right-2 z-[3] mt-[-0.1rem] h-[0.2rem] list-none rounded-full bg-[var(--b-color-point-light)] shadow-[0_0_0_1px_var(--b-color-border)]"
+                        className="pointer-events-none absolute left-[72px] right-2 z-[3] mt-[-0.16px] h-[3.2px] list-none rounded-full bg-[var(--b-color-point-light)] shadow-[0_0_0_1px_var(--b-color-border)]"
                         style={{ top: `${dragIndicatorTop}px` }}
                     />
                 )}
@@ -492,8 +492,8 @@ export default function Queue() {
 
     return (
         <div className="flex h-full min-h-full w-full flex-col overflow-y-auto overflow-x-hidden bg-[var(--b-gradient-page)]" ref={scrollRef}>
-            <div className="sticky top-0 z-[3] w-full shrink-0 bg-[image:var(--b-gradient-sticky)] px-4 pb-3.5 pt-[calc(env(safe-area-inset-top)+0.875rem)] max-lg:h-16 max-lg:border-b max-lg:border-[var(--b-color-border-subtle)] max-lg:px-3 max-lg:py-0">
-                <div className="grid w-full min-w-0 grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 max-lg:h-full max-lg:grid-cols-[40px_minmax(0,1fr)_auto] max-lg:gap-2">
+            <div className="sticky top-0 z-[3] w-full shrink-0 bg-[image:var(--b-gradient-sticky)] px-4 pb-3.5 pt-[calc(env(safe-area-inset-top)+14px)] max-lg:px-3 max-lg:py-2">
+                <div className="grid w-full min-w-0 grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 max-lg:grid-cols-[40px_minmax(0,1fr)_auto] max-lg:gap-2">
                     <button
                         type="button"
                         className={queueHeaderButtonClass}
@@ -507,49 +507,29 @@ export default function Queue() {
                             as="h1"
                             size="md"
                             weight="semibold"
-                            className="truncate leading-[1.2] max-lg:text-[0.9375rem]">
-                            {isSelectMode && (
-                                <span className="hidden max-lg:inline">
-                                    {selectedItems.length} selected
-                                </span>
-                            )}
-                            <span className={cx(isSelectMode && 'max-lg:hidden')}>Queue</span>
+                            className="truncate leading-[1.2] max-lg:text-[15px]">
+                            <span>Queue</span>
                         </Text>
                         <Text as="p" variant="muted" size="xs" className="truncate max-lg:hidden">
-                            {isSelectMode
-                                ? `${selectedItems.length} selected`
-                                : queueSummary}
+                            {queueSummary}
                         </Text>
                     </div>
 
-                    {items.length > 0 ? (
-                        <div className="inline-flex items-center justify-self-end gap-2 max-lg:gap-1.5">
-                            {isSelectMode ? (
-                                <>
-                                    <Button
-                                        size="sm"
-                                        disabled={selectedItems.length === items.length}
-                                        onClick={() => setSelectedItems(items)}>
-                                        Select all
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        onClick={() => setIsSelectMode(false)}>
-                                        Done
-                                    </Button>
-                                </>
-                            ) : (
-                                <Button
-                                    size="sm"
-                                    onClick={() => setIsSelectMode(true)}>
-                                    Edit
-                                </Button>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="h-11 w-11 justify-self-end max-lg:h-10 max-lg:w-10" />
-                    )}
                 </div>
+                {items.length > 0 && (
+                    <ListSelectionToolbar
+                        className="mx-auto mt-2 w-[min(100%,608px)] px-4 max-sm:px-3.5"
+                        isSelecting={isSelectMode}
+                        selectedCount={selectedItems.length}
+                        totalCount={items.length}
+                        selectLabel="Select"
+                        selectedLabel="queue items"
+                        onStartSelect={() => setIsSelectMode(true)}
+                        onStopSelect={() => setIsSelectMode(false)}
+                        onSelectAll={() => setSelectedItems(items)}
+                        onClear={() => setSelectedItems([])}
+                    />
+                )}
             </div>
 
             <PageContainer width="focus" padding="focus" className="flex min-h-0 flex-col gap-4">
@@ -565,7 +545,7 @@ export default function Queue() {
                     </>
                 ) : (
                     <div className="my-auto flex flex-1 flex-col items-center gap-6 text-center">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-[1.5rem] border border-[var(--b-color-border)] bg-[var(--b-color-surface-item)] text-[var(--b-color-point-light)] [&_svg]:h-8 [&_svg]:w-8">
+                        <div className="flex h-20 w-20 items-center justify-center rounded-[24px] border border-[var(--b-color-border)] bg-[var(--b-color-surface-item)] text-[var(--b-color-point-light)] [&_svg]:h-8 [&_svg]:w-8">
                             <Icon.ListMusic />
                         </div>
 

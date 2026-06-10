@@ -233,15 +233,15 @@ export default function Dashboard() {
         : [];
 
     return (
-        <div className="mx-auto flex w-[min(100%,72rem)] flex-col gap-[clamp(1rem,2.4vw,1.5rem)] p-[clamp(1rem,3vw,2rem)] pb-[calc(clamp(1.5rem,4vw,3rem)+env(safe-area-inset-bottom))] text-[var(--b-color-text)] max-sm:p-[var(--b-spacing-md)] max-sm:pb-[calc(var(--b-spacing-xl)+env(safe-area-inset-bottom))]">
-            <Surface as="section" className="relative overflow-hidden rounded-[var(--b-radius-2xl)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] p-[clamp(1rem,3vw,1.5rem)]">
+        <div className="mx-auto flex w-[min(100%,1152px)] flex-col gap-[clamp(16px,2.4vw,24px)] p-[clamp(16px,3vw,32px)] pb-[calc(clamp(24px,4vw,48px)+env(safe-area-inset-bottom))] text-[var(--b-color-text)] max-sm:p-[var(--b-spacing-md)] max-sm:pb-[calc(var(--b-spacing-xl)+env(safe-area-inset-bottom))]">
+            <Surface as="section" className="relative overflow-hidden rounded-[var(--b-radius-2xl)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] p-[clamp(16px,3vw,24px)]">
                 <div className="absolute inset-x-8 top-0 h-px bg-[linear-gradient(90deg,transparent,var(--b-color-point),transparent)]" aria-hidden="true" />
                 <div className="flex flex-wrap items-end justify-between gap-5">
                     <div className="flex min-w-0 flex-col gap-3">
                         <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.1em] text-[var(--b-color-point)] uppercase">
                             Dashboard
                         </Text>
-                        <Text as="h1" size="2xl" weight="bold" className="max-w-[34rem] leading-[1.08] tracking-[-0.04em]">
+                        <Text as="h1" size="2xl" weight="bold" className="max-w-[544px] leading-[1.08] tracking-[-0.04em]">
                             What to play next, and what your library is hiding.
                         </Text>
                     </div>
@@ -263,10 +263,10 @@ export default function Dashboard() {
                 <DashboardStat label="Lossless" value={formatPercent(losslessRatio)} meta={`${formatNumber(losslessMusics.length)} of ${formatNumber(availableMusics.length)} tracks`} icon={<Icon.Activity />} />
             </div>
 
-            <Surface as="section" className="flex flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
+            <Surface as="section" className="flex flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(16px,2.4vw,20px)]">
                 <div>
                     <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Next actions</Text>
-                    <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Turn the dashboard into a queue</h2>
+                    <h2 className="m-0 text-[16.8px] font-semibold leading-tight text-[var(--b-color-text)]">Turn the dashboard into a queue</h2>
                 </div>
 
                 <div className="grid grid-cols-4 gap-2.5 max-[980px]:grid-cols-2 max-sm:grid-cols-1">
@@ -305,12 +305,12 @@ export default function Dashboard() {
                 </div>
             </Surface>
 
-            <div className="grid grid-cols-2 gap-[clamp(1rem,2.4vw,1.5rem)] max-[980px]:grid-cols-1">
-                <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
+            <div className="grid grid-cols-2 gap-[clamp(16px,2.4vw,24px)] max-[980px]:grid-cols-1">
+                <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(16px,2.4vw,20px)]">
                     <div className="flex items-start justify-between gap-4">
                         <div>
                             <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Played a lot</Text>
-                            <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Heavy rotation</h2>
+                            <h2 className="m-0 text-[16.8px] font-semibold leading-tight text-[var(--b-color-text)]">Heavy rotation</h2>
                         </div>
                         <Link to="/library" className="rounded-full border border-[var(--b-color-border-subtle)] bg-transparent px-2.5 py-1.5 text-sm font-medium text-[var(--b-color-text-tertiary)] no-underline transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]">Open</Link>
                     </div>
@@ -335,10 +335,10 @@ export default function Dashboard() {
                     )}
                 </Surface>
 
-                <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
+                <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(16px,2.4vw,20px)]">
                     <div>
                         <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Barely played</Text>
-                        <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Unexplored tracks</h2>
+                        <h2 className="m-0 text-[16.8px] font-semibold leading-tight text-[var(--b-color-text)]">Unexplored tracks</h2>
                     </div>
 
                     {leastHeardMusics.length > 0 ? (
@@ -360,11 +360,11 @@ export default function Dashboard() {
                 </Surface>
             </div>
 
-            <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
+            <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(16px,2.4vw,20px)]">
                 <div className="flex items-start justify-between gap-4">
                     <div>
                         <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">History</Text>
-                        <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Listening history</h2>
+                        <h2 className="m-0 text-[16.8px] font-semibold leading-tight text-[var(--b-color-text)]">Listening history</h2>
                     </div>
                     <button
                         type="button"
@@ -385,10 +385,10 @@ export default function Dashboard() {
                 )}
             </Surface>
 
-            <Surface as="section" className="flex flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(1rem,2.4vw,1.25rem)]">
+            <Surface as="section" className="flex flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(16px,2.4vw,20px)]">
                 <div>
                     <Text as="span" variant="muted" size="xs" weight="medium" className="tracking-[0.06em] uppercase">Listening bias</Text>
-                    <h2 className="m-0 text-[1.05rem] font-semibold leading-tight text-[var(--b-color-text)]">Artists you actually play</h2>
+                    <h2 className="m-0 text-[16.8px] font-semibold leading-tight text-[var(--b-color-text)]">Artists you actually play</h2>
                 </div>
 
                 <div className="grid grid-cols-5 gap-2.5 max-[980px]:grid-cols-2 max-sm:grid-cols-1">

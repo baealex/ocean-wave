@@ -15,18 +15,18 @@ export interface PageContainerProps {
 }
 
 const WIDTH_MAP: Record<PageContainerWidth, string> = {
-    narrow: 'w-[min(100%,50rem)]',
+    narrow: 'w-[min(100%,800px)]',
     content: 'w-full max-w-[860px]',
-    wide: 'w-[min(100%,72rem)]',
-    focus: 'w-[min(100%,38rem)]',
-    player: 'w-[min(100%,30rem)]',
+    wide: 'w-[min(100%,1152px)]',
+    focus: 'w-[min(100%,608px)]',
+    player: 'w-[min(100%,480px)]',
     full: 'w-full'
 };
 
 const PADDING_MAP: Record<PageContainerPadding, string> = {
-    page: 'p-[clamp(1rem,3vw,2rem)] pb-[calc(clamp(1.5rem,4vw,3rem)+env(safe-area-inset-bottom))] max-sm:p-[var(--b-spacing-md)] max-sm:pb-[calc(var(--b-spacing-xl)+env(safe-area-inset-bottom))]',
+    page: 'p-[clamp(16px,3vw,32px)] pb-[calc(clamp(24px,4vw,48px)+env(safe-area-inset-bottom))] max-sm:p-[var(--b-spacing-md)] max-sm:pb-[calc(var(--b-spacing-xl)+env(safe-area-inset-bottom))]',
     content: 'px-4 py-6 sm:px-6 sm:py-10 lg:px-10 lg:py-12',
-    focus: 'px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] max-sm:px-3.5',
+    focus: 'px-4 pb-[calc(24px+env(safe-area-inset-bottom))] max-sm:px-3.5',
     none: ''
 };
 

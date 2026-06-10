@@ -72,7 +72,7 @@ const MusicListItem = ({
                         )}
                         <span className="truncate">{musicName}</span>
                         {musicCodec && musicCodec.toLowerCase() === 'flac' && (
-                            <span className="shrink-0 text-[0.625rem] font-semibold uppercase tracking-[0.04em] text-[var(--b-color-point)]">{musicCodec}</span>
+                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--b-color-point)]">{musicCodec}</span>
                         )}
                     </span>
                     <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">

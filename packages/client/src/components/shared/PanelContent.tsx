@@ -41,7 +41,7 @@ export default function PanelContent({ header, items, footer }: PanelContentProp
                                 'flex w-full items-start gap-4 rounded-lg border-0 bg-transparent py-3.5 text-left font-inherit text-[var(--b-color-text)]',
                                 'transition-[background-color,color]',
                                 '[&_svg]:mt-0.5',
-                                '[&_svg]:h-[1.125rem] [&_svg]:w-[1.125rem]',
+                                '[&_svg]:h-[18px] [&_svg]:w-[18px]',
                                 isActive && 'bg-[var(--b-color-active)] !text-[var(--b-color-point)] [&_svg]:fill-none [&_svg]:!text-[var(--b-color-point)]'
                             )}
                             aria-pressed={isActive}

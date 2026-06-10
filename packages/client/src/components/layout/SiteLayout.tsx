@@ -39,7 +39,7 @@ const subPageFrameClass: Record<SubPagePresentation, string> = {
 
 const subPageSurfaceClass: Record<SubPagePresentation, string> = {
     stacked: '',
-    sheet: 'rounded-t-[1.5rem] lg:rounded-none',
+    sheet: 'rounded-t-[24px] lg:rounded-none',
     fullscreen: 'border-t-0 bg-transparent opacity-100 shadow-none lg:flex lg:w-full lg:grid-cols-none'
 };
 

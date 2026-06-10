@@ -24,8 +24,8 @@ const layoutClass = {
     panelHeader: 'flex items-start justify-between gap-3 max-[640px]:flex-col',
     rangeLabel: 'shrink-0 rounded-full border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] px-2.5 py-1.5 text-xs font-medium text-[var(--b-color-text-tertiary)] max-[640px]:self-start',
     eqDeck: 'overflow-x-auto rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[rgba(202,247,249,0.025)]',
-    eqDeckInner: 'min-w-[42rem] p-4',
-    sliderGroup: 'grid min-h-[24rem] grid-cols-7 gap-3'
+    eqDeckInner: 'min-w-[672px] p-4',
+    sliderGroup: 'grid min-h-[384px] grid-cols-7 gap-3'
 };
 
 const EQUALIZER_BANDS = [

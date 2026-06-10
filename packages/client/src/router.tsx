@@ -30,7 +30,7 @@ const router = createBrowserRouter([
                 handle: {
                     pageFrame: {
                         width: 'wide',
-                        className: 'flex flex-col gap-[clamp(1rem,2.4vw,1.5rem)]'
+                        className: 'flex flex-col gap-[clamp(16px,2.4vw,24px)]'
                     }
                 }
             },

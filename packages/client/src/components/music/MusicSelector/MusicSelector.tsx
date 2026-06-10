@@ -20,7 +20,7 @@ export default function MusicSelector({
             <button
                 type="button"
                 className={classNames(
-                    'flex w-auto cursor-pointer items-center justify-center gap-2 text-[0.8rem] [&_svg]:h-4 [&_svg]:w-4',
+                    'flex w-auto cursor-pointer items-center justify-center gap-2 text-[12.8px] [&_svg]:h-4 [&_svg]:w-4',
                     active && 'text-[var(--b-color-point)]'
                 )}
                 onClick={onClick}>
@@ -30,7 +30,7 @@ export default function MusicSelector({
             {active && (
                 <button
                     type="button"
-                    className="flex w-auto cursor-pointer items-center justify-center gap-2 text-[0.8rem] [&_svg]:h-4 [&_svg]:w-4"
+                    className="flex w-auto cursor-pointer items-center justify-center gap-2 text-[12.8px] [&_svg]:h-4 [&_svg]:w-4"
                     onClick={onSelectAll}>
                     <DoubleCheck />
                     Select All

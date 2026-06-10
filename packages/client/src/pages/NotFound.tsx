@@ -6,7 +6,7 @@ export default function NotFound() {
 
     return (
         <div className="flex h-full flex-col items-center justify-center gap-4">
-            <div className="text-[1.75rem] font-bold text-[var(--b-color-text)]">
+            <div className="text-[28px] font-bold text-[var(--b-color-text)]">
                 404
             </div>
             <div className="text-base text-[var(--b-color-text-tertiary)]">

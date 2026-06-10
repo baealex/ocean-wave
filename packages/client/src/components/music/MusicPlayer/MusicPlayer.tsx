@@ -10,7 +10,7 @@ import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
 import { panel } from '~/modules/panel';
 
-const controlButtonClassName = 'relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent !text-[var(--b-color-text)] transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:!text-white active:scale-95 [&_svg]:h-[1.125rem] [&_svg]:w-[1.125rem] [&_svg]:opacity-100 [&_svg]:text-current';
+const controlButtonClassName = 'relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent !text-[var(--b-color-text)] transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:!text-white active:scale-95 [&_svg]:h-[18px] [&_svg]:w-[18px] [&_svg]:opacity-100 [&_svg]:text-current';
 const secondaryControlClassName = '!text-[var(--b-color-text-secondary)] hover:!text-[var(--b-color-text)]';
 
 const MusicPlayer = () => {
