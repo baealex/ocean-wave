@@ -21,7 +21,7 @@ export default function SmartMusicFilterPanelContent({
                 icon: option.id === activeFilterId ? <Icon.Check /> : <Icon.Filter />,
                 text: option.label,
                 description: option.description,
-                isActive: option.id === activeFilterId,
+                active: option.id === activeFilterId,
                 onClick: () => {
                     onSelect(option.id);
                     panel.close();

@@ -11,6 +11,8 @@ function getPlaybackStateValue(playbackState: ReturnType<typeof usePlaybackState
   return 'state' in playbackState ? playbackState.state : playbackState;
 }
 
+const ACCESSIBLE_SEEK_STEP_SECONDS = 10;
+
 export function useTrackPlaybackControls() {
   const playbackState = usePlaybackState();
   const playbackValue = getPlaybackStateValue(playbackState);
@@ -48,11 +50,19 @@ export function useTrackPlaybackControls() {
     await TrackPlayer.seekTo(ratio * progressDuration);
   }, [canControlPlayback, progressDuration, progressWidth]);
 
+  const seekByStep = useCallback(async (direction: 'backward' | 'forward') => {
+    if (!canControlPlayback || !progressDuration) return;
+    const offset = direction === 'forward' ? ACCESSIBLE_SEEK_STEP_SECONDS : -ACCESSIBLE_SEEK_STEP_SECONDS;
+    const nextPosition = Math.max(0, Math.min(progress.position + offset, progressDuration));
+    await TrackPlayer.seekTo(nextPosition);
+  }, [canControlPlayback, progress.position, progressDuration]);
+
   return {
     activeTrack,
     canControlPlayback,
     isPlaying,
     progressRatio,
+    seekByStep,
     seekToTouch,
     setProgressWidth,
     skipNext,

@@ -8,7 +8,8 @@ import {
     Button,
     StickyHeader,
     SearchField,
-    FixedVirtualList
+    FixedVirtualList,
+    StateMessage
 } from '~/components/shared';
 import { AlbumListItem } from '~/components/album';
 import * as Icon from '~/icon';
@@ -56,6 +57,7 @@ export default function Album() {
                 />
                 <Button
                     size="sm"
+                    aria-label="Sort albums"
                     onClick={() => panel.open({
                         title: 'Album Sort',
                         content: (
@@ -74,6 +76,16 @@ export default function Album() {
                     rowHeight={ALBUM_LIST_ROW_HEIGHT}
                     overscanPx={ALBUM_LIST_ROW_HEIGHT * 8}
                     getKey={(album) => album.id}
+                    emptyState={(
+                        <StateMessage
+                            className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-2xl)]"
+                            icon={<Icon.Disc />}
+                            heading={query.trim() ? 'No albums found.' : 'No albums yet.'}
+                            description={query.trim()
+                                ? 'Try a different album or artist search.'
+                                : 'Albums will appear after music is added to your library.'}
+                        />
+                    )}
                     renderItem={(album) => (
                         <AlbumListItem
                             albumName={album.name}

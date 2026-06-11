@@ -33,11 +33,11 @@ export default function Setting() {
 
     return (
         <>
-            <div className="mb-8 lg:mb-12">
-                <Text as="h1" size="xl" weight="bold" className="text-[clamp(32px,5vw,52px)] leading-[0.98] tracking-[-0.055em]">
+            <div className="mb-8 flex flex-col gap-2 lg:mb-12">
+                <Text as="h1" size="2xl" weight="bold" className="leading-tight tracking-normal">
                     {appCopy.settings.title}
                 </Text>
-                <Text as="p" variant="tertiary" size="sm" className="mt-2 max-w-[480px] leading-relaxed">
+                <Text as="p" variant="tertiary" size="sm" className="max-w-[480px] leading-relaxed">
                     Tune how Ocean Wave behaves.
                 </Text>
             </div>
@@ -55,7 +55,7 @@ export default function Setting() {
                     src="/brand-logo.svg"
                     alt=""
                     aria-hidden="true"
-                    className="h-[18px] w-[18px] rounded-md opacity-70"
+                    className="h-[18px] w-[18px] rounded-[var(--b-radius-md)] opacity-70"
                 />
                 <span>Powered by {appShell.brand.name}</span>
             </div>

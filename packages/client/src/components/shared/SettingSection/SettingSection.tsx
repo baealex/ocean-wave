@@ -1,8 +1,37 @@
-import classNames from 'classnames';
+import { cva } from 'class-variance-authority';
 import type { ReactNode } from 'react';
 import Text from '../Text';
 
-const cx = classNames;
+const settingItemClass = cva(
+    'py-[var(--b-spacing-md)]',
+    {
+        variants: {
+            divider: {
+                true: 'border-b border-[var(--b-color-border-subtle)] last:border-b-0',
+                false: 'border-b-0'
+            }
+        },
+        defaultVariants: {
+            divider: true
+        }
+    }
+);
+
+const infoBoxClass = cva(
+    'rounded-[var(--b-radius-lg)] border p-[var(--b-spacing-md)] [&_p]:m-0',
+    {
+        variants: {
+            type: {
+                info: 'border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] [&_p]:text-[var(--b-color-text-secondary)]',
+                success: 'border-[var(--b-color-badge-success-background)] bg-[var(--b-color-badge-success-background)] [&_p]:text-[var(--b-color-badge-success-text)]',
+                warning: 'border-[var(--b-color-badge-warning-background)] bg-[var(--b-color-badge-warning-background)] [&_p]:text-[var(--b-color-badge-warning-text)]'
+            }
+        },
+        defaultVariants: {
+            type: 'info'
+        }
+    }
+);
 
 interface SettingItemProps {
     title: string;
@@ -18,7 +47,7 @@ export const SettingItem = ({
     children
 }: SettingItemProps) => {
     return (
-        <div className={cx('py-[var(--b-spacing-md)]', !divider && 'border-b-0', divider && 'border-b border-[var(--b-color-border-subtle)] last:border-b-0')}>
+        <div className={settingItemClass({ divider })}>
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[var(--b-spacing-md)] max-[720px]:grid-cols-1 max-[720px]:items-start">
                 <div className="min-w-0">
                     <Text as="h4" size="md" weight="medium" className="m-0">
@@ -49,8 +78,8 @@ export const SettingSection = ({ title, description, icon, children }: SettingSe
     return (
         <section className="p-0">
             <div className="mb-[var(--b-spacing-md)] grid grid-cols-1 gap-[var(--b-spacing-xs)]">
-                <Text as="h3" size="md" weight="semibold" className="m-0 flex items-center gap-[var(--b-spacing-sm)] text-[var(--b-color-text)] tracking-[-0.015em]">
-                    {icon && <span className="flex w-[19.2px] items-center text-[var(--b-color-point-light)] [&_svg]:h-[17.6px] [&_svg]:w-[17.6px]">{icon}</span>}
+                <Text as="h3" size="md" weight="semibold" className="m-0 flex items-center gap-[var(--b-spacing-sm)] text-[var(--b-color-text)] tracking-normal">
+                    {icon && <span className="flex w-[19.2px] items-center text-[var(--b-color-text-muted)] [&_svg]:h-[17.6px] [&_svg]:w-[17.6px]">{icon}</span>}
                     <span>{title}</span>
                 </Text>
                 {description && (
@@ -73,12 +102,7 @@ interface InfoBoxProps {
 
 export const InfoBox = ({ children, type = 'info' }: InfoBoxProps) => {
     return (
-        <div className={cx(
-            'rounded-[var(--b-radius-lg)] border p-[var(--b-spacing-md)] [&_p]:m-0',
-            type === 'warning'
-                ? 'border-[rgba(245,158,11,0.22)] bg-[rgba(245,158,11,0.08)] [&_p]:text-[rgba(255,210,138,0.95)]'
-                : 'border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] [&_p]:text-[var(--b-color-text-secondary)]'
-        )}>
+        <div className={infoBoxClass({ type })}>
             <Text as="p" size="sm" variant="secondary">
                 {children}
             </Text>

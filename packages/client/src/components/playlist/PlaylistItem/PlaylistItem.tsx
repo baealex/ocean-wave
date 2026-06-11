@@ -1,6 +1,6 @@
 import { useAppStore as useStore } from '~/store/base-store';
 
-import { IconButton, PlaylistArtwork } from '~/components/shared';
+import { IconButton, libraryRowClass, PlaylistArtwork } from '~/components/shared';
 import { VerticalDots } from '~/icon';
 
 import type { Music } from '~/models/type';
@@ -28,7 +28,7 @@ export default function PlaylistItem({
         <div className="flex w-full min-w-0 items-center">
             <button
                 type="button"
-                className="group/row flex min-w-0 flex-1 items-center gap-4 rounded-[var(--b-radius-lg)] border border-transparent p-4 text-left text-[var(--b-color-text)] transition-colors hover:border-[var(--b-color-border-subtle)] hover:bg-[image:var(--b-gradient-row-hover)] active:bg-[var(--b-color-active)] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"
+                className={libraryRowClass({ layout: 'card' })}
                 onClick={onClick}
                 onContextMenu={(e) => {
                     e.preventDefault();

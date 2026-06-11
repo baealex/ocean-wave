@@ -3,8 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 
 import {
     Button,
-    Loading
+    Loading,
+    TagButton
 } from '~/components/shared';
+import TagMatchModeControl from './TagMatchModeControl';
 import * as Icon from '~/icon';
 
 import { fetchTags } from '~/api/tags';
@@ -81,38 +83,7 @@ export default function MusicTagFilterPanelContent({
 
     return (
         <div className="flex flex-col gap-5 pb-1 pt-2">
-            <div className="flex gap-2">
-                <Button
-                    fullWidth
-                    aria-pressed={draftMode === 'all'}
-                    className={draftMode === 'all'
-                        ? 'min-h-14 justify-start border-[var(--b-color-focus)] bg-[var(--b-color-active)] text-left !text-[var(--b-color-point)]'
-                        : 'min-h-14 justify-start text-left'}
-                    onClick={() => setDraftMode('all')}>
-                    <Icon.DoubleCheck />
-                    <span className="flex min-w-0 flex-col gap-0.5">
-                        <span>AND filter</span>
-                        <span className="text-[11px] font-medium leading-tight text-[var(--b-color-text-muted)]">
-                            Music with every selected tag
-                        </span>
-                    </span>
-                </Button>
-                <Button
-                    fullWidth
-                    aria-pressed={draftMode === 'any'}
-                    className={draftMode === 'any'
-                        ? 'min-h-14 justify-start border-[var(--b-color-focus)] bg-[var(--b-color-active)] text-left !text-[var(--b-color-point)]'
-                        : 'min-h-14 justify-start text-left'}
-                    onClick={() => setDraftMode('any')}>
-                    <Icon.Check />
-                    <span className="flex min-w-0 flex-col gap-0.5">
-                        <span>OR filter</span>
-                        <span className="text-[11px] font-medium leading-tight text-[var(--b-color-text-muted)]">
-                            Music with any selected tag
-                        </span>
-                    </span>
-                </Button>
-            </div>
+            <TagMatchModeControl value={draftMode} onChange={setDraftMode} />
 
             <section className="flex flex-col gap-2">
                 <h3 className="m-0 text-xs font-semibold uppercase text-[var(--b-color-text-muted)]">Tags</h3>
@@ -129,18 +100,15 @@ export default function MusicTagFilterPanelContent({
                                 const selected = selectedSet.has(tag.id);
 
                                 return (
-                                    <button
+                                    <TagButton
                                         key={tag.id}
-                                        type="button"
-                                        className={selected
-                                            ? 'inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border border-[var(--b-color-focus)] bg-[var(--b-color-active)] px-3 py-1.5 text-sm font-semibold text-[var(--b-color-text)] transition-[background-color,color]'
-                                            : 'inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-input)] px-3 py-1.5 text-sm font-semibold text-[var(--b-color-text-secondary)] transition-[background-color,color,border-color] hover:border-[var(--b-color-focus)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]'}
+                                        selected={selected}
                                         aria-pressed={selected}
                                         onClick={() => toggleTag(tag.id)}>
                                         {selected && <Icon.Check className="h-3.5 w-3.5 shrink-0" />}
                                         <span className="min-w-0 truncate">{tag.name}</span>
                                         <span className="text-xs text-[var(--b-color-text-muted)]">{tag.musicCount}</span>
-                                    </button>
+                                    </TagButton>
                                 );
                             })}
                         </div>

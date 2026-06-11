@@ -12,11 +12,12 @@ import {
     StickyHeader,
     VerticalSortable,
     Flex,
-    IconButton
+    IconButton,
+    StateMessage
 } from '~/components/shared';
 import { TextEntryDialog } from '~/components/shared/Modal';
 import { PlaylistActionPanelContent, PlaylistItem } from '~/components/playlist';
-import { Menu } from '~/icon';
+import { ListMusic, Menu } from '~/icon';
 
 import type { Playlist as PlaylistModel } from '~/models/type';
 
@@ -116,6 +117,19 @@ export default function Playlist() {
             <VerticalSortable items={playlists.map((playlist) => playlist.id)} onDragEnd={handleDragEnd}>
                 {!loaded && (
                     <Loading />
+                )}
+                {loaded && playlists.length === 0 && (
+                    <StateMessage
+                        className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-2xl)]"
+                        icon={<ListMusic />}
+                        heading="No playlists yet."
+                        description="Create a playlist to collect tracks for later."
+                        actions={(
+                            <Button onClick={handleOpenCreateDialog}>
+                                Create playlist
+                            </Button>
+                        )}
+                    />
                 )}
                 {loaded && playlists?.map((playlist) => (
                     <PlaylistDndItem

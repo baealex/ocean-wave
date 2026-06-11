@@ -1,7 +1,8 @@
 import classNames from 'classnames';
 const cx = classNames;
 
-import { IconButton, TrackArtwork } from '~/components/shared';
+import { IconButton, libraryRowClass, TrackArtwork } from '~/components/shared';
+import { activeFilledIconClassName } from '~/components/shared/iconStateClass';
 import { Heart, VerticalDots } from '~/icon';
 
 interface MusicListItemProps {
@@ -45,12 +46,7 @@ const MusicListItem = ({
         <div
             role="button"
             tabIndex={0}
-            className={cx(
-                'group/row flex w-full cursor-pointer flex-row items-center gap-4 px-6 py-4 text-left text-[var(--b-color-text)] transition-colors',
-                'hover:bg-[image:var(--b-gradient-row-hover)] active:bg-[var(--b-color-active)]',
-                'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
-                { 'opacity-40': isHated }
-            )}
+            className={libraryRowClass({ dimmed: isHated })}
             onClick={onClick}
             onKeyDown={handleKeyDown}
             onContextMenu={(e) => {
@@ -72,26 +68,32 @@ const MusicListItem = ({
                         )}
                         <span className="truncate">{musicName}</span>
                         {musicCodec && musicCodec.toLowerCase() === 'flac' && (
-                            <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.04em] text-[var(--b-color-point)]">{musicCodec}</span>
+                            <span className="shrink-0 text-[var(--b-font-size-badge)] font-semibold uppercase tracking-normal text-[var(--b-color-text-tertiary)]">{musicCodec}</span>
                         )}
                     </span>
                     <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">
                         {artistName}
                     </span>
                 </span>
+                {isLiked && (
+                    <span
+                        className={cx(
+                            'inline-flex h-8 w-8 shrink-0 items-center justify-center text-[var(--b-color-point)] [&_svg]:h-4 [&_svg]:w-4',
+                            activeFilledIconClassName
+                        )}
+                        aria-hidden="true">
+                        <Heart />
+                    </span>
+                )}
                 {onLongPress && (
                     <IconButton
+                        size="compact"
                         aria-label={`Open actions for ${musicName}`}
-                        active={isLiked}
-                        className={cx(
-                            'h-10 w-10',
-                            isLiked && '[&_svg]:!fill-[var(--b-color-point)] [&_svg]:!stroke-[var(--b-color-point)]'
-                        )}
                         onClick={(e) => {
                             e.stopPropagation();
                             onLongPress?.();
                         }}>
-                        {isLiked ? <Heart /> : <VerticalDots />}
+                        <VerticalDots />
                     </IconButton>
                 )}
             </span>

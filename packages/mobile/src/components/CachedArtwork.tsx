@@ -18,7 +18,7 @@ const ARTWORK_RETRY_DELAY_MS = 1000 * 60 * 5;
 export const CachedArtwork = memo(function CachedArtwork({
   active = false,
   cookie,
-  size = 44,
+  size = brand.layout.listArtworkSize,
   uri,
 }: CachedArtworkProps) {
   const remoteUri = uri ?? null;
@@ -58,7 +58,7 @@ export const CachedArtwork = memo(function CachedArtwork({
   }, [cookie, remoteUri]);
 
   return (
-    <View style={[styles.frame, { width: size, height: size, borderRadius: Math.round(size * 0.28) }, active && styles.activeFrame]}>
+    <View style={[styles.frame, { width: size, height: size, borderRadius: brand.radius.md }, active && styles.activeFrame]}>
       {artworkUri ? (
         <Image resizeMode="cover" source={{ uri: artworkUri }} style={{ width: size, height: size }} />
       ) : (
@@ -69,7 +69,7 @@ export const CachedArtwork = memo(function CachedArtwork({
 });
 
 const styles = StyleSheet.create({
-  activeFrame: { borderColor: brand.primary },
-  frame: { overflow: 'hidden', backgroundColor: '#18181b', borderWidth: 1, borderColor: '#27272a' },
-  placeholder: { flex: 1, backgroundColor: '#18181b' },
+  activeFrame: { borderColor: brand.colors.primary },
+  frame: { overflow: 'hidden', ...brand.components.raisedCard },
+  placeholder: { flex: 1, backgroundColor: brand.colors.surfaceRaised },
 });

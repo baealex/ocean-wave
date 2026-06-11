@@ -20,6 +20,7 @@ on:
       - 'scripts/**'
       - 'docs/process/**'
       - 'tests/branding/**'
+      - 'tests/design-system/**'
       - '.github/workflows/**'
   pull_request:
     branches:
@@ -40,6 +41,7 @@ on:
       - 'scripts/**'
       - 'docs/process/**'
       - 'tests/branding/**'
+      - 'tests/design-system/**'
       - '.github/workflows/**'
   workflow_dispatch:
 
@@ -125,11 +127,22 @@ jobs:
       - name: Test (Repository Metadata)
         run: pnpm test:metadata
 
+      - name: Test (Design System Contracts)
+        run: pnpm test:design-system
+
       - name: Test (Server)
         run: pnpm test:server
 
       - name: Test (Client)
         run: pnpm test:client
+
+      - name: Test (Mobile)
+        run: pnpm test:mobile
+
+      - name: Test (Runtime UI Smoke)
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: pnpm test:runtime-ui:managed
 
       - name: Lint
         run: pnpm lint

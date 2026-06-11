@@ -1,1 +1,1 @@
-export { default } from './TwoToneLayout';
+export { default, TwoTonePrimaryAction } from './TwoToneLayout';

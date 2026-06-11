@@ -30,14 +30,28 @@ export function ServerListScreen({
 
       <View style={styles.serverList}>
         {profiles.map(profile => (
-          <Pressable key={profile.id} disabled={isLoading} onPress={() => onConnect(profile)} style={styles.serverCard}>
-            <View style={styles.serverAvatar}><Text style={styles.serverAvatarText}>{profile.isDemo ? 'D' : profile.name.slice(0, 1).toUpperCase()}</Text></View>
-            <View style={styles.serverCardText}>
-              <Text numberOfLines={1} style={styles.serverTitle}>{profile.name}</Text>
-              <Text numberOfLines={1} style={styles.serverUrl}>{profile.url}</Text>
-            </View>
+          <View key={profile.id} style={styles.serverCard}>
+            <Pressable
+              accessibilityLabel={`Connect to ${profile.name}`}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isLoading }}
+              disabled={isLoading}
+              onPress={() => onConnect(profile)}
+              style={({ pressed }) => [styles.serverMainButton, pressed && !isLoading && styles.pressedSurface]}
+            >
+              <View style={styles.serverAvatar}><Text style={styles.serverAvatarText}>{profile.isDemo ? 'D' : profile.name.slice(0, 1).toUpperCase()}</Text></View>
+              <View style={styles.serverCardText}>
+                <Text numberOfLines={1} style={styles.serverTitle}>{profile.name}</Text>
+                <Text numberOfLines={1} style={styles.serverUrl}>{profile.url}</Text>
+              </View>
+              <ChevronIcon />
+            </Pressable>
             {!profile.isDemo ? (
               <Pressable
+                accessibilityLabel={`Delete ${profile.name}`}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isLoading }}
+                disabled={isLoading}
                 hitSlop={10}
                 onPress={event => {
                   event.stopPropagation();
@@ -51,10 +65,9 @@ export function ServerListScreen({
                 <TrashIcon />
               </Pressable>
             ) : null}
-            <ChevronIcon />
-          </Pressable>
+          </View>
         ))}
-        <Pressable disabled={isLoading} onPress={onAddServer} style={[styles.serverCard, styles.addServerCard]}>
+        <Pressable accessibilityRole="button" accessibilityState={{ disabled: isLoading }} disabled={isLoading} onPress={onAddServer} style={({ pressed }) => [styles.serverCard, styles.addServerCard, pressed && !isLoading && styles.pressedSurface, isLoading && styles.disabledButton]}>
           <View style={styles.addIcon}><PlusIcon /></View>
           <View style={styles.serverCardText}>
             <Text style={styles.serverTitle}>Add server</Text>
@@ -62,8 +75,8 @@ export function ServerListScreen({
           </View>
         </Pressable>
       </View>
-      {isLoading ? <ActivityIndicator color={brand.primary} /> : null}
-      <Text style={styles.status}>{message}</Text>
+      {isLoading ? <ActivityIndicator accessibilityLabel="Connecting to server" color={brand.colors.primary} /> : null}
+      <Text accessibilityLiveRegion="polite" style={styles.status}>{message}</Text>
     </View>
   );
 }
@@ -95,28 +108,31 @@ function ChevronIcon() {
 }
 
 const styles = StyleSheet.create({
-  fullPage: { flex: 1, gap: 18, padding: 20, backgroundColor: brand.background },
-  header: { gap: 8, paddingTop: 10 },
-  kicker: { color: brand.primary, fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
-  title: { color: brand.text, fontSize: 32, fontWeight: '900', letterSpacing: -1.4 },
-  description: { color: brand.muted, fontSize: 15, lineHeight: 22 },
-  serverList: { gap: 10 },
-  serverCard: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 74, padding: 14, borderRadius: 20, backgroundColor: brand.surfaceRaised, borderWidth: 1, borderColor: brand.border },
-  addServerCard: { borderStyle: 'dashed', backgroundColor: brand.surface },
-  serverAvatar: { alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: 14, backgroundColor: 'rgba(139,92,246,0.16)' },
-  serverAvatarText: { color: brand.primary, fontSize: 16, fontWeight: '900' },
-  addIcon: { alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: 14, backgroundColor: brand.primary },
-  plusIcon: { alignItems: 'center', justifyContent: 'center', width: 20, height: 20 },
-  plusHorizontal: { position: 'absolute', width: 18, height: 3, borderRadius: 999, backgroundColor: brand.background },
-  plusVertical: { position: 'absolute', width: 3, height: 18, borderRadius: 999, backgroundColor: brand.background },
-  serverCardText: { flex: 1, minWidth: 0, gap: 3 },
-  serverTitle: { color: brand.text, fontSize: 16, fontWeight: '800' },
-  serverUrl: { color: brand.muted, fontSize: 12 },
-  deleteButton: { alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: 20, backgroundColor: '#27272a' },
+  fullPage: { flex: 1, gap: brand.space.xl, padding: brand.space.xl, ...brand.components.page },
+  header: { gap: brand.space.sm, paddingTop: brand.space.md },
+  kicker: { color: brand.colors.primary, ...brand.typography.kicker },
+  title: { color: brand.colors.text, ...brand.typography.title },
+  description: { color: brand.colors.textMuted, ...brand.typography.body },
+  serverList: { gap: brand.space.md },
+  serverCard: { flexDirection: 'row', alignItems: 'stretch', minHeight: brand.layout.serverCardMinHeight, overflow: 'hidden', borderRadius: brand.radius.lg, ...brand.components.raisedCard },
+  serverMainButton: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: brand.space.md, paddingVertical: brand.space.lg, paddingLeft: brand.space.lg, paddingRight: brand.space.sm },
+  addServerCard: { borderStyle: 'dashed', ...brand.components.surfaceCard },
+  disabledButton: { ...brand.components.disabledButton },
+  pressedSurface: { ...brand.components.pressedSurface },
+  serverAvatar: { width: brand.layout.listArtworkSize, height: brand.layout.listArtworkSize, borderRadius: brand.radius.md, backgroundColor: brand.colors.primarySubtle, ...brand.components.centeredControl },
+  serverAvatarText: { color: brand.colors.primary, ...brand.typography.sectionTitle },
+  addIcon: { width: brand.layout.listArtworkSize, height: brand.layout.listArtworkSize, borderRadius: brand.radius.md, backgroundColor: brand.colors.primary, ...brand.components.centeredControl },
+  plusIcon: { width: 20, height: 20, ...brand.components.centeredControl },
+  plusHorizontal: { position: 'absolute', width: 18, height: 3, borderRadius: brand.radius.full, backgroundColor: brand.colors.background },
+  plusVertical: { position: 'absolute', width: 3, height: 18, borderRadius: brand.radius.full, backgroundColor: brand.colors.background },
+  serverCardText: { flex: 1, minWidth: 0, gap: brand.space.xs },
+  serverTitle: { color: brand.colors.text, ...brand.typography.listTitle },
+  serverUrl: { color: brand.colors.textMuted, ...brand.typography.caption },
+  deleteButton: { alignSelf: 'center', marginRight: brand.space.md, width: brand.control.deleteButtonSize, height: brand.control.deleteButtonSize, borderRadius: brand.radius.full, backgroundColor: brand.colors.border, ...brand.components.centeredControl },
   trashIcon: { alignItems: 'center', width: 18, height: 20 },
-  trashLid: { width: 14, height: 3, borderRadius: 2, backgroundColor: brand.muted },
-  trashCan: { marginTop: 2, width: 13, height: 14, borderWidth: 2, borderTopWidth: 0, borderColor: brand.muted, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
-  chevronIcon: { alignItems: 'center', justifyContent: 'center', width: 24, height: 40 },
-  chevronStroke: { width: 10, height: 10, borderTopWidth: 2, borderRightWidth: 2, borderColor: brand.muted, transform: [{ rotate: '45deg' }] },
-  status: { color: brand.muted, fontSize: 13, lineHeight: 19 },
+  trashLid: { width: 14, height: 3, borderRadius: brand.icon.trashLidRadius, backgroundColor: brand.colors.textMuted },
+  trashCan: { marginTop: 2, width: 13, height: 14, borderWidth: 2, borderTopWidth: 0, borderColor: brand.colors.textMuted, borderBottomLeftRadius: brand.icon.trashCanRadius, borderBottomRightRadius: brand.icon.trashCanRadius },
+  chevronIcon: { width: 24, height: 40, ...brand.components.centeredControl },
+  chevronStroke: { width: 10, height: 10, borderTopWidth: 2, borderRightWidth: 2, borderColor: brand.colors.textMuted, transform: [{ rotate: '45deg' }] },
+  status: { color: brand.colors.textMuted, ...brand.typography.status },
 });

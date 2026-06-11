@@ -8,16 +8,25 @@ import classNames from 'classnames';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { useModal } from '~/components/app/ModalProvider';
+import { TagMatchModeControl } from '~/components/music';
 import {
+    ActionBar,
+    ActionBarButton,
     Badge,
     Button,
     IconButton,
     ListSelectionToolbar,
+    listRowActionRailClass,
+    listRowButtonContentClass,
+    listRowClass,
+    listRowIconClass,
     Loading,
     SearchField,
-    SelectionCheckButton,
+    SelectionCheckIndicator,
+    SegmentedControl,
     StickyHeader,
-    Text
+    Text,
+    type SegmentedControlOption
 } from '~/components/shared';
 import { TextEntryDialog } from '~/components/shared/Modal';
 import * as Icon from '~/icon';
@@ -63,56 +72,50 @@ interface TagViewDraft {
 
 type TagSelectionIntent = 'browse' | 'create-filter';
 
+const TAG_LIST_SECTION_OPTIONS: SegmentedControlOption<TagListSection>[] = [
+    {
+        value: 'tags',
+        label: 'Tags',
+        icon: <Icon.Tags />,
+        id: 'tag-list-tags-tab',
+        ariaControls: 'tag-list-tags-panel'
+    },
+    {
+        value: 'views',
+        label: 'Saved filters',
+        icon: <Icon.Filter />,
+        id: 'tag-list-views-tab',
+        ariaControls: 'tag-list-views-panel'
+    }
+];
+
 const resolveTagListSection = (value: string | null): TagListSection => {
     return value === 'views' ? 'views' : 'tags';
 };
 
-const tagListItemIconClass = cva(
-    'flex h-10 w-10 items-center justify-center rounded-[var(--b-radius-md)] border bg-[var(--b-color-surface-subtle)]',
-    {
-        variants: {
-            selected: {
-                true: 'border-[var(--b-color-point)] bg-[var(--b-color-point)] text-[var(--b-color-background)]',
-                false: 'border-[var(--b-color-border-subtle)] text-[var(--b-color-text-secondary)]'
-            }
+const tagListBodyClass = cva('', {
+    variants: {
+        selecting: {
+            true: 'pb-48',
+            false: 'pb-[var(--b-spacing-2xl)]'
         }
+    },
+    defaultVariants: {
+        selecting: false
     }
-);
+});
 
-const tagListRowClass = cva(
-    [
-        'grid min-h-16 w-full items-center gap-3 border-b border-[var(--b-color-border-subtle)]',
-        'px-[var(--b-spacing-lg)] py-3 text-left transition-colors hover:bg-[var(--b-color-hover)]',
-        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--b-color-focus)]'
-    ],
+const tagSelectionActionGridClass = cva(
+    'grid gap-2',
     {
         variants: {
-            interactive: {
-                select: 'grid-cols-[2.5rem_minmax(0,1fr)_auto]',
-                browse: 'min-w-0 grid-cols-[2.5rem_minmax(0,1fr)_auto]'
-            },
-            selected: {
-                true: '',
-                false: ''
+            singleAction: {
+                true: 'grid-cols-1',
+                false: 'grid-cols-2 max-sm:grid-cols-1'
             }
         },
         defaultVariants: {
-            selected: false
-        }
-    }
-);
-
-const tagListTabClass = cva(
-    [
-        'relative flex min-h-10 items-center justify-center gap-2 border-b-2 bg-transparent px-1 text-sm font-semibold transition-colors sm:justify-start sm:px-0',
-        'appearance-none shadow-none ring-0 hover:bg-transparent active:bg-transparent focus:bg-transparent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0'
-    ],
-    {
-        variants: {
-            selected: {
-                true: 'border-[var(--b-color-focus)] text-[var(--b-color-point)]',
-                false: 'border-transparent text-[var(--b-color-text-muted)] hover:text-[var(--b-color-text)]'
-            }
+            singleAction: false
         }
     }
 );
@@ -163,14 +166,13 @@ function TagListItem({
     const content = (
         <>
             {isSelectMode ? (
-                <SelectionCheckButton
+                <SelectionCheckIndicator
                     selected={selected}
-                    className="pointer-events-none h-10 w-10 p-0"
-                    tabIndex={-1}
+                    className="h-10 w-10 p-0"
                     aria-hidden="true"
                 />
             ) : (
-                <span className={tagListItemIconClass({ selected: false })}>
+                <span className={listRowIconClass()}>
                     <Icon.Tags className="h-5 w-5" />
                 </span>
             )}
@@ -196,7 +198,7 @@ function TagListItem({
                 type="button"
                 aria-label={selected ? `Unselect ${tag.name}` : `Select ${tag.name}`}
                 aria-pressed={selected}
-                className={tagListRowClass({ interactive: 'select', selected })}
+                className={listRowClass({ columns: 'content', selected })}
                 onClick={onClick}>
                 {content}
             </button>
@@ -204,18 +206,18 @@ function TagListItem({
     }
 
     return (
-        <div className="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] items-stretch border-b border-[var(--b-color-border-subtle)] transition-colors hover:bg-[var(--b-color-hover)]">
+        <div className={listRowClass({ layout: 'actionShell', columns: 'actionShell' })}>
             <button
                 type="button"
                 aria-label={`Filter library by ${tag.name}`}
                 className={cx(
-                    tagListRowClass({ interactive: 'browse' }),
-                    'border-b-0 hover:bg-transparent'
+                    listRowClass({ columns: 'content' }),
+                    listRowButtonContentClass()
                 )}
                 onClick={onClick}>
                 {content}
             </button>
-            <div className="flex items-center gap-1 pr-[var(--b-spacing-md)]">
+            <div className={listRowActionRailClass}>
                 <IconButton
                     size="sm"
                     aria-label={`Rename ${tag.name}`}
@@ -252,19 +254,24 @@ function TagViewListItem({
     const hasTags = view.tagIds.length > 0;
 
     return (
-        <div className="grid min-h-16 w-full grid-cols-[minmax(0,1fr)_auto] items-stretch border-b border-[var(--b-color-border-subtle)] transition-colors hover:bg-[var(--b-color-hover)]">
+        <div
+            className={listRowClass({
+                layout: 'actionShell',
+                surface: hasTags ? 'divided' : 'staticDivided',
+                columns: 'actionShell'
+            })}>
             <button
                 type="button"
                 aria-label={hasTags
                     ? `Open ${view.name} saved filter`
                     : `${view.name} saved filter has no tags`}
                 className={cx(
-                    tagListRowClass({ interactive: 'browse' }),
-                    'border-b-0 hover:bg-transparent disabled:cursor-not-allowed disabled:opacity-60'
+                    listRowClass({ columns: 'content', disabled: true }),
+                    listRowButtonContentClass()
                 )}
                 disabled={!hasTags}
                 onClick={onClick}>
-                <span className={tagListItemIconClass({ selected: false })}>
+                <span className={listRowIconClass()}>
                     <Icon.Filter className="h-5 w-5" />
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5">
@@ -277,7 +284,7 @@ function TagViewListItem({
                 </span>
                 <Badge>{getTagViewSummary(view)}</Badge>
             </button>
-            <div className="flex items-center gap-1 pr-[var(--b-spacing-md)]">
+            <div className={listRowActionRailClass}>
                 <IconButton
                     size="sm"
                     aria-label={`Rename ${view.name} saved filter`}
@@ -671,24 +678,13 @@ export default function TagList() {
             <nav
                 aria-label="Tag page sections"
                 className="border-b border-[var(--b-color-border-subtle)] px-[var(--b-spacing-lg)]">
-                <div role="tablist" className="grid grid-cols-2 gap-6 sm:inline-flex sm:grid-cols-none sm:gap-6">
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected={section === 'tags'}
-                        className={tagListTabClass({ selected: section === 'tags' })}
-                        onClick={() => handleSectionChange('tags')}>
-                        <Icon.Tags className="h-4 w-4" /> Tags
-                    </button>
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected={section === 'views'}
-                        className={tagListTabClass({ selected: section === 'views' })}
-                        onClick={() => handleSectionChange('views')}>
-                        <Icon.Filter className="h-4 w-4" /> Saved filters
-                    </button>
-                </div>
+                <SegmentedControl
+                    variant="tabs"
+                    value={section}
+                    options={TAG_LIST_SECTION_OPTIONS}
+                    ariaLabel="Tag page sections"
+                    onChange={handleSectionChange}
+                />
             </nav>
 
             <section className="flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)] max-sm:flex-col max-sm:items-start">
@@ -743,18 +739,21 @@ export default function TagList() {
             )}
 
             {section === 'tags' && (
-                <>
+                <div
+                    id="tag-list-tags-panel"
+                    role="tabpanel"
+                    aria-labelledby="tag-list-tags-tab">
                     {tagsQuery.isLoading && <Loading />}
                     {!tagsQuery.isLoading && tagsQuery.data?.type === 'error' && (
-                        <div className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
-                            <Text as="p" variant="muted" size="sm">
+                        <div role="alert" className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
+                            <Text as="p" size="sm" className="text-[var(--b-color-badge-danger-text)]">
                                 {getGraphQueryErrorMessage(tagsQuery.data)}
                             </Text>
                         </div>
                     )}
                     {!tagsQuery.isLoading && tagsQuery.data?.type !== 'error' && (
                         tags.length > 0 ? (
-                            <div className={isSelectMode ? 'pb-48' : 'pb-[var(--b-spacing-2xl)]'}>
+                            <div className={tagListBodyClass({ selecting: isSelectMode })}>
                                 {tags.map(tag => (
                                     <TagListItem
                                         key={tag.id}
@@ -778,15 +777,18 @@ export default function TagList() {
                             </div>
                         )
                     )}
-                </>
+                </div>
             )}
 
             {section === 'views' && (
-                <>
+                <div
+                    id="tag-list-views-panel"
+                    role="tabpanel"
+                    aria-labelledby="tag-list-views-tab">
                     {viewsQuery.isLoading && <Loading />}
                     {!viewsQuery.isLoading && viewsQuery.data?.type === 'error' && (
-                        <div className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
-                            <Text as="p" variant="muted" size="sm">
+                        <div role="alert" className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
+                            <Text as="p" size="sm" className="text-[var(--b-color-badge-danger-text)]">
                                 {getGraphQueryErrorMessage(viewsQuery.data)}
                             </Text>
                         </div>
@@ -813,51 +815,33 @@ export default function TagList() {
                             </div>
                         )
                     )}
-                </>
+                </div>
             )}
 
             {section === 'tags' && isSelectMode && selectedTagIds.length > 0 && (
-                <section className="sticky bottom-[max(12px,env(safe-area-inset-bottom))] z-[8] mx-auto mt-[var(--b-spacing-lg)] flex w-[min(544px,calc(100%_-_32px))] flex-col gap-2 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-modal)] p-2">
-                    <div className="grid grid-cols-2 gap-1 rounded-[var(--b-radius-md)] bg-[var(--b-color-surface-subtle)] p-1">
-                        <button
-                            type="button"
-                            aria-pressed={selectedTagMode === 'all'}
-                            className={cx(
-                                'min-h-9 rounded-[var(--b-radius-sm)] px-3 text-xs font-semibold text-[var(--b-color-text-secondary)] transition-colors hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
-                                selectedTagMode === 'all' && 'bg-[var(--b-color-surface-input)] text-[var(--b-color-text)]'
-                            )}
-                            onClick={() => setSelectedTagMode('all')}>
-                            Match all
-                        </button>
-                        <button
-                            type="button"
-                            aria-pressed={selectedTagMode === 'any'}
-                            className={cx(
-                                'min-h-9 rounded-[var(--b-radius-sm)] px-3 text-xs font-semibold text-[var(--b-color-text-secondary)] transition-colors hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
-                                selectedTagMode === 'any' && 'bg-[var(--b-color-surface-input)] text-[var(--b-color-text)]'
-                            )}
-                            onClick={() => setSelectedTagMode('any')}>
-                            Match any
-                        </button>
-                    </div>
+                <ActionBar layout="stack" role="region" aria-label="Selected tag actions">
+                    <TagMatchModeControl
+                        value={selectedTagMode}
+                        onChange={setSelectedTagMode}
+                    />
                     <Text as="p" variant="muted" size="xs" className="px-1" truncate>
                         {getTagCountLabel(selectedTagIds.length)} · {getTagViewModeDescription(selectedTagMode)}
                     </Text>
-                    <div className={cx('grid gap-2', tagSelectionIntent === 'create-filter' ? 'grid-cols-1' : 'grid-cols-2 max-sm:grid-cols-1')}>
+                    <div className={tagSelectionActionGridClass({ singleAction: tagSelectionIntent === 'create-filter' })}>
                         {tagSelectionIntent !== 'create-filter' && (
-                            <Button
-                                fullWidth
+                            <ActionBarButton
+                                variant="secondary"
                                 onClick={() => handleViewLibrary(selectedTagIds, selectedTagMode)}>
                                 <Icon.Filter /> Show songs
-                            </Button>
+                            </ActionBarButton>
                         )}
-                        <Button
-                            fullWidth
+                        <ActionBarButton
+                            variant="primary"
                             onClick={handleStartSaveView}>
                             <Icon.Plus /> Save filter
-                        </Button>
+                        </ActionBarButton>
                     </div>
-                </section>
+                </ActionBar>
             )}
 
             <TextEntryDialog

@@ -1,7 +1,17 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { useAppStore as useStore } from '~/store/base-store';
-import { IconTextButton, Image, Surface, Text } from '~/components/shared';
+import {
+    CompactTrackRow,
+    IconTextButton,
+    Image,
+    LibraryActionCard,
+    SectionEmptyState,
+    SectionHeader,
+    SectionHeaderAction,
+    Surface,
+    Text
+} from '~/components/shared';
 import * as Icon from '~/icon';
 import { useResetQueue } from '~/hooks';
 import { musicStore } from '~/store/music';
@@ -98,18 +108,18 @@ export default function Home() {
 
     return (
         <>
-            <Surface as="section" variant="panel" radius="2xl" className="relative grid min-h-[clamp(240px,34vw,352px)] grid-cols-[minmax(144px,0.44fr)_minmax(0,1fr)] items-center gap-[clamp(20px,4vw,48px)] overflow-hidden rounded-[var(--b-radius-2xl)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] p-[clamp(16px,3vw,24px)] shadow-[var(--b-card-shadow-main)] max-[900px]:min-h-0 max-[900px]:grid-cols-1 max-sm:rounded-[var(--b-radius-xl)]">
-                <div className="relative flex min-w-0 justify-center before:absolute before:left-1/2 before:top-1/2 before:h-[78%] before:w-[78%] before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border before:border-[rgba(139,92,246,0.26)] before:content-[''] after:absolute after:left-1/2 after:top-1/2 after:h-[92%] after:w-[92%] after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-[var(--b-radius-2xl)] after:border after:border-[rgba(244,244,245,0.08)] after:content-['']">
+            <Surface as="section" variant="subtle" radius="2xl" padding="hero" className="relative grid min-h-[clamp(240px,34vw,352px)] grid-cols-[minmax(144px,0.44fr)_minmax(0,1fr)] items-center gap-[clamp(20px,4vw,48px)] overflow-hidden shadow-[var(--b-card-shadow-main)] max-[900px]:min-h-0 max-[900px]:grid-cols-1">
+                <div className="relative flex min-w-0 justify-center before:absolute before:left-1/2 before:top-1/2 before:h-[78%] before:w-[78%] before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border before:border-[var(--b-color-point-glow)] before:content-[''] after:absolute after:left-1/2 after:top-1/2 after:h-[92%] after:w-[92%] after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-[var(--b-radius-2xl)] after:border after:border-[var(--b-color-border-subtle)] after:content-['']">
                     {currentMusic ? (
                         <Image
-                            className="relative z-[1] aspect-square w-[min(100%,200px)] rounded-[var(--b-radius-2xl)] border border-[rgba(244,244,245,0.08)] object-cover shadow-[0_18px_42px_rgba(0,0,0,0.28)] max-sm:w-[min(100%,224px)] max-sm:rounded-[var(--b-radius-xl)]"
+                            className="relative z-[1] aspect-square w-[min(100%,200px)] rounded-[var(--b-radius-2xl)] border border-[var(--b-color-border-subtle)] object-cover shadow-[var(--b-shadow-artwork-hero)] max-sm:w-[min(100%,224px)] max-sm:rounded-[var(--b-radius-xl)]"
                             src={currentMusic.album.cover}
                             alt={currentMusic.album.name}
                             loading="eager"
                             icon={<Icon.Disc />}
                         />
                     ) : (
-                        <div className="relative z-[1] flex aspect-square w-[min(100%,200px)] items-center justify-center rounded-[var(--b-radius-2xl)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] text-[var(--b-color-point-light)] shadow-[0_18px_42px_rgba(0,0,0,0.24)] max-sm:w-[min(100%,224px)] max-sm:rounded-[var(--b-radius-xl)] [&_svg]:h-16 [&_svg]:w-16">
+                        <div className="relative z-[1] flex aspect-square w-[min(100%,200px)] items-center justify-center rounded-[var(--b-radius-2xl)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] text-[var(--b-color-point-light)] shadow-[var(--b-shadow-artwork-placeholder)] max-sm:w-[min(100%,224px)] max-sm:rounded-[var(--b-radius-xl)] [&_svg]:h-16 [&_svg]:w-16">
                             <Icon.Music />
                         </div>
                     )}
@@ -119,9 +129,9 @@ export default function Home() {
                     <Text
                         as="span"
                         variant="muted"
-                        size="xs"
+                        size="overline"
                         weight="medium"
-                        className="tracking-[0.08em] text-[var(--b-color-point-light)] uppercase">
+                        className="text-[var(--b-color-point-light)]">
                         {currentMusic ? 'Now playing' : 'Listening room'}
                     </Text>
 
@@ -130,7 +140,7 @@ export default function Home() {
                         size="2xl"
                         weight="bold"
                         title={currentMusic?.name}
-                        className="max-w-[min(100%,448px)] overflow-hidden break-all leading-[1.08] tracking-[-0.04em] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] max-[900px]:max-w-[min(100%,384px)]">
+                        className="max-w-[min(100%,448px)] overflow-hidden break-all leading-[1.08] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] max-[900px]:max-w-[min(100%,384px)]">
                         {currentMusic?.name ?? (loaded ? 'Ready when you are.' : 'Loading your library.')}
                     </Text>
 
@@ -173,65 +183,41 @@ export default function Home() {
             </Surface>
 
             <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(288px,0.8fr)] gap-[clamp(16px,2.4vw,24px)] max-[900px]:grid-cols-1">
-                <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(16px,2.4vw,20px)] max-sm:rounded-[var(--b-radius-xl)]" aria-labelledby="home-queue-title">
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <Text
-                                as="span"
-                                variant="muted"
-                                size="xs"
-                                weight="medium"
-                                className="tracking-[0.06em] uppercase">
-                                Up next
-                            </Text>
-                            <h2 id="home-queue-title" className="m-0 text-[16.8px] font-semibold leading-tight text-[var(--b-color-text)]">
-                                Queue
-                            </h2>
-                        </div>
-                        <button
-                            type="button"
-                            className="min-h-9 rounded-full border border-[var(--b-color-border-subtle)] bg-transparent px-2.5 py-1.5 text-sm font-medium text-[var(--b-color-text-tertiary)] transition-[color,background-color,border-color] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"
-                            onClick={() => navigate('/queue')}>
-                            Open
-                        </button>
-                    </div>
+                <Surface as="section" variant="transparent" radius="lg" padding="responsive" className="flex min-w-0 flex-col gap-4" aria-labelledby="home-queue-title">
+                    <SectionHeader
+                        eyebrow="Up next"
+                        heading="Queue"
+                        headingId="home-queue-title"
+                        actions={(
+                            <SectionHeaderAction onClick={() => navigate('/queue')}>
+                                Open
+                            </SectionHeaderAction>
+                        )}
+                    />
 
                     {queuePreviewMusics.length > 0 ? (
                         <div className="flex flex-col gap-2.5">
                             {queuePreviewMusics.map((music, index) => (
-                                <button
+                                <CompactTrackRow
                                     key={music.id}
-                                    type="button"
-                                    className="grid min-h-15 w-full min-w-0 grid-cols-[1.5rem_3rem_minmax(0,1fr)] items-center gap-3 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] p-2.5 text-left text-[var(--b-color-text)] transition-[color,background-color,border-color,transform] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"
+                                    music={music}
+                                    rank={index + 1}
                                     onClick={() => {
                                         const queueIndex = items.indexOf(music.id);
 
                                         if (queueIndex >= 0) {
                                             queueStore.select(queueIndex);
                                         }
-                                    }}>
-                                    <span className="text-center text-sm font-medium text-[var(--b-color-text-muted)]">{index + 1}</span>
-                                    <Image
-                                        className="h-12 w-12 shrink-0 overflow-hidden rounded-[var(--b-radius-md)] object-cover"
-                                        src={music.album.cover}
-                                        alt={music.album.name}
-                                        icon={<Icon.Disc />}
-                                    />
-                                    <span className="flex min-w-0 flex-col gap-0.5">
-                                        <span className="truncate text-sm font-medium text-[var(--b-color-text)]">{music.name}</span>
-                                        <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">{music.artist.name}</span>
-                                    </span>
-                                </button>
+                                    }}
+                                />
                             ))}
                         </div>
                     ) : (
-                        <div className="flex min-h-32 items-center rounded-[var(--b-radius-lg)] bg-[var(--b-color-surface-item)] p-4">
-                            <Text as="p" variant="secondary" size="sm">
-                                {queueLength > 0
-                                    ? 'Queue ends after the current track.'
-                                    : 'Build a queue when you want the session to keep moving.'}
-                            </Text>
-                        </div>
+                        <SectionEmptyState>
+                            {queueLength > 0
+                                ? 'Queue ends after the current track.'
+                                : 'Build a queue when you want the session to keep moving.'}
+                        </SectionEmptyState>
                     )}
 
                     <Text as="p" variant="muted" size="xs" className="mt-auto max-sm:hidden">
@@ -241,22 +227,8 @@ export default function Home() {
                     </Text>
                 </Surface>
 
-                <Surface as="section" className="flex min-w-0 flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(16px,2.4vw,20px)] max-sm:rounded-[var(--b-radius-xl)]" aria-labelledby="home-actions-title">
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <Text
-                                as="span"
-                                variant="muted"
-                                size="xs"
-                                weight="medium"
-                                className="tracking-[0.06em] uppercase">
-                                Quick start
-                            </Text>
-                            <h2 id="home-actions-title" className="m-0 text-[16.8px] font-semibold leading-tight text-[var(--b-color-text)]">
-                                Choose a flow
-                            </h2>
-                        </div>
-                    </div>
+                <Surface as="section" variant="transparent" radius="lg" padding="responsive" className="flex min-w-0 flex-col gap-4" aria-labelledby="home-actions-title">
+                    <SectionHeader eyebrow="Quick start" heading="Choose a flow" headingId="home-actions-title" />
 
                     <div className="flex flex-col flex-wrap gap-2.5">
                         <IconTextButton
@@ -279,73 +251,34 @@ export default function Home() {
                 </Surface>
             </div>
 
-            <Surface as="section" className="flex flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(16px,2.4vw,20px)] max-sm:rounded-[var(--b-radius-xl)]" aria-labelledby="home-library-title">
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <Text
-                            as="span"
-                            variant="muted"
-                            size="xs"
-                            weight="medium"
-                            className="tracking-[0.06em] uppercase">
-                            Library
-                        </Text>
-                        <h2 id="home-library-title" className="m-0 text-[16.8px] font-semibold leading-tight text-[var(--b-color-text)]">
-                            Browse quietly
-                        </h2>
-                    </div>
-                </div>
+            <Surface as="section" variant="transparent" radius="lg" padding="responsive" className="flex flex-col gap-4" aria-labelledby="home-library-title">
+                <SectionHeader eyebrow="Library" heading="Browse quietly" headingId="home-library-title" />
 
                 <div className="grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-sm:grid-cols-1">
                     {shortcutItems.map(item => (
-                        <Link key={item.path} to={item.path} className="flex min-h-21 min-w-0 flex-col justify-between gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] p-3.5 text-[var(--b-color-text)] no-underline transition-[color,background-color,border-color,transform] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]">
-                            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[var(--b-color-surface-subtle)] text-[var(--b-color-point-light)] [&_svg]:h-[18px] [&_svg]:w-[18px]">{item.icon}</span>
-                            <span className="flex min-w-0 flex-col gap-0.5">
-                                <span className="truncate text-sm font-medium text-[var(--b-color-text)]">{item.label}</span>
-                                <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">{item.meta}</span>
-                            </span>
-                        </Link>
+                        <LibraryActionCard
+                            key={item.path}
+                            to={item.path}
+                            title={item.label}
+                            meta={item.meta}
+                            icon={item.icon}
+                        />
                     ))}
                 </div>
             </Surface>
 
             {recentlyAddedMusics.length > 0 && (
-                <Surface as="section" className="flex flex-col gap-4 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent p-[clamp(16px,2.4vw,20px)] max-sm:rounded-[var(--b-radius-xl)]" aria-labelledby="home-focus-title">
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <Text
-                                as="span"
-                                variant="muted"
-                                size="xs"
-                                weight="medium"
-                                className="tracking-[0.06em] uppercase">
-                                New in library
-                            </Text>
-                            <h2 id="home-focus-title" className="m-0 text-[16.8px] font-semibold leading-tight text-[var(--b-color-text)]">
-                                Recently added
-                            </h2>
-                        </div>
-                    </div>
+                <Surface as="section" variant="transparent" radius="lg" padding="responsive" className="flex flex-col gap-4" aria-labelledby="home-focus-title">
+                    <SectionHeader eyebrow="New in library" heading="Recently added" headingId="home-focus-title" />
 
                     <div className="grid grid-cols-2 gap-2.5 max-[900px]:grid-cols-2 max-sm:grid-cols-1">
                         {recentlyAddedMusics.map(music => (
-                            <button
+                            <CompactTrackRow
                                 key={music.id}
-                                type="button"
-                                className="grid min-h-15 w-full min-w-0 grid-cols-[3rem_minmax(0,1fr)_1.400px] items-center gap-3 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] p-2.5 text-left text-[var(--b-color-text)] transition-[color,background-color,border-color,transform] duration-150 hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)] [&>svg]:h-4 [&>svg]:w-4 [&>svg]:text-[var(--b-color-text-muted)]"
-                                onClick={() => void queueStore.add(music.id)}>
-                                <Image
-                                    className="h-12 w-12 shrink-0 overflow-hidden rounded-[var(--b-radius-md)] object-cover"
-                                    src={music.album.cover}
-                                    alt={music.album.name}
-                                    icon={<Icon.Disc />}
-                                />
-                                <span className="flex min-w-0 flex-col gap-0.5">
-                                    <span className="truncate text-sm font-medium text-[var(--b-color-text)]">{music.name}</span>
-                                    <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">{music.artist.name}</span>
-                                </span>
-                                <Icon.Play />
-                            </button>
+                                music={music}
+                                trailing={<Icon.Play />}
+                                onClick={() => void queueStore.add(music.id)}
+                            />
                         ))}
                     </div>
                 </Surface>

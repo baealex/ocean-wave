@@ -1,7 +1,7 @@
 import { useAppStore as useStore } from '~/store/base-store';
 
 import { Image, PanelContent } from '~/components/shared';
-import { panelContentClass } from '~/components/shared/PanelContent';
+import { PanelHeaderAction, panelContentClass } from '~/components/shared/PanelContent';
 import { PlaylistPanelContent } from '~/components/playlist';
 import MusicTagPanelContent from './MusicTagPanelContent';
 
@@ -34,58 +34,56 @@ export default function MusicActionPanelContent({
         return null;
     }
 
+    const header = (onAlbumClick || onArtistClick) ? (
+        <>
+            {onAlbumClick && (
+                <PanelHeaderAction
+                    layout="album"
+                    onClick={() => {
+                        panel.close();
+                        setTimeout(onAlbumClick, 100);
+                    }}>
+                    <Image
+                        className={panelContentClass.cover}
+                        src={music.album.cover}
+                        alt={music.album.name}
+                    />
+                    <div>
+                        <div className={panelContentClass.subTitle}>Album</div>
+                        <div className={panelContentClass.subContent}>
+                            {music.album.name}
+                        </div>
+                    </div>
+                </PanelHeaderAction>
+            )}
+            {onArtistClick && (
+                <PanelHeaderAction
+                    layout="artist"
+                    onClick={() => {
+                        panel.close();
+                        setTimeout(onArtistClick, 100);
+                    }}>
+                    <div>
+                        <div className={panelContentClass.subTitle}>Artist</div>
+                        <div className={panelContentClass.subContent}>
+                            {music.artist.name}
+                        </div>
+                    </div>
+                </PanelHeaderAction>
+            )}
+        </>
+    ) : undefined;
+
     return (
         <PanelContent
-            header={(
-                <>
-                    {onAlbumClick && (
-                        <button
-                            className={`${panelContentClass.actionLink} ${panelContentClass.albumLink}`}
-                            onClick={() => {
-                                panel.close();
-                                setTimeout(onAlbumClick, 100);
-                            }}>
-                            <Image
-                                className={panelContentClass.cover}
-                                src={music.album.cover}
-                                alt={music.album.name}
-                            />
-                            <div>
-                                <div className={panelContentClass.subTitle}>Album</div>
-                                <div className={panelContentClass.subContent}>
-                                    {music.album.name}
-                                </div>
-                            </div>
-                        </button>
-                    )}
-                    {onArtistClick && (
-                        <button
-                            className={`${panelContentClass.actionLink} ${panelContentClass.artistLink}`}
-                            onClick={() => {
-                                panel.close();
-                                setTimeout(onArtistClick, 100);
-                            }}>
-                            <div>
-                                <div className={panelContentClass.subTitle}>Artist</div>
-                                <div className={panelContentClass.subContent}>
-                                    {music.artist.name}
-                                </div>
-                            </div>
-                        </button>
-                    )}
-                </>
-            )}
+            header={header}
             items={[
                 {
-                    icon: (
-                        <Icon.Heart
-                            className={music.isLiked
-                                ? '!fill-[var(--b-color-point)] !stroke-[var(--b-color-point)]'
-                                : undefined}
-                        />
-                    ),
-                    text: 'Like',
-                    isActive: music.isLiked,
+                    id: 'like',
+                    icon: <Icon.Heart />,
+                    text: music.isLiked ? 'Liked' : 'Like',
+                    filled: music.isLiked,
+                    active: music.isLiked,
                     onClick: () => MusicListener.like(music.id, !music.isLiked)
                 },
                 {

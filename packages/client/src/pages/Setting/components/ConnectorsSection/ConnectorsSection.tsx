@@ -1,6 +1,6 @@
 import { useAppStore as useStore } from '~/store/base-store';
 
-import { SettingSection, Text } from '~/components/shared';
+import { SettingSection, Tag, TagButton, Text } from '~/components/shared';
 import { appCopy } from '~/config/copy';
 import { ConnectorListener, socket } from '~/socket';
 import { connectorStore } from '~/store/connector';
@@ -48,13 +48,14 @@ export const ConnectorsSection = () => {
                             </Text>
                         </div>
                         {connector.id === socket.id ? (
-                            <span className="inline-flex w-fit items-center rounded-full border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--b-color-text-secondary)]">This device</span>
+                            <Tag className="w-fit px-2.5 py-1 text-xs">This device</Tag>
                         ) : (
-                            <button
-                                className="inline-flex w-fit items-center rounded-full border border-[rgba(255,152,152,0.2)] bg-transparent px-2.5 py-1 text-xs font-semibold text-[rgba(254,202,202,0.92)] transition-[color,border-color,background-color] duration-150 hover:border-[rgba(255,152,152,0.28)] hover:bg-[rgba(255,152,152,0.08)] hover:text-[var(--b-color-text)]"
+                            <TagButton
+                                tone="danger"
+                                className="w-fit px-2.5 py-1 text-xs"
                                 onClick={() => ConnectorListener.remove(connector.id)}>
                                 Remove
-                            </button>
+                            </TagButton>
                         )}
                     </div>
                 ))}

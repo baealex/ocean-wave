@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { MusicActionPanelContent, MusicListItem } from '~/components/music';
-import { TwoToneLayout } from '~/components/layout';
+import { TwoToneLayout, TwoTonePrimaryAction } from '~/components/layout';
 import { AlbumSummary } from '~/components/album';
+import { Button, Loading, StateMessage } from '~/components/shared';
 import { Play } from '~/icon';
 
 import { getAlbum } from '~/api/library';
@@ -22,7 +23,7 @@ export default function AlbumDetail() {
 
     const { id } = useParams<{ id: string }>();
 
-    const { data: album } = useQuery({
+    const { data: album, isError, isLoading } = useQuery({
         queryKey: queryKeys.albums.detail(id),
         queryFn: async () => {
             const { data } = await getAlbum(id!);
@@ -33,8 +34,26 @@ export default function AlbumDetail() {
 
     const [{ musicMap }] = useStore(musicStore);
 
-    if (!album) {
-        return null;
+    if (isLoading) {
+        return <Loading />;
+    }
+
+    if (isError || !album) {
+        return (
+            <div className="flex min-h-full items-center justify-center p-[var(--b-spacing-lg)]">
+                <StateMessage
+                    surface
+                    icon={<Play />}
+                    heading="Album not found."
+                    description="The album could not be loaded. Go back and choose another album."
+                    actions={(
+                        <Button variant="primary" onClick={() => navigate(-1)}>
+                            Go back
+                        </Button>
+                    )}
+                />
+            </div>
+        );
     }
 
     return (
@@ -44,9 +63,12 @@ export default function AlbumDetail() {
                 <AlbumSummary {...album} />
             )}
             primaryAction={(
-                <button onClick={() => void resetQueue(album.musics.map(music => music.id))}>
+                <TwoTonePrimaryAction
+                    aria-label={`Play ${album.name}`}
+                    disabled={album.musics.length === 0}
+                    onClick={() => void resetQueue(album.musics.map(music => music.id))}>
                     <Play />
-                </button>
+                </TwoTonePrimaryAction>
             )}>
             {album.musics.map(({ id }) => {
                 const music = musicMap.get(id);
@@ -63,8 +85,8 @@ export default function AlbumDetail() {
                         trackNumber={music.trackNumber}
                         musicName={music.name}
                         musicCodec={music.codec}
-                        hideAlbumArt
                         isLiked={music.isLiked}
+                        hideAlbumArt
                         isHated={music.isHated}
                         onClick={() => queueStore.add(music.id)}
                         onLongPress={() => panel.open({

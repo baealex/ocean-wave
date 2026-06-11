@@ -1,4 +1,5 @@
 import classNames from 'classnames';
+import { cva } from 'class-variance-authority';
 import { Suspense, useEffect, useRef } from 'react';
 import {
     Outlet,
@@ -31,15 +32,39 @@ interface RouteHandle {
     pageFrame?: PageFrameConfig;
 }
 
+const siteContentClass = cva('relative flex min-h-0 flex-1 overflow-hidden', {
+    variants: {
+        subPage: {
+            true: 'lg:col-[1/3]',
+            false: ''
+        }
+    },
+    defaultVariants: {
+        subPage: false
+    }
+});
+
+const subPageBackdropClass = cva('pointer-events-none absolute inset-0 bg-[var(--b-color-overlay-strong)] lg:hidden', {
+    variants: {
+        hidden: {
+            true: 'hidden',
+            false: ''
+        }
+    },
+    defaultVariants: {
+        hidden: false
+    }
+});
+
 const subPageFrameClass: Record<SubPagePresentation, string> = {
     stacked: 'pt-0',
     sheet: 'pt-3.5 lg:pt-0',
-    fullscreen: 'pt-0 bg-[linear-gradient(180deg,rgba(9,9,11,0.98)_0%,rgb(6,6,8)_100%)] lg:bg-transparent'
+    fullscreen: 'pt-0 bg-[var(--b-gradient-subpage-fullscreen)] lg:bg-transparent'
 };
 
 const subPageSurfaceClass: Record<SubPagePresentation, string> = {
     stacked: '',
-    sheet: 'rounded-t-[24px] lg:rounded-none',
+    sheet: 'rounded-t-[var(--b-radius-xl)] lg:rounded-none',
     fullscreen: 'border-t-0 bg-transparent opacity-100 shadow-none lg:flex lg:w-full lg:grid-cols-none'
 };
 
@@ -78,6 +103,7 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
     const hasSubPageHeader = shouldRenderSubPageHeader(location.pathname);
     const hideMiniPlayer = shouldHideMiniPlayer(location.pathname);
     const shouldAvoidMiniPlayerForToast = !disablePlayer && !hideMiniPlayer;
+    const hasMiniPlayer = !disablePlayer && !hideMiniPlayer;
     const pageFrame = resolvePageFrame(matches);
 
     const renderOutlet = () => {
@@ -141,9 +167,14 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
         <PanelProvider>
             <main>
             {!isSubPage && <SiteHeader />}
-            <div className={cx('relative flex min-h-0 flex-1 overflow-hidden', isSubPage && 'lg:col-[1/3]')}>
+            <div className={siteContentClass({ subPage: isSubPage })}>
                 {!isSubPage && (
-                    <div ref={containerRef} className={cx('main-container min-h-0 w-full min-w-0 flex-1')}>
+                    <div
+                        ref={containerRef}
+                        className={cx(
+                            'main-container min-h-0 w-full min-w-0 flex-1',
+                            hasMiniPlayer && 'pb-[var(--app-mini-player-content-offset)] lg:pb-[var(--app-mini-player-content-offset-lg)]'
+                        )}>
                         {renderOutlet()}
                     </div>
                 )}
@@ -153,7 +184,7 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                             'absolute inset-0 z-[2] flex min-h-0 flex-1 overflow-hidden p-0',
                             subPageFrameClass[subPagePresentation]
                         )}>
-                        <div className={cx('pointer-events-none absolute inset-0 bg-[rgba(9,9,11,0.72)] lg:hidden', subPagePresentation === 'fullscreen' && 'hidden')} />
+                        <div className={subPageBackdropClass({ hidden: subPagePresentation === 'fullscreen' })} />
                         <div
                             key={location.pathname}
                             className={cx(
@@ -166,14 +197,14 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                                     <div
                                         ref={containerRef}
                                         className={cx(
-                                            'main-container min-h-0 bg-[linear-gradient(180deg,rgba(9,9,11,0.52)_0%,rgba(9,9,11,0)_100%)] lg:bg-transparent',
+                                            'main-container min-h-0 bg-[var(--b-gradient-subpage-content)] lg:bg-transparent',
                                             subPageContentClass[subPagePresentation]
                                         )}>
                                         {renderOutlet()}
                                     </div>
                                 </>
                             ) : (
-                                <div className={cx('min-h-0 bg-[linear-gradient(180deg,rgba(9,9,11,0.52)_0%,rgba(9,9,11,0)_100%)] lg:bg-transparent', subPageContentClass[subPagePresentation])}>
+                                <div className={cx('min-h-0 bg-[var(--b-gradient-subpage-content)] lg:bg-transparent', subPageContentClass[subPagePresentation])}>
                                     {renderOutlet()}
                                 </div>
                             )}
@@ -181,7 +212,7 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                     </div>
                 )}
             </div>
-            {!disablePlayer && !hideMiniPlayer && <MusicPlayer />}
+            {hasMiniPlayer && <MusicPlayer />}
             <ToastProvider avoidMiniPlayer={shouldAvoidMiniPlayerForToast} />
             </main>
         </PanelProvider>

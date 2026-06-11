@@ -12,9 +12,13 @@
         "dev:server": "pnpm --filter ocean-wave-server dev",
         "dev": "concurrently \"pnpm dev:client\" \"pnpm dev:server\"",
         "test:metadata": "node --test tests/branding/*.test.mjs",
+        "test:design-system": "node --test tests/design-system/*.test.mjs",
+        "test:runtime-ui": "node --test tests/design-system/runtime-ui-smoke.mjs",
+        "test:runtime-ui:managed": "node scripts/test/runtime-ui-managed.mjs",
         "test:server": "pnpm --filter ocean-wave-server test",
         "test:client": "pnpm --filter ocean-wave-client test",
-        "test:ci": "pnpm test:metadata && pnpm test:server && pnpm test:client",
+        "test:mobile": "pnpm --filter ocean-wave-mobile test",
+        "test:ci": "pnpm test:metadata && pnpm test:design-system && pnpm test:server && pnpm test:client && pnpm test:mobile && pnpm test:runtime-ui:managed",
         "lint": "biome lint .",
         "type-check": "pnpm --filter ocean-wave-server type-check && pnpm --filter ocean-wave-client type-check && pnpm --filter ocean-wave-mobile type-check",
         "build:server": "pnpm --filter ocean-wave-server build",
@@ -53,6 +57,7 @@
             "@prisma/dev": "0.24.7",
             "hono": "4.12.18",
             "fast-uri": "3.1.2",
+            "minimatch@3.1.5>brace-expansion": "2.0.2",
             "brace-expansion": "5.0.6"
         },
         "patchedDependencies": {

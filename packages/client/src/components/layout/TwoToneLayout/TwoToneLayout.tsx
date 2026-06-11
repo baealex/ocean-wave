@@ -1,7 +1,29 @@
-import classNames from 'classnames';
+import { cva } from 'class-variance-authority';
 import React from 'react';
 
-const cx = classNames;
+import IconButton from '~/components/shared/IconButton';
+
+const contentClass = cva('relative z-[1]', {
+    variants: {
+        hasPrimaryAction: {
+            true: 'pt-[var(--b-spacing-2xl)]',
+            false: ''
+        }
+    },
+    defaultVariants: {
+        hasPrimaryAction: false
+    }
+});
+
+const headerBackdropStyle = (backgroundImage?: string): React.CSSProperties | undefined => {
+    if (!backgroundImage) {
+        return undefined;
+    }
+
+    return {
+        backgroundImage: `url(${JSON.stringify(backgroundImage)})`
+    };
+};
 
 interface TwoToneLayoutProps {
     backgroundImage?: string;
@@ -10,25 +32,55 @@ interface TwoToneLayoutProps {
     children: React.ReactNode;
 }
 
+export interface TwoTonePrimaryActionProps extends Omit<React.ComponentProps<typeof IconButton>, 'size' | 'tone'> {}
+
+export const TwoTonePrimaryAction = React.forwardRef<HTMLButtonElement, TwoTonePrimaryActionProps>(({
+    className,
+    type = 'button',
+    ...props
+}, ref) => (
+    <IconButton
+        ref={ref}
+        size="floating"
+        tone="primary"
+        type={type}
+        className={className}
+        {...props}
+    />
+));
+
+TwoTonePrimaryAction.displayName = 'TwoTonePrimaryAction';
+
 const TwoToneLayout = ({
+    backgroundImage,
     header,
     primaryAction,
     children
 }: TwoToneLayoutProps) => {
     return (
         <div className="relative min-h-full bg-[var(--b-color-background)]">
-            <div className="relative z-[3] border-b border-[var(--b-color-border-subtle)]">
+            <div className="relative z-[3] overflow-hidden border-b border-[var(--b-color-border-subtle)]">
+                {backgroundImage && (
+                    <>
+                        <div
+                            aria-hidden="true"
+                            className="absolute inset-0 z-0 scale-110 bg-cover bg-center opacity-30 blur-2xl"
+                            style={headerBackdropStyle(backgroundImage)}
+                        />
+                        <div className="absolute inset-0 z-0 bg-[var(--b-gradient-detail-header-scrim)]" aria-hidden="true" />
+                    </>
+                )}
                 <div className="relative z-[1] px-[var(--b-spacing-lg)] py-[calc(var(--b-spacing-2xl)+var(--b-spacing-lg))]">
                     {header}
                     {primaryAction && (
-                        <div className="absolute bottom-0 right-[var(--b-spacing-lg)] z-10 translate-y-1/2 [&_button]:flex [&_button]:h-16 [&_button]:w-16 [&_button]:cursor-pointer [&_button]:items-center [&_button]:justify-center [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-[var(--b-color-point)] [&_button]:text-black [&_button]:shadow-none [&_button]:transition-colors [&_button]:duration-150 hover:[&_button]:bg-[var(--b-color-point-dark)] active:[&_button]:scale-95 [&_button_svg]:h-7 [&_button_svg]:w-7">
+                        <div className="absolute bottom-0 right-[var(--b-spacing-lg)] z-10 translate-y-1/2">
                             {primaryAction}
                         </div>
                     )}
                 </div>
             </div>
 
-            <div className={cx('relative z-[1]', Boolean(primaryAction) && 'pt-[var(--b-spacing-2xl)]')}>
+            <div className={contentClass({ hasPrimaryAction: Boolean(primaryAction) })}>
                 {children}
             </div>
         </div>

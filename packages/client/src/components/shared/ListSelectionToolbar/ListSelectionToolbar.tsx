@@ -1,9 +1,25 @@
 import classNames from 'classnames';
+import { cva } from 'class-variance-authority';
 
 import Button from '../Button';
 import SelectionCheckButton from './SelectionCheckButton';
 
 const cx = classNames;
+
+const listSelectionToolbarClass = cva(
+    'flex flex-wrap items-center justify-start gap-2',
+    {
+        variants: {
+            sticky: {
+                true: 'sticky z-[4] bg-[image:var(--b-gradient-sticky)]',
+                false: ''
+            }
+        },
+        defaultVariants: {
+            sticky: false
+        }
+    }
+);
 
 interface ListSelectionToolbarProps {
     className?: string;
@@ -34,15 +50,13 @@ export default function ListSelectionToolbar({
 }: ListSelectionToolbarProps) {
     return (
         <div className={cx(
-            'flex flex-wrap items-center justify-start gap-2',
-            sticky && 'sticky z-[4] bg-[image:var(--b-gradient-sticky)]',
+            listSelectionToolbarClass({ sticky }),
             className
         )}>
             {isSelecting ? (
                 <>
                     <SelectionCheckButton
                         selected
-                        activeTone={false}
                         aria-pressed
                         aria-label={`Stop selecting ${selectedLabel}`}
                         onClick={onStopSelect}>

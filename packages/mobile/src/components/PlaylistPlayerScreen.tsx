@@ -49,6 +49,7 @@ type PlaylistPlayerScreenProps = {
   onProgressLayout: (width: number) => void;
   onSearchQueryChange: (value: string) => void;
   onSeek: (event: GestureResponderEvent) => void;
+  onSeekByStep: (direction: 'backward' | 'forward') => void;
   onTogglePlayback: () => void;
   onToggleOffline: () => void;
 };
@@ -88,6 +89,7 @@ export function PlaylistPlayerScreen({
   onProgressLayout,
   onSearchQueryChange,
   onSeek,
+  onSeekByStep,
   onTogglePlayback,
   onToggleOffline,
 }: PlaylistPlayerScreenProps) {
@@ -120,7 +122,7 @@ export function PlaylistPlayerScreen({
       <NavBar onBack={onBack} title={selectedProfileName ?? 'Ocean Wave'} />
 
       {syncLabel ? (
-        <View style={[styles.syncPill, syncStatus === 'synced' && styles.syncPillSynced, syncStatus === 'offline' && styles.syncPillOffline, syncStatus === 'failed' && styles.syncPillFailed, syncStatus === 'authRequired' && styles.syncPillWarning]}>
+        <View accessibilityLiveRegion="polite" style={[styles.syncPill, syncStatus === 'synced' && styles.syncPillSynced, syncStatus === 'offline' && styles.syncPillOffline, syncStatus === 'failed' && styles.syncPillFailed, syncStatus === 'authRequired' && styles.syncPillWarning]}>
           <View style={[styles.syncDot, syncStatus === 'synced' && styles.syncDotSynced, syncStatus === 'offline' && styles.syncDotOffline, syncStatus === 'failed' && styles.syncDotFailed, syncStatus === 'authRequired' && styles.syncDotWarning]} />
           <Text style={styles.syncPillText}>{syncLabel}</Text>
         </View>
@@ -129,7 +131,7 @@ export function PlaylistPlayerScreen({
       {playlists.length || showPlaylistSkeleton ? (
         <View style={styles.playlistPanel}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.playlistRail}>
-            {!showPlaylistSkeleton ? <Pressable onPress={onCreatePlaylist} style={[styles.playlistChip, styles.addPlaylistChip]}>
+            {!showPlaylistSkeleton ? <Pressable accessibilityRole="button" onPress={onCreatePlaylist} style={({ pressed }) => [styles.playlistChip, styles.addPlaylistChip, pressed && styles.pressedSurface]}>
               <View style={styles.addPlaylistIcon}>
                 <View style={styles.addPlaylistHorizontal} />
                 <View style={styles.addPlaylistVertical} />
@@ -152,7 +154,12 @@ export function PlaylistPlayerScreen({
               const failedLabel = offlineStatus !== 'none' && offlineStatus.failed ? `${offlineStatus.failed} failed` : null;
 
               return (
-                <Pressable key={playlist.id} onPress={() => onOpenPlaylist(playlist.id)} style={[styles.playlistChip, selectedPlaylistId === playlist.id && styles.playlistChipActive]}>
+                <Pressable
+                  key={playlist.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: selectedPlaylistId === playlist.id }}
+                  onPress={() => onOpenPlaylist(playlist.id)}
+                  style={({ pressed }) => [styles.playlistChip, selectedPlaylistId === playlist.id && styles.playlistChipActive, pressed && styles.pressedSurface]}>
                   <Text numberOfLines={1} style={styles.playlistName}>{playlist.name}</Text>
                   <View style={styles.playlistMetaRow}>
                     <Text style={styles.playlistMeta}>{playlist.musicCount.toLocaleString()} tracks</Text>
@@ -168,13 +175,13 @@ export function PlaylistPlayerScreen({
 
       {playlistName ? (
         <>
-          <View style={styles.playlistStatusRow}>
+          <View accessibilityLiveRegion="polite" style={styles.playlistStatusRow}>
             {contentLabel ? <Text style={[styles.contentSourceBadge, playlistContentState === 'showing-offline' && styles.contentSourceBadgeOffline, playlistContentState === 'failed' && styles.contentSourceBadgeFailed]}>{contentLabel}</Text> : null}
             {playlistContentState === 'refreshing' ? <Text style={styles.refreshingHint}>Updating in background…</Text> : null}
           </View>
           <View style={styles.playlistActionPanel}>
-            <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={onSearchQueryChange} placeholder="Search in playlist" placeholderTextColor="#71717a" style={styles.searchInput} value={searchQuery} />
-            <Pressable accessibilityLabel={selectedOfflineFailureCount > 0 ? 'Retry failed offline downloads' : hasSelectedPlaylistOfflineUpdate ? 'Update downloaded playlist' : isSelectedPlaylistOffline ? 'Remove downloaded playlist' : 'Download playlist for offline playback'} disabled={isOfflineSaving || !visibleLibrary.length} onPress={onToggleOffline} style={[styles.offlineButton, (isOfflineSaving || !visibleLibrary.length) && styles.disabledButton, isSelectedPlaylistOffline && styles.offlineButtonSaved]}>
+            <TextInput accessibilityLabel="Search in playlist" autoCapitalize="none" autoCorrect={false} onChangeText={onSearchQueryChange} placeholder="Search in playlist" placeholderTextColor={brand.colors.textSubtle} style={styles.searchInput} value={searchQuery} />
+            <Pressable accessibilityLabel={selectedOfflineFailureCount > 0 ? 'Retry failed offline downloads' : hasSelectedPlaylistOfflineUpdate ? 'Update downloaded playlist' : isSelectedPlaylistOffline ? 'Remove downloaded playlist' : 'Download playlist for offline playback'} accessibilityRole="button" accessibilityState={{ disabled: isOfflineSaving || !visibleLibrary.length, busy: isOfflineSaving, selected: isSelectedPlaylistOffline }} disabled={isOfflineSaving || !visibleLibrary.length} onPress={onToggleOffline} style={({ pressed }) => [styles.offlineButton, (isOfflineSaving || !visibleLibrary.length) && styles.disabledButton, isSelectedPlaylistOffline && styles.offlineButtonSaved, pressed && !isOfflineSaving && visibleLibrary.length > 0 && styles.pressedSurface]}>
               <Text style={[styles.offlineButtonText, isSelectedPlaylistOffline && styles.offlineButtonTextSaved]}>{offlineButtonLabel}</Text>
             </Pressable>
           </View>
@@ -204,7 +211,7 @@ export function PlaylistPlayerScreen({
         <View style={styles.emptyPlaylistState}>
           <Text style={styles.emptyPlaylistTitle}>Choose a playlist</Text>
           <Text style={styles.emptyPlaylistBody}>Create a playlist on the web, then come back here to play it.</Text>
-          <Pressable onPress={onCreatePlaylist} style={styles.emptyPlaylistButton}>
+          <Pressable accessibilityRole="button" onPress={onCreatePlaylist} style={({ pressed }) => [styles.emptyPlaylistButton, pressed && styles.pressedSurface]}>
             <Text style={styles.emptyPlaylistButtonText}>Open web</Text>
           </Pressable>
         </View>
@@ -217,6 +224,7 @@ export function PlaylistPlayerScreen({
         onPrevious={onPrevious}
         onProgressLayout={onProgressLayout}
         onSeek={onSeek}
+        onSeekByStep={onSeekByStep}
         onTogglePlayback={onTogglePlayback}
         playlistName={playlistName}
         progressRatio={progressRatio}
@@ -245,7 +253,7 @@ const PlaylistTrackRow = memo(function PlaylistTrackRow({
   sessionCookie,
 }: PlaylistTrackRowProps) {
   return (
-    <Pressable onPress={() => onPlayTrack(index)} style={[styles.row, active && styles.activeRow]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: active }} onPress={() => onPlayTrack(index)} style={({ pressed }) => [styles.row, active && styles.activeRow, pressed && styles.pressedSurface]}>
       <CachedArtwork active={active} cookie={sessionCookie} uri={albumArtUrl(serverUrl, item.album?.cover)} />
       <View style={styles.rowMain}>
         <View style={styles.songTitleRow}>
@@ -276,69 +284,70 @@ function TrackListSkeleton() {
 }
 
 const styles = StyleSheet.create({
-  playerPage: { flex: 1, gap: 12, paddingHorizontal: 16, paddingTop: 4, backgroundColor: brand.background },
-  disabledButton: { opacity: 0.42 },
-  syncPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: 'rgba(139,92,246,0.12)', borderWidth: 1, borderColor: 'rgba(139,92,246,0.22)' },
-  syncPillSynced: { backgroundColor: 'rgba(16,185,129,0.11)', borderColor: 'rgba(16,185,129,0.22)' },
-  syncPillOffline: { backgroundColor: 'rgba(113,113,122,0.14)', borderColor: 'rgba(161,161,170,0.18)' },
-  syncPillFailed: { backgroundColor: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.22)' },
-  syncPillWarning: { backgroundColor: 'rgba(245,158,11,0.12)', borderColor: 'rgba(245,158,11,0.22)' },
-  syncDot: { width: 7, height: 7, borderRadius: 999, backgroundColor: brand.primary },
-  syncDotSynced: { backgroundColor: '#34d399' },
-  syncDotOffline: { backgroundColor: '#a1a1aa' },
-  syncDotFailed: { backgroundColor: '#f87171' },
-  syncDotWarning: { backgroundColor: '#fbbf24' },
-  syncPillText: { color: brand.text, fontSize: 11, fontWeight: '800' },
-  playlistPanel: { gap: 8 },
-  playlistRail: { gap: 8, paddingRight: 16 },
-  playlistChip: { width: 150, gap: 5, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#121214', borderWidth: 1, borderColor: brand.border },
-  playlistChipActive: { borderColor: 'rgba(139,92,246,0.75)', backgroundColor: 'rgba(139,92,246,0.14)' },
-  addPlaylistChip: { alignItems: 'flex-start', justifyContent: 'center', borderStyle: 'dashed', backgroundColor: '#09090b' },
-  addPlaylistIcon: { alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 10, backgroundColor: 'rgba(139,92,246,0.16)' },
-  addPlaylistHorizontal: { position: 'absolute', width: 14, height: 2.5, borderRadius: 999, backgroundColor: brand.primary },
-  addPlaylistVertical: { position: 'absolute', width: 2.5, height: 14, borderRadius: 999, backgroundColor: brand.primary },
-  playlistName: { color: brand.text, fontSize: 13, fontWeight: '800' },
-  playlistMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  playlistMeta: { color: brand.muted, fontSize: 11 },
-  playlistOfflineBadge: { alignSelf: 'flex-start', overflow: 'hidden', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: 'rgba(16,185,129,0.16)', color: '#34d399', fontSize: 9, fontWeight: '900' },
-  playlistOfflineBadgePartial: { backgroundColor: 'rgba(245,158,11,0.15)', color: '#fbbf24' },
-  playlistOfflineFailed: { alignSelf: 'flex-start', overflow: 'hidden', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: 'rgba(239,68,68,0.14)', color: '#f87171', fontSize: 9, fontWeight: '900' },
-  emptyPlaylistState: { gap: 10, padding: 16, borderRadius: 20, backgroundColor: '#121214', borderWidth: 1, borderColor: brand.border },
-  emptyPlaylistTitle: { color: brand.text, fontSize: 16, fontWeight: '900' },
-  emptyPlaylistBody: { color: brand.muted, fontSize: 13, lineHeight: 20 },
-  emptyPlaylistButton: { alignSelf: 'flex-start', minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: 999, paddingHorizontal: 14, backgroundColor: 'rgba(139,92,246,0.16)' },
-  emptyPlaylistButtonText: { color: brand.primary, fontSize: 12, fontWeight: '900' },
-  playlistActionPanel: { flexDirection: 'row', gap: 8 },
-  playlistStatusRow: { minHeight: 20, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  contentSourceBadge: { overflow: 'hidden', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: 'rgba(139,92,246,0.14)', color: brand.primary, fontSize: 10, fontWeight: '900' },
-  contentSourceBadgeOffline: { backgroundColor: 'rgba(16,185,129,0.14)', color: '#34d399' },
-  contentSourceBadgeFailed: { backgroundColor: 'rgba(245,158,11,0.14)', color: '#fbbf24' },
-  refreshingHint: { color: brand.muted, fontSize: 11, fontWeight: '700' },
-  searchInput: { flex: 1, minHeight: 42, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#09090b', borderWidth: 1, borderColor: brand.border },
-  offlineButton: { minWidth: 112, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, paddingHorizontal: 12, backgroundColor: 'rgba(139,92,246,0.16)', borderWidth: 1, borderColor: 'rgba(139,92,246,0.32)' },
-  offlineButtonSaved: { backgroundColor: 'rgba(16,185,129,0.14)', borderColor: 'rgba(16,185,129,0.34)' },
-  offlineButtonText: { color: brand.primary, fontSize: 12, fontWeight: '900' },
-  offlineButtonTextSaved: { color: '#34d399' },
-  listContent: { gap: 8, paddingBottom: 108 },
-  empty: { paddingVertical: 36, textAlign: 'center', color: brand.muted },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#09090b', borderWidth: 1, borderColor: '#18181b' },
-  activeRow: { borderColor: 'rgba(139,92,246,0.55)', backgroundColor: 'rgba(139,92,246,0.12)' },
-  rowMain: { flex: 1, minWidth: 0, gap: 4 },
-  songTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  songTitle: { flex: 1, color: brand.text, fontSize: 15, fontWeight: '700' },
-  activeText: { color: brand.primary },
-  songMeta: { color: brand.muted, fontSize: 12 },
-  duration: { color: '#71717a', fontSize: 12, fontVariant: ['tabular-nums'] },
-  skeletonArtwork: { width: 44, height: 44, borderRadius: 12 },
-  skeletonBadge: { width: 74, height: 17, borderRadius: 999 },
-  skeletonBlock: { backgroundColor: '#27272a', opacity: 0.72 },
+  playerPage: { flex: 1, gap: brand.space.md, paddingHorizontal: brand.space.lg, paddingTop: brand.space.xs, ...brand.components.page },
+  disabledButton: { ...brand.components.disabledButton },
+  pressedSurface: { ...brand.components.pressedSurface },
+  syncPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: brand.space.sm, paddingVertical: brand.space.xs, paddingHorizontal: brand.space.md, borderRadius: brand.radius.full, backgroundColor: brand.colors.neutralWash, borderWidth: 1, borderColor: brand.colors.neutralBorder },
+  syncPillSynced: { backgroundColor: brand.colors.successWash, borderColor: brand.colors.successBorder },
+  syncPillOffline: { backgroundColor: brand.colors.neutralWash, borderColor: brand.colors.neutralBorder },
+  syncPillFailed: { backgroundColor: brand.colors.dangerWash, borderColor: brand.colors.dangerBorder },
+  syncPillWarning: { backgroundColor: brand.colors.warningWash, borderColor: brand.colors.warningBorder },
+  syncDot: { width: brand.layout.syncDotSize, height: brand.layout.syncDotSize, borderRadius: brand.radius.full, backgroundColor: brand.colors.textMuted },
+  syncDotSynced: { backgroundColor: brand.colors.success },
+  syncDotOffline: { backgroundColor: brand.colors.textMuted },
+  syncDotFailed: { backgroundColor: brand.colors.danger },
+  syncDotWarning: { backgroundColor: brand.colors.warning },
+  syncPillText: { color: brand.colors.text, ...brand.typography.kicker },
+  playlistPanel: { gap: brand.space.sm },
+  playlistRail: { gap: brand.space.sm, paddingRight: brand.space.lg },
+  playlistChip: { width: brand.layout.playlistChipWidth, gap: brand.space.xs, paddingVertical: brand.space.md, paddingHorizontal: brand.space.md, borderRadius: brand.radius.lg, ...brand.components.inputSurface },
+  playlistChipActive: { ...brand.components.selectedSurface },
+  addPlaylistChip: { alignItems: 'flex-start', justifyContent: 'center', borderStyle: 'dashed', ...brand.components.surfaceCard },
+  addPlaylistIcon: { width: brand.layout.playlistAddIconSize, height: brand.layout.playlistAddIconSize, borderRadius: brand.radius.sm, backgroundColor: brand.colors.primarySubtle, ...brand.components.centeredControl },
+  addPlaylistHorizontal: { position: 'absolute', width: 14, height: 2.5, borderRadius: brand.radius.full, backgroundColor: brand.colors.primary },
+  addPlaylistVertical: { position: 'absolute', width: 2.5, height: 14, borderRadius: brand.radius.full, backgroundColor: brand.colors.primary },
+  playlistName: { color: brand.colors.text, ...brand.typography.label },
+  playlistMetaRow: { flexDirection: 'row', alignItems: 'center', gap: brand.space.sm },
+  playlistMeta: { color: brand.colors.textMuted, ...brand.typography.caption },
+  playlistOfflineBadge: { ...brand.components.statusBadge, backgroundColor: brand.colors.successSubtle, color: brand.colors.success, ...brand.typography.tinyBadge },
+  playlistOfflineBadgePartial: { backgroundColor: brand.colors.warningSubtle, color: brand.colors.warning },
+  playlistOfflineFailed: { ...brand.components.statusBadge, backgroundColor: brand.colors.dangerSubtle, color: brand.colors.danger, ...brand.typography.tinyBadge },
+  emptyPlaylistState: { gap: brand.space.sm, marginBottom: brand.layout.miniPlayerClearance, padding: brand.space.lg, borderRadius: brand.radius.lg, ...brand.components.inputSurface },
+  emptyPlaylistTitle: { color: brand.colors.text, ...brand.typography.sectionTitle },
+  emptyPlaylistBody: { color: brand.colors.textMuted, ...brand.typography.status },
+  emptyPlaylistButton: { alignSelf: 'flex-start', minHeight: brand.control.buttonHeightSmall, borderRadius: brand.radius.full, paddingHorizontal: brand.space.lg, ...brand.components.softPrimaryButton },
+  emptyPlaylistButtonText: { color: brand.colors.primary, ...brand.typography.buttonLabel },
+  playlistActionPanel: { flexDirection: 'row', gap: brand.space.sm },
+  playlistStatusRow: { minHeight: 20, flexDirection: 'row', alignItems: 'center', gap: brand.space.sm },
+  contentSourceBadge: { ...brand.components.statusBadge, backgroundColor: brand.colors.neutralWash, color: brand.colors.textMuted, ...brand.typography.badge },
+  contentSourceBadgeOffline: { backgroundColor: brand.colors.successSubtle, color: brand.colors.success },
+  contentSourceBadgeFailed: { backgroundColor: brand.colors.warningSubtle, color: brand.colors.warning },
+  refreshingHint: { color: brand.colors.textMuted, ...brand.typography.kicker },
+  searchInput: { flex: 1, minHeight: brand.control.buttonHeightCompact, borderRadius: brand.radius.md, paddingHorizontal: brand.space.lg, color: brand.colors.text, ...brand.components.surfaceCard },
+  offlineButton: { minWidth: 112, minHeight: brand.control.buttonHeightCompact, borderRadius: brand.radius.md, paddingHorizontal: brand.space.md, ...brand.components.softPrimaryButton },
+  offlineButtonSaved: { backgroundColor: brand.colors.successSubtle, borderColor: brand.colors.successBorderStrong },
+  offlineButtonText: { color: brand.colors.primary, ...brand.typography.buttonLabel },
+  offlineButtonTextSaved: { color: brand.colors.success },
+  listContent: { gap: brand.space.sm, paddingBottom: brand.layout.miniPlayerClearance },
+  empty: { paddingVertical: brand.layout.emptyStatePadding, textAlign: 'center', color: brand.colors.textMuted, ...brand.typography.status },
+  row: { flexDirection: 'row', alignItems: 'center', gap: brand.space.md, paddingVertical: brand.space.md, paddingHorizontal: brand.space.md, borderRadius: brand.radius.lg, ...brand.components.surfaceCard, borderColor: brand.colors.surfaceRaised },
+  activeRow: { ...brand.components.activeSurface },
+  rowMain: { flex: 1, minWidth: 0, gap: brand.space.xs },
+  songTitleRow: { flexDirection: 'row', alignItems: 'center', gap: brand.space.sm },
+  songTitle: { flex: 1, color: brand.colors.text, ...brand.typography.trackTitle },
+  activeText: { color: brand.colors.primary },
+  songMeta: { color: brand.colors.textMuted, ...brand.typography.caption },
+  duration: { color: brand.colors.textSubtle, ...brand.typography.caption, fontVariant: ['tabular-nums'] },
+  skeletonArtwork: { width: brand.layout.listArtworkSize, height: brand.layout.listArtworkSize, borderRadius: brand.radius.md },
+  skeletonBadge: { width: brand.layout.skeleton.badge.width, height: brand.layout.skeleton.badge.height, borderRadius: brand.radius.full },
+  skeletonBlock: { backgroundColor: brand.colors.skeleton, opacity: 0.72 },
   skeletonCard: { justifyContent: 'center' },
-  skeletonDuration: { width: 34, height: 12, borderRadius: 999 },
-  skeletonList: { gap: 8, paddingVertical: 2 },
-  skeletonMeta: { width: 62, height: 11, borderRadius: 999 },
-  skeletonRow: { borderColor: '#18181b' },
-  skeletonRowMain: { flex: 1, gap: 8 },
-  skeletonTitle: { width: 104, height: 13, borderRadius: 999 },
-  skeletonTrackMeta: { width: '62%', height: 12, borderRadius: 999 },
-  skeletonTrackTitle: { width: '84%', height: 15, borderRadius: 999 },
+  skeletonDuration: { width: brand.layout.skeleton.duration.width, height: brand.layout.skeleton.duration.height, borderRadius: brand.radius.full },
+  skeletonList: { gap: brand.space.sm, paddingVertical: brand.space.xxs },
+  skeletonMeta: { width: brand.layout.skeleton.meta.width, height: brand.layout.skeleton.meta.height, borderRadius: brand.radius.full },
+  skeletonRow: { borderColor: brand.colors.surfaceRaised },
+  skeletonRowMain: { flex: 1, gap: brand.space.sm },
+  skeletonTitle: { width: brand.layout.skeleton.title.width, height: brand.layout.skeleton.title.height, borderRadius: brand.radius.full },
+  skeletonTrackMeta: { width: '62%', height: brand.layout.skeleton.trackMetaHeight, borderRadius: brand.radius.full },
+  skeletonTrackTitle: { width: '84%', height: brand.layout.skeleton.trackTitleHeight, borderRadius: brand.radius.full },
 });

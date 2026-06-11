@@ -1,14 +1,14 @@
-import classNames from 'classnames';
-const cx = classNames;
+import { cva } from 'class-variance-authority';
 
 import type {
     CSSProperties,
+    KeyboardEvent as ReactKeyboardEvent,
     PointerEvent as ReactPointerEvent
 } from 'react';
 import { useAppStore as useStore } from '~/store/base-store';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ActionBar, ActionBarButton, Button, ListSelectionToolbar, PageContainer, Text } from '~/components/shared';
+import { ActionBar, ActionBarButton, Button, IconButton, ListSelectionToolbar, PageContainer, StateMessage, Text } from '~/components/shared';
 import { MusicActionPanelContent } from '~/components/music';
 import { PlaylistPanelContent } from '~/components/playlist';
 import * as Icon from '~/icon';
@@ -39,8 +39,6 @@ import type { QueueTone } from './Queue/QueueDndItem';
 import QueueItem from './Queue/QueueItem';
 
 
-const queueHeaderButtonClass = 'inline-flex h-11 w-11 items-center justify-center justify-self-start rounded-full border-0 bg-transparent text-[var(--b-color-text-secondary)] transition-[color,background-color] duration-150 hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)] max-lg:h-10 max-lg:w-10 max-lg:text-inherit [&_svg]:h-[18px] [&_svg]:w-[18px] max-lg:[&_svg]:h-5 max-lg:[&_svg]:w-5';
-
 interface QueueDragState {
     activeId: string;
     activeIndex: number;
@@ -51,6 +49,36 @@ interface QueueDragState {
     pointerContentY: number;
     tone: QueueTone;
 }
+
+const queueSectionRowClass = cva(
+    'absolute left-0 w-full box-border px-1 pt-2 pb-0.5 text-[var(--b-font-size-caption-compact)] font-medium uppercase tracking-normal text-[var(--b-color-text-muted)] max-sm:pt-2',
+    {
+        variants: {
+            current: {
+                true: 'text-[var(--b-color-text-tertiary)]',
+                false: ''
+            }
+        },
+        defaultVariants: {
+            current: false
+        }
+    }
+);
+
+const queueVirtualItemClass = cva(
+    'absolute left-0 w-full',
+    {
+        variants: {
+            dragging: {
+                true: 'opacity-15',
+                false: ''
+            }
+        },
+        defaultVariants: {
+            dragging: false
+        }
+    }
+);
 
 export default function Queue() {
     const back = useBack();
@@ -391,6 +419,26 @@ export default function Queue() {
         };
     };
 
+    const moveQueueItemByKeyboard = (
+        id: string,
+        index: number
+    ) => (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+        const direction = {
+            ArrowUp: -1,
+            ArrowLeft: -1,
+            ArrowDown: 1,
+            ArrowRight: 1
+        }[event.key];
+
+        if (direction === undefined) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        queueStore.reorderToIndex(id, Math.max(index + direction, 0));
+    };
+
     const toggleSelectedItem = (id: string) => {
         setSelectedItems((prev) => prev.includes(id)
             ? prev.filter((item) => item !== id)
@@ -413,7 +461,6 @@ export default function Queue() {
         }
 
         const sharedProps = {
-            key: id,
             music,
             index,
             tone,
@@ -425,12 +472,14 @@ export default function Queue() {
                 queueStore.select(index);
             },
             onOpenActions: () => openMusicActions(music),
+            onReorderKeyDown: moveQueueItemByKeyboard(id, index),
             onReorderPointerDown: startReorderDrag(id, index, tone, music),
             style: options?.style
         };
 
         return (
             <QueueItem
+                key={id}
                 {...sharedProps}
             />
         );
@@ -444,7 +493,7 @@ export default function Queue() {
                         return (
                             <li
                                 key={row.key}
-                                className={cx('absolute left-0 w-full box-border px-1 pt-2 pb-0.5 text-[11px] font-medium uppercase tracking-normal text-[var(--b-color-text-muted)] max-sm:pt-2', row.current && 'text-[var(--b-color-text-tertiary)]')}
+                                className={queueSectionRowClass({ current: row.current })}
                                 style={{
                                     top: `${row.top}px`,
                                     height: `${row.height}px`
@@ -455,7 +504,7 @@ export default function Queue() {
                     }
 
                     return renderQueueItem(row.id, row.index, row.tone, {
-                        className: cx('absolute left-0 w-full', dragState?.activeId === row.id && 'opacity-15'),
+                        className: queueVirtualItemClass({ dragging: dragState?.activeId === row.id }),
                         style: {
                             top: `${row.top + QUEUE_TRACK_ROW_GAP / 2}px`,
                             height: `${QUEUE_TRACK_CARD_HEIGHT}px`
@@ -471,7 +520,7 @@ export default function Queue() {
                 {dragState && dragOverlayTop !== null && (
                     <QueueItem
                         key={`drag-overlay-${dragState.activeId}`}
-                        className="pointer-events-none absolute left-0 z-[4] w-full drop-shadow-[0_16px_24px_rgba(0,0,0,0.36)]"
+                        className="pointer-events-none absolute left-0 z-[4] w-full drop-shadow-[var(--b-shadow-queue-drag)]"
                         music={dragState.music}
                         index={dragState.activeIndex}
                         tone={dragState.tone}
@@ -494,20 +543,21 @@ export default function Queue() {
         <div className="flex h-full min-h-full w-full flex-col overflow-y-auto overflow-x-hidden bg-[var(--b-gradient-page)]" ref={scrollRef}>
             <div className="sticky top-0 z-[3] w-full shrink-0 bg-[image:var(--b-gradient-sticky)] px-4 pb-3.5 pt-[calc(env(safe-area-inset-top)+14px)] max-lg:px-3 max-lg:py-2">
                 <div className="grid w-full min-w-0 grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 max-lg:grid-cols-[40px_minmax(0,1fr)_auto] max-lg:gap-2">
-                    <button
-                        type="button"
-                        className={queueHeaderButtonClass}
+                    <IconButton
+                        size="utility"
+                        tone="muted"
+                        className="justify-self-start"
                         aria-label="Go back"
                         onClick={back}>
                         <Icon.ChevronLeft />
-                    </button>
+                    </IconButton>
 
                     <div className="flex min-w-0 flex-1 flex-col gap-0.5 max-lg:justify-center max-lg:gap-0">
                         <Text
                             as="h1"
                             size="md"
                             weight="semibold"
-                            className="truncate leading-[1.2] max-lg:text-[15px]">
+                            className="truncate leading-[1.2] max-lg:text-sm">
                             <span>Queue</span>
                         </Text>
                         <Text as="p" variant="muted" size="xs" className="truncate max-lg:hidden">
@@ -544,21 +594,12 @@ export default function Queue() {
                         </div>
                     </>
                 ) : (
-                    <div className="my-auto flex flex-1 flex-col items-center gap-6 text-center">
-                        <div className="flex h-20 w-20 items-center justify-center rounded-[24px] border border-[var(--b-color-border)] bg-[var(--b-color-surface-item)] text-[var(--b-color-point-light)] [&_svg]:h-8 [&_svg]:w-8">
-                            <Icon.ListMusic />
-                        </div>
-
-                        <div className="flex max-w-96 flex-col gap-3">
-                            <Text as="h1" size="2xl" weight="bold">
-                                Queue is empty.
-                            </Text>
-                            <Text as="p" variant="secondary" size="md">
-                                Add music from your library to shape the next listening session.
-                            </Text>
-                        </div>
-
-                        <div className="flex w-full justify-center max-sm:flex-col">
+                    <StateMessage
+                        className="my-auto"
+                        icon={<Icon.ListMusic />}
+                        heading="Queue is empty."
+                        description="Add music from your library to shape the next listening session."
+                        actions={(
                             <Button
                                 variant="primary"
                                 className="max-sm:w-full"
@@ -566,13 +607,14 @@ export default function Queue() {
                                 <Icon.Music />
                                 <span>Open library</span>
                             </Button>
-                        </div>
-                    </div>
+                        )}
+                    />
                 )}
 
                 {isSelectMode && selectedItems.length > 0 && (
                     <ActionBar>
                         <ActionBarButton
+                            variant="primary"
                             onClick={() => panel.open({
                                 title: 'Move to playlist',
                                 content: (
@@ -591,6 +633,7 @@ export default function Queue() {
                         </ActionBarButton>
 
                         <ActionBarButton
+                            variant="danger"
                             onClick={() => {
                                 queueStore.removeItems(selectedItems);
                                 setSelectedItems([]);

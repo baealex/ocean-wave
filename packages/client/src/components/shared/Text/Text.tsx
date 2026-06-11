@@ -4,7 +4,7 @@ const cx = classNames;
 
 export type TextElement = 'span' | 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'div' | 'strong';
 export type TextVariant = 'primary' | 'secondary' | 'tertiary' | 'muted';
-export type TextSize = 'xs' | 'sm' | 'md' | 'title' | 'xl' | '2xl';
+export type TextSize = 'xs' | 'sm' | 'md' | 'overline' | 'sectionTitle' | 'title' | 'xl' | '2xl';
 export type TextWeight = 'normal' | 'medium' | 'semibold' | 'bold';
 
 const textVariants = cva('m-0 p-0 leading-[1.45]', {
@@ -19,6 +19,8 @@ const textVariants = cva('m-0 p-0 leading-[1.45]', {
             xs: 'text-xs',
             sm: 'text-sm',
             md: 'text-base',
+            overline: 'text-xs uppercase tracking-normal',
+            sectionTitle: 'text-base font-semibold leading-tight',
             title: 'text-xl leading-tight',
             xl: 'text-2xl leading-tight',
             '2xl': 'text-3xl leading-[1.12]'

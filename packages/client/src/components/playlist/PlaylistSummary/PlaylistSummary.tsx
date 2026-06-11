@@ -14,7 +14,7 @@ const PlaylistSummary = ({ musics, name }: PlaylistSummaryProps) => {
     return (
         <div className="flex flex-col items-center justify-center gap-[var(--b-spacing-md)] text-center">
             <GridImage
-                className="mb-[var(--b-spacing-sm)] w-[260px] max-w-[76%] rounded-[var(--b-radius-xl)] shadow-[0_12px_32px_rgba(0,0,0,0.45)]"
+                className="mb-[var(--b-spacing-sm)] w-[260px] max-w-[76%] rounded-[var(--b-radius-xl)] shadow-[var(--b-shadow-artwork-summary)]"
                 images={(musics ?? []).slice(0, 16).map((music) => musicMap.get(music.id)?.album.cover ?? '')}
             />
             <SummaryTitle as="h1">
