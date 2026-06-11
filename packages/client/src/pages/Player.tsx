@@ -85,10 +85,11 @@ const visualizerFrameClass = cva(
 
 const audioMenuDialogClass = {
     overlay: dialogOverlayClass({ layer: 'form', tone: 'strong' }),
-    content: dialogContentClass({ layer: 'form', width: 'form', padding: 'form' }),
-    panel: 'flex max-h-[min(82dvh,640px)] flex-col gap-5 overflow-y-auto',
-    header: 'flex items-start justify-between gap-4 border-b border-[var(--b-color-border-subtle)] pb-4',
+    content: dialogContentClass({ layer: 'form', width: 'form', padding: 'none' }),
+    panel: dialogChromeClass.panel,
+    header: dialogChromeClass.stickyHeader,
     heading: dialogChromeClass.header,
+    body: dialogChromeClass.body,
     title: dialogChromeClass.title,
     description: dialogChromeClass.description,
     sections: 'flex flex-col gap-5'
@@ -330,69 +331,71 @@ export default function PlayerDetail() {
                                     </Dialog.Close>
                                 </header>
 
-                                <div className={audioMenuDialogClass.sections}>
-                                    <AudioMenuSection
-                                        titleId="player-effects-title"
-                                        title="Player Effect"
-                                        description="Choose how the album art reacts.">
-                                        <div className="flex flex-col gap-1" aria-label="Visualizer mode">
-                                            {PLAYER_VISUALIZER_MODES.map(({ value, label, description }) => (
-                                                <AudioMenuOption
-                                                    key={value}
-                                                    label={label}
-                                                    description={description}
-                                                    active={playerEffectMode === value}
-                                                    pressed={playerEffectMode === value}
-                                                    onClick={() => themeStore.setPlayerVisualizerMode(value)}
-                                                />
-                                            ))}
-                                        </div>
-                                    </AudioMenuSection>
+                                <div className={audioMenuDialogClass.body}>
+                                    <div className={audioMenuDialogClass.sections}>
+                                        <AudioMenuSection
+                                            titleId="player-effects-title"
+                                            title="Player Effect"
+                                            description="Choose how the album art reacts.">
+                                            <div className="flex flex-col gap-1" aria-label="Visualizer mode">
+                                                {PLAYER_VISUALIZER_MODES.map(({ value, label, description }) => (
+                                                    <AudioMenuOption
+                                                        key={value}
+                                                        label={label}
+                                                        description={description}
+                                                        active={playerEffectMode === value}
+                                                        pressed={playerEffectMode === value}
+                                                        onClick={() => themeStore.setPlayerVisualizerMode(value)}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </AudioMenuSection>
 
-                                    <AudioMenuSection
-                                        titleId="transition-title"
-                                        title="Transition"
-                                        description="Control how tracks blend.">
-                                        <div className="flex flex-col gap-1" aria-label="Transition effect">
-                                            {MIX_MODES.map(({ value, label, description }) => (
-                                                <AudioMenuOption
-                                                    key={value}
-                                                    label={label}
-                                                    description={description}
-                                                    active={mixMode === value}
-                                                    pressed={mixMode === value}
-                                                    onClick={() => queueStore.setMixMode(value)}
-                                                />
-                                            ))}
-                                        </div>
-                                    </AudioMenuSection>
+                                        <AudioMenuSection
+                                            titleId="transition-title"
+                                            title="Transition"
+                                            description="Control how tracks blend.">
+                                            <div className="flex flex-col gap-1" aria-label="Transition effect">
+                                                {MIX_MODES.map(({ value, label, description }) => (
+                                                    <AudioMenuOption
+                                                        key={value}
+                                                        label={label}
+                                                        description={description}
+                                                        active={mixMode === value}
+                                                        pressed={mixMode === value}
+                                                        onClick={() => queueStore.setMixMode(value)}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </AudioMenuSection>
 
-                                    <AudioMenuSection
-                                        titleId="audio-tools-title"
-                                        title="Audio Tools"
-                                        description="Tune output and playback.">
-                                        <AudioMenuOption
-                                            variant="action"
-                                            label="Open Equalizer"
-                                            description="Adjust frequency bands and presets"
-                                            leadingIcon={<Icon.Settings />}
-                                            onClick={() => {
-                                                setIsAudioMenuOpen(false);
-                                                navigate('/equalizer');
-                                            }}
-                                        />
+                                        <AudioMenuSection
+                                            titleId="audio-tools-title"
+                                            title="Audio Tools"
+                                            description="Tune output and playback.">
+                                            <AudioMenuOption
+                                                variant="action"
+                                                label="Open Equalizer"
+                                                description="Adjust frequency bands and presets"
+                                                leadingIcon={<Icon.Settings />}
+                                                onClick={() => {
+                                                    setIsAudioMenuOpen(false);
+                                                    navigate('/equalizer');
+                                                }}
+                                            />
 
-                                        <AudioMenuOption
-                                            variant="action"
-                                            label="Playback Settings"
-                                            description="Quality and queue behavior"
-                                            leadingIcon={<Icon.Gear />}
-                                            onClick={() => {
-                                                setIsAudioMenuOpen(false);
-                                                navigate('/setting');
-                                            }}
-                                        />
-                                    </AudioMenuSection>
+                                            <AudioMenuOption
+                                                variant="action"
+                                                label="Playback Settings"
+                                                description="Quality and queue behavior"
+                                                leadingIcon={<Icon.Gear />}
+                                                onClick={() => {
+                                                    setIsAudioMenuOpen(false);
+                                                    navigate('/setting');
+                                                }}
+                                            />
+                                        </AudioMenuSection>
+                                    </div>
                                 </div>
                             </div>
                         </Dialog.Content>

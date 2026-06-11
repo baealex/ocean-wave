@@ -34,6 +34,7 @@ export const dialogContentClass = cva(
                 form: 'w-[min(calc(100vw_-_24px),448px)] max-sm:w-[min(calc(100vw_-_16px),448px)]'
             },
             padding: {
+                none: '',
                 compact: 'p-3.5',
                 form: 'p-4 max-sm:p-3.5'
             }
@@ -47,9 +48,12 @@ export const dialogContentClass = cva(
 );
 
 export const dialogChromeClass = {
+    panel: 'flex max-h-[min(82dvh,640px)] flex-col overflow-hidden',
+    body: 'min-h-0 overflow-y-auto px-4 py-4 max-sm:px-3.5',
     actions: 'flex justify-end gap-2.5 max-sm:flex-col-reverse',
     button: 'min-w-[88px] max-sm:w-full',
     description: 'leading-[1.45]',
     header: 'flex flex-col gap-2',
+    stickyHeader: 'flex shrink-0 items-start justify-between gap-4 border-b border-[var(--b-color-border-subtle)] px-4 py-4 max-sm:px-3.5',
     title: 'tracking-normal'
 };
