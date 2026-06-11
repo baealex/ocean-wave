@@ -36,7 +36,13 @@ const router = createBrowserRouter([
             },
             {
                 path: '/dashboard',
-                element: <Dashboard />
+                element: <Dashboard />,
+                handle: {
+                    pageFrame: {
+                        width: 'wide',
+                        className: 'flex flex-col gap-[clamp(16px,2.4vw,24px)]'
+                    }
+                }
             },
             {
                 path: '/library',
@@ -71,7 +77,7 @@ const router = createBrowserRouter([
                 element: <Setting />,
                 handle: {
                     pageFrame: {
-                        width: 'content',
+                        width: 'standard',
                         padding: 'content',
                         className: 'min-h-full'
                     }

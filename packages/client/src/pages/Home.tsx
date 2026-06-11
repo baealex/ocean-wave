@@ -108,7 +108,7 @@ export default function Home() {
 
     return (
         <>
-            <Surface as="section" variant="subtle" radius="2xl" padding="hero" className="relative grid min-h-[clamp(240px,34vw,352px)] grid-cols-[minmax(144px,0.44fr)_minmax(0,1fr)] items-center gap-[clamp(20px,4vw,48px)] overflow-hidden shadow-[var(--b-card-shadow-main)] max-[900px]:min-h-0 max-[900px]:grid-cols-1">
+            <Surface as="section" variant="subtle" radius="2xl" padding="hero" className="relative grid min-h-[clamp(208px,28vw,304px)] grid-cols-[minmax(144px,0.44fr)_minmax(0,1fr)] items-center gap-[clamp(20px,4vw,48px)] overflow-hidden shadow-[var(--b-card-shadow-main)] max-[900px]:min-h-0 max-[900px]:grid-cols-1">
                 <div className="relative flex min-w-0 justify-center before:absolute before:left-1/2 before:top-1/2 before:h-[78%] before:w-[78%] before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border before:border-[var(--b-color-point-glow)] before:content-[''] after:absolute after:left-1/2 after:top-1/2 after:h-[92%] after:w-[92%] after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-[var(--b-radius-2xl)] after:border after:border-[var(--b-color-border-subtle)] after:content-['']">
                     {currentMusic ? (
                         <Image
@@ -132,7 +132,7 @@ export default function Home() {
                         size="overline"
                         weight="medium"
                         className="text-[var(--b-color-point-light)]">
-                        {currentMusic ? 'Now playing' : 'Listening room'}
+                        {currentMusic ? 'Now playing' : 'Now'}
                     </Text>
 
                     <Text
@@ -147,7 +147,7 @@ export default function Home() {
                     <Text as="p" variant="secondary" size="md" className="max-w-[544px] leading-[1.6] max-sm:hidden">
                         {currentMusic
                             ? `${currentMusic.artist.name} · ${currentMusic.album.name}`
-                            : 'Start a calm session from your own collection.'}
+                            : 'Select music to start playback.'}
                     </Text>
 
                     {currentMusic && (
@@ -183,7 +183,7 @@ export default function Home() {
             </Surface>
 
             <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(288px,0.8fr)] gap-[clamp(16px,2.4vw,24px)] max-[900px]:grid-cols-1">
-                <Surface as="section" variant="transparent" radius="lg" padding="responsive" className="flex min-w-0 flex-col gap-4" aria-labelledby="home-queue-title">
+                <section className="flex min-w-0 flex-col gap-4" aria-labelledby="home-queue-title">
                     <SectionHeader
                         eyebrow="Up next"
                         heading="Queue"
@@ -216,7 +216,7 @@ export default function Home() {
                         <SectionEmptyState>
                             {queueLength > 0
                                 ? 'Queue ends after the current track.'
-                                : 'Build a queue when you want the session to keep moving.'}
+                                : 'Add tracks to build a queue.'}
                         </SectionEmptyState>
                     )}
 
@@ -225,10 +225,10 @@ export default function Home() {
                             ? `${formatCount(upNextCount, 'track')} waiting after this moment.`
                             : 'No upcoming tracks yet.'}
                     </Text>
-                </Surface>
+                </section>
 
-                <Surface as="section" variant="transparent" radius="lg" padding="responsive" className="flex min-w-0 flex-col gap-4" aria-labelledby="home-actions-title">
-                    <SectionHeader eyebrow="Quick start" heading="Choose a flow" headingId="home-actions-title" />
+                <section className="flex min-w-0 flex-col gap-4" aria-labelledby="home-actions-title">
+                    <SectionHeader eyebrow="Play" heading="Start" headingId="home-actions-title" />
 
                     <div className="flex flex-col flex-wrap gap-2.5">
                         <IconTextButton
@@ -248,11 +248,11 @@ export default function Home() {
                             onClick={handlePlayFavorites}
                         />
                     </div>
-                </Surface>
+                </section>
             </div>
 
-            <Surface as="section" variant="transparent" radius="lg" padding="responsive" className="flex flex-col gap-4" aria-labelledby="home-library-title">
-                <SectionHeader eyebrow="Library" heading="Browse quietly" headingId="home-library-title" />
+            <section className="flex flex-col gap-4" aria-labelledby="home-library-title">
+                <SectionHeader eyebrow="Library" heading="Browse" headingId="home-library-title" />
 
                 <div className="grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-sm:grid-cols-1">
                     {shortcutItems.map(item => (
@@ -265,10 +265,10 @@ export default function Home() {
                         />
                     ))}
                 </div>
-            </Surface>
+            </section>
 
             {recentlyAddedMusics.length > 0 && (
-                <Surface as="section" variant="transparent" radius="lg" padding="responsive" className="flex flex-col gap-4" aria-labelledby="home-focus-title">
+                <section className="flex flex-col gap-4" aria-labelledby="home-focus-title">
                     <SectionHeader eyebrow="New in library" heading="Recently added" headingId="home-focus-title" />
 
                     <div className="grid grid-cols-2 gap-2.5 max-[900px]:grid-cols-2 max-sm:grid-cols-1">
@@ -281,7 +281,7 @@ export default function Home() {
                             />
                         ))}
                     </div>
-                </Surface>
+                </section>
             )}
         </>
     );

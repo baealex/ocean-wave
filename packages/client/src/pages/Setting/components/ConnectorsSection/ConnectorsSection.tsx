@@ -40,7 +40,7 @@ export const ConnectorsSection = () => {
                 {connectors.map((connector) => (
                     <div key={connector.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[var(--b-spacing-md)] border-b border-[var(--b-color-border-subtle)] py-[var(--b-spacing-md)] last:border-b-0 max-[720px]:grid-cols-1 max-[720px]:items-start">
                         <div className="flex min-w-0 flex-col gap-1">
-                            <Text as="span" size="sm" className="truncate font-semibold">
+                            <Text as="span" size="sm" className="truncate">
                                 {connector.userAgent}
                             </Text>
                             <Text as="span" size="xs" variant="muted">
@@ -48,7 +48,7 @@ export const ConnectorsSection = () => {
                             </Text>
                         </div>
                         {connector.id === socket.id ? (
-                            <Tag className="w-fit px-2.5 py-1 text-xs">This device</Tag>
+                            <Tag className="w-fit bg-transparent px-2.5 py-1 text-xs">This device</Tag>
                         ) : (
                             <TagButton
                                 tone="danger"

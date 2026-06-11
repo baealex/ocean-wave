@@ -13,7 +13,6 @@ const surfaceVariants = cva('', {
             panel: 'ow-surface-base ow-surface-panel',
             modal: 'ow-surface-base ow-surface-modal',
             item: 'ow-surface-base bg-[var(--b-color-surface-item)]',
-            transparent: 'bg-transparent',
             bare: ''
         },
         radius: {

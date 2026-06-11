@@ -7,6 +7,7 @@ import {
     Loading,
     Button,
     StickyHeader,
+    StickyHeaderActions,
     SearchField,
     FixedVirtualList,
     StateMessage
@@ -55,17 +56,19 @@ export default function Album() {
                     ariaLabel="Search albums"
                     onChange={handleSearchChange}
                 />
-                <Button
-                    size="sm"
-                    aria-label="Sort albums"
-                    onClick={() => panel.open({
-                        title: 'Album Sort',
-                        content: (
-                            <ItemSortPanelContent items={albumStore.sortItems} />
-                        )
-                    })}>
-                    <Icon.Sort />
-                </Button>
+                <StickyHeaderActions>
+                    <Button
+                        size="sm"
+                        aria-label="Sort albums"
+                        onClick={() => panel.open({
+                            title: 'Album Sort',
+                            content: (
+                                <ItemSortPanelContent items={albumStore.sortItems} />
+                            )
+                        })}>
+                        <Icon.Sort />
+                    </Button>
+                </StickyHeaderActions>
             </StickyHeader>
             {!loaded && (
                 <Loading />

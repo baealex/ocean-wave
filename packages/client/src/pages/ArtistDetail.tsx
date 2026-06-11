@@ -60,7 +60,6 @@ export default function ArtistDetail() {
 
     return (
         <TwoToneLayout
-            backgroundImage={artist.latestAlbum?.cover || ''}
             header={(
                 <ArtistSummary
                     name={artist.name}

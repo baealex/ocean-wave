@@ -8,6 +8,7 @@ import {
     Loading,
     Button,
     StickyHeader,
+    StickyHeaderActions,
     SearchField,
     StateMessage
 } from '~/components/shared';
@@ -55,17 +56,19 @@ export default function ArtistList() {
                     ariaLabel="Search artists"
                     onChange={handleSearchChange}
                 />
-                <Button
-                    size="sm"
-                    aria-label="Sort artists"
-                    onClick={() => panel.open({
-                        title: 'Artist Sort',
-                        content: (
-                            <ItemSortPanelContent items={artistStore.sortItems} />
-                        )
-                    })}>
-                    <Icon.Sort />
-                </Button>
+                <StickyHeaderActions>
+                    <Button
+                        size="sm"
+                        aria-label="Sort artists"
+                        onClick={() => panel.open({
+                            title: 'Artist Sort',
+                            content: (
+                                <ItemSortPanelContent items={artistStore.sortItems} />
+                            )
+                        })}>
+                        <Icon.Sort />
+                    </Button>
+                </StickyHeaderActions>
             </StickyHeader>
             {!loaded && (
                 <Loading />

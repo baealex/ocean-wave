@@ -82,7 +82,7 @@ export default function SiteHeader() {
     };
 
     return (
-        <header className="relative flex h-16 flex-col justify-center gap-[var(--b-spacing-sm)] border-b border-[var(--b-color-border-subtle)] bg-[var(--b-color-panel-background)] px-3 lg:h-full lg:justify-start lg:gap-[var(--b-spacing-lg)] lg:border-b-0 lg:border-r lg:px-3 lg:py-[var(--b-spacing-lg)]">
+        <header className="relative flex h-16 flex-col justify-center gap-[var(--b-spacing-sm)] border-b border-[var(--b-color-border-subtle)] bg-[var(--b-color-background)] px-3 lg:h-full lg:justify-start lg:gap-[var(--b-spacing-lg)] lg:border-b-0 lg:border-r lg:px-3 lg:py-[var(--b-spacing-lg)]">
             <nav
                 ref={ref}
                 className="relative z-[1] flex gap-[var(--b-spacing-sm)] overflow-x-auto overflow-y-hidden px-1 [mask-image:linear-gradient(90deg,transparent,var(--b-color-static-white)_28px,var(--b-color-static-white)_calc(100%-28px),transparent)] [scrollbar-width:none] lg:flex-1 lg:flex-col lg:gap-[var(--b-spacing-md)] lg:overflow-visible lg:px-0 lg:[mask-image:none] [&::-webkit-scrollbar]:hidden"

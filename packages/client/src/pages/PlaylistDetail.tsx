@@ -135,14 +135,8 @@ export default function PlaylistDetail() {
     }
 
     const playlistMusics = playlist.musics ?? [];
-    const playlistHeaderMusics = playlist.headerMusics ?? playlistMusics.slice(0, 16);
-    const backgroundImage = playlistHeaderMusics
-        .map(({ id }) => musicMap.get(id)?.album.cover)
-        .find(Boolean) || '';
-
     return (
         <TwoToneLayout
-            backgroundImage={backgroundImage}
             header={(
                 <PlaylistSummary {...playlist} />
             )}

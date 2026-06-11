@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import Text from '../Text';
 
 const settingItemClass = cva(
-    'py-[var(--b-spacing-md)]',
+    'py-[var(--b-spacing-md)] max-sm:py-[var(--b-spacing-lg)]',
     {
         variants: {
             divider: {
@@ -76,19 +76,21 @@ interface SettingSectionProps {
 
 export const SettingSection = ({ title, description, icon, children }: SettingSectionProps) => {
     return (
-        <section className="p-0">
-            <div className="mb-[var(--b-spacing-md)] grid grid-cols-1 gap-[var(--b-spacing-xs)]">
-                <Text as="h3" size="md" weight="semibold" className="m-0 flex items-center gap-[var(--b-spacing-sm)] text-[var(--b-color-text)] tracking-normal">
-                    {icon && <span className="flex w-[19.2px] items-center text-[var(--b-color-text-muted)] [&_svg]:h-[17.6px] [&_svg]:w-[17.6px]">{icon}</span>}
-                    <span>{title}</span>
-                </Text>
-                {description && (
-                    <Text as="p" variant="secondary" size="sm" className="max-w-[672px] leading-[1.45]">
-                        {description}
+        <section className="overflow-hidden rounded-[var(--b-radius-xl)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)]">
+            <div className="border-b border-[var(--b-color-border-subtle)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)] max-sm:px-[var(--b-spacing-md)]">
+                <div className="grid grid-cols-1 gap-[var(--b-spacing-xs)]">
+                    <Text as="h3" size="md" weight="semibold" className="m-0 flex items-center gap-[var(--b-spacing-sm)] text-[var(--b-color-text)] tracking-normal">
+                        {icon && <span className="flex w-[19.2px] items-center text-[var(--b-color-text-muted)] [&_svg]:h-[17.6px] [&_svg]:w-[17.6px]">{icon}</span>}
+                        <span>{title}</span>
                     </Text>
-                )}
+                    {description && (
+                        <Text as="p" variant="tertiary" size="sm" className="max-w-[672px] leading-[1.45]">
+                            {description}
+                        </Text>
+                    )}
+                </div>
             </div>
-            <div className="rounded-[var(--b-radius-xl)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-background-layer-1)] px-[var(--b-spacing-lg)]">
+            <div className="px-[var(--b-spacing-lg)] max-sm:px-[var(--b-spacing-md)]">
                 {children}
             </div>
         </section>

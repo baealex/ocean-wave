@@ -11,7 +11,7 @@ const listSelectionToolbarClass = cva(
     {
         variants: {
             sticky: {
-                true: 'sticky z-[4] bg-[image:var(--b-gradient-sticky)]',
+                true: 'sticky z-[4] bg-[var(--b-color-background)]',
                 false: ''
             }
         },

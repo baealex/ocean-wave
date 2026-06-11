@@ -15,18 +15,7 @@ const contentClass = cva('relative z-[1]', {
     }
 });
 
-const headerBackdropStyle = (backgroundImage?: string): React.CSSProperties | undefined => {
-    if (!backgroundImage) {
-        return undefined;
-    }
-
-    return {
-        backgroundImage: `url(${JSON.stringify(backgroundImage)})`
-    };
-};
-
 interface TwoToneLayoutProps {
-    backgroundImage?: string;
     header: React.ReactNode;
     primaryAction?: React.ReactNode;
     children: React.ReactNode;
@@ -52,32 +41,22 @@ export const TwoTonePrimaryAction = React.forwardRef<HTMLButtonElement, TwoToneP
 TwoTonePrimaryAction.displayName = 'TwoTonePrimaryAction';
 
 const TwoToneLayout = ({
-    backgroundImage,
     header,
     primaryAction,
     children
 }: TwoToneLayoutProps) => {
     return (
-        <div className="relative min-h-full bg-[var(--b-color-background)]">
-            <div className="relative z-[3] overflow-hidden border-b border-[var(--b-color-border-subtle)]">
-                {backgroundImage && (
-                    <>
-                        <div
-                            aria-hidden="true"
-                            className="absolute inset-0 z-0 scale-110 bg-cover bg-center opacity-30 blur-2xl"
-                            style={headerBackdropStyle(backgroundImage)}
-                        />
-                        <div className="absolute inset-0 z-0 bg-[var(--b-gradient-detail-header-scrim)]" aria-hidden="true" />
-                    </>
-                )}
-                <div className="relative z-[1] px-[var(--b-spacing-lg)] py-[calc(var(--b-spacing-2xl)+var(--b-spacing-lg))]">
+        <div className="relative min-h-full">
+            <div className="relative z-[2]">
+                <div className="relative px-[var(--b-spacing-lg)] py-[calc(var(--b-spacing-2xl)+var(--b-spacing-lg))]">
                     {header}
                     {primaryAction && (
-                        <div className="absolute bottom-0 right-[var(--b-spacing-lg)] z-10 translate-y-1/2">
+                        <div className="absolute bottom-0 right-[var(--b-spacing-lg)] z-20 translate-y-1/2">
                             {primaryAction}
                         </div>
                     )}
                 </div>
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-px bg-[var(--b-color-border-subtle)]" aria-hidden="true" />
             </div>
 
             <div className={contentClass({ hasPrimaryAction: Boolean(primaryAction) })}>

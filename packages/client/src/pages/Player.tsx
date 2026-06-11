@@ -260,9 +260,7 @@ export default function PlayerDetail() {
     }, [currentMusic]);
 
     return (
-        <div className="relative h-full min-h-full w-full overflow-hidden bg-[var(--b-gradient-page)] max-sm:overflow-y-auto max-sm:overflow-x-hidden">
-            {currentMusic && <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden bg-[var(--b-color-background)]" aria-hidden="true" />}
-
+        <div className="relative h-full min-h-full w-full overflow-hidden max-sm:overflow-y-auto max-sm:overflow-x-hidden">
             <div className="relative z-[1] flex min-h-full flex-col px-4 pb-6 pt-4 max-lg:pt-0">
                 <Dialog.Root
                     open={Boolean(currentMusic && isAudioMenuOpen)}
@@ -403,7 +401,7 @@ export default function PlayerDetail() {
                 </Dialog.Root>
 
                 {currentMusic ? (
-                    <PageContainer width="player" padding="none" className="m-auto flex flex-col items-center gap-6 max-sm:gap-5">
+                    <PageContainer width="compact" padding="none" className="m-auto flex flex-col items-center gap-6 max-sm:gap-5">
                         <div className="flex w-full justify-center">
                             <div className={visualizerFrameClass({ effect: isVisualizerEffect })}>
                                 {playerEffectMode === 'disk' && (

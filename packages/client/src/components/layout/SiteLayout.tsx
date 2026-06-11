@@ -59,7 +59,7 @@ const subPageBackdropClass = cva('pointer-events-none absolute inset-0 bg-[var(-
 const subPageFrameClass: Record<SubPagePresentation, string> = {
     stacked: 'pt-0',
     sheet: 'pt-3.5 lg:pt-0',
-    fullscreen: 'pt-0 bg-[var(--b-gradient-subpage-fullscreen)] lg:bg-transparent'
+    fullscreen: 'pt-0'
 };
 
 const subPageSurfaceClass: Record<SubPagePresentation, string> = {
@@ -171,10 +171,7 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                 {!isSubPage && (
                     <div
                         ref={containerRef}
-                        className={cx(
-                            'main-container min-h-0 w-full min-w-0 flex-1',
-                            hasMiniPlayer && 'pb-[var(--app-mini-player-content-offset)] lg:pb-[var(--app-mini-player-content-offset-lg)]'
-                        )}>
+                        className="main-container min-h-0 w-full min-w-0 flex-1">
                         {renderOutlet()}
                     </div>
                 )}
@@ -188,7 +185,7 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                         <div
                             key={location.pathname}
                             className={cx(
-                                'relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden border-t border-[var(--b-color-border-subtle)] bg-[var(--b-gradient-layer)] shadow-none lg:grid lg:grid-cols-[256px_minmax(0,1fr)] lg:border-t-0 lg:bg-transparent',
+                                'relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden border-t border-[var(--b-color-border-subtle)] shadow-none lg:grid lg:grid-cols-[256px_minmax(0,1fr)] lg:border-t-0',
                                 subPageSurfaceClass[subPagePresentation]
                             )}>
                             {hasSubPageHeader ? (
@@ -197,14 +194,14 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                                     <div
                                         ref={containerRef}
                                         className={cx(
-                                            'main-container min-h-0 bg-[var(--b-gradient-subpage-content)] lg:bg-transparent',
+                                            'main-container min-h-0',
                                             subPageContentClass[subPagePresentation]
                                         )}>
                                         {renderOutlet()}
                                     </div>
                                 </>
                             ) : (
-                                <div className={cx('min-h-0 bg-[var(--b-gradient-subpage-content)] lg:bg-transparent', subPageContentClass[subPagePresentation])}>
+                                <div className={cx('min-h-0', subPageContentClass[subPagePresentation])}>
                                     {renderOutlet()}
                                 </div>
                             )}

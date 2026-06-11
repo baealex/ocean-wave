@@ -266,6 +266,7 @@ main {
   display: flex;
   flex-direction: column;
   height: 100%;
+  background: var(--b-color-background);
 }
 @media (min-width: 1024px) {
   main {

@@ -540,8 +540,8 @@ export default function Queue() {
     };
 
     return (
-        <div className="flex h-full min-h-full w-full flex-col overflow-y-auto overflow-x-hidden bg-[var(--b-gradient-page)]" ref={scrollRef}>
-            <div className="sticky top-0 z-[3] w-full shrink-0 bg-[image:var(--b-gradient-sticky)] px-4 pb-3.5 pt-[calc(env(safe-area-inset-top)+14px)] max-lg:px-3 max-lg:py-2">
+        <div className="flex h-full min-h-full w-full flex-col overflow-y-auto overflow-x-hidden" ref={scrollRef}>
+            <div className="sticky top-0 z-[3] w-full shrink-0 bg-[var(--b-color-background)] px-4 pb-3.5 pt-[calc(env(safe-area-inset-top)+14px)] max-lg:px-3 max-lg:py-2">
                 <div className="grid w-full min-w-0 grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 max-lg:grid-cols-[40px_minmax(0,1fr)_auto] max-lg:gap-2">
                     <IconButton
                         size="utility"
@@ -582,7 +582,7 @@ export default function Queue() {
                 )}
             </div>
 
-            <PageContainer width="focus" padding="focus" className="flex min-h-0 flex-col gap-4">
+            <PageContainer width="narrow" padding="focus" className="flex min-h-0 flex-col gap-4">
                 {items.length > 0 ? (
                     <>
                         <div className="pb-2" ref={listRef}>

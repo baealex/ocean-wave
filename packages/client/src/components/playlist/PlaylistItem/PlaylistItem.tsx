@@ -28,7 +28,7 @@ export default function PlaylistItem({
         <div className="flex w-full min-w-0 items-center">
             <button
                 type="button"
-                className={libraryRowClass({ layout: 'card' })}
+                className={libraryRowClass({ layout: 'list' })}
                 onClick={onClick}
                 onContextMenu={(e) => {
                     e.preventDefault();

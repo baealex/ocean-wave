@@ -11,11 +11,6 @@ describe('appShell', () => {
                 path: '/'
             }),
             expect.objectContaining({
-                id: 'dashboard',
-                label: 'Dashboard',
-                path: '/dashboard'
-            }),
-            expect.objectContaining({
                 id: 'library',
                 label: 'Library',
                 path: '/library'
