@@ -1,6 +1,7 @@
 import * as Slider from '@radix-ui/react-slider';
-import classNames from 'classnames';
+import { cva } from 'class-variance-authority';
 import type { ChangeEvent } from 'react';
+import Button from '../Button';
 
 interface EqualizerSliderProps {
     name: string;
@@ -16,9 +17,47 @@ interface EqualizerSliderProps {
     onReset?: () => void;
 }
 
-const cx = classNames;
+const sliderRootClass = cva(
+    'relative flex touch-none select-none items-center data-[disabled]:opacity-50',
+    {
+        variants: {
+            orientation: {
+                horizontal: 'h-8 w-full',
+                vertical: 'h-40 w-8 flex-col'
+            }
+        },
+        defaultVariants: {
+            orientation: 'horizontal'
+        }
+    }
+);
 
-const resetButtonClass = 'rounded-full border border-[var(--b-color-border-subtle)] bg-transparent px-2.5 py-1 text-xs font-semibold text-[var(--b-color-text-tertiary)] transition-[color,background-color,border-color] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)] disabled:cursor-not-allowed disabled:opacity-40 enabled:hover:border-[var(--b-color-border)] enabled:hover:bg-[var(--b-color-hover)] enabled:hover:text-[var(--b-color-text)]';
+const sliderTrackClass = cva(
+    'relative grow overflow-hidden rounded-full bg-[var(--b-color-hover)]',
+    {
+        variants: {
+            orientation: {
+                horizontal: 'h-1.5 w-full',
+                vertical: 'h-full w-1.5'
+            }
+        },
+        defaultVariants: {
+            orientation: 'horizontal'
+        }
+    }
+);
+
+const sliderRangeClass = cva('absolute rounded-full bg-[var(--b-color-point)]', {
+    variants: {
+        orientation: {
+            horizontal: 'h-full',
+            vertical: 'w-full'
+        }
+    },
+    defaultVariants: {
+        orientation: 'horizontal'
+    }
+});
 
 const EqualizerSlider = ({
     name,
@@ -54,10 +93,7 @@ const EqualizerSlider = ({
 
     const slider = (
         <Slider.Root
-            className={cx(
-                'relative flex touch-none select-none items-center data-[disabled]:opacity-50',
-                isVertical ? 'h-40 w-8 flex-col' : 'h-8 w-full'
-            )}
+            className={sliderRootClass({ orientation })}
             name={name}
             min={min}
             max={max}
@@ -68,15 +104,9 @@ const EqualizerSlider = ({
             aria-label={`${displayName} gain`}
             onValueChange={([nextValue]) => emitChange(nextValue)}>
             <Slider.Track
-                className={cx(
-                    'relative grow overflow-hidden rounded-full bg-[var(--b-color-hover)]',
-                    isVertical ? 'h-full w-1.5' : 'h-1.5 w-full'
-                )}>
+                className={sliderTrackClass({ orientation })}>
                 <Slider.Range
-                    className={cx(
-                        'absolute rounded-full bg-[var(--b-color-point)]',
-                        isVertical ? 'w-full' : 'h-full'
-                    )}
+                    className={sliderRangeClass({ orientation })}
                 />
             </Slider.Track>
             <Slider.Thumb className="block h-4 w-4 rounded-full border-2 border-[var(--b-color-background)] bg-[var(--b-color-point)] outline-none transition-[box-shadow,transform] duration-150 focus-visible:shadow-[0_0_0_3px_var(--b-color-focus-ring)] active:scale-110" />
@@ -98,13 +128,14 @@ const EqualizerSlider = ({
 
                 <div className="flex flex-col items-center justify-center gap-2">
                     <span className="text-center text-xs font-semibold text-[var(--b-color-text-secondary)]">{valueLabel}</span>
-                    <button
-                        type="button"
-                        className={resetButtonClass}
+                    <Button
+                        size="xs"
+                        variant="ghost"
+                        className="rounded-full"
                         disabled={disabled || value === 0}
                         onClick={onReset}>
                         Reset
-                    </button>
+                    </Button>
                 </div>
             </div>
         );
@@ -124,13 +155,14 @@ const EqualizerSlider = ({
             </div>
             <div className="flex items-center justify-end gap-2">
                 <span className="min-w-14 text-right text-xs font-semibold text-[var(--b-color-text-secondary)]">{valueLabel}</span>
-                <button
-                    type="button"
-                    className={resetButtonClass}
+                <Button
+                    size="xs"
+                    variant="ghost"
+                    className="rounded-full"
                     disabled={disabled || value === 0}
                     onClick={onReset}>
                     Reset
-                </button>
+                </Button>
             </div>
         </div>
     );

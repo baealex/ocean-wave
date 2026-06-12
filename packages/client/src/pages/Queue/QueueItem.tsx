@@ -5,7 +5,15 @@ import type {
 
 import classNames from 'classnames';
 
-import { Image, SelectionCheckButton, Text } from '~/components/shared';
+import {
+    Badge,
+    IconButton,
+    Image,
+    listRowButtonContentClass,
+    listRowClass,
+    SelectionCheckButton,
+    Text
+} from '~/components/shared';
 import * as Icon from '~/icon';
 
 import type { Music } from '~/models/type';
@@ -24,17 +32,10 @@ interface QueueItemProps {
     onSelect: () => void;
     onClick: () => void;
     onOpenActions: () => void;
+    onReorderKeyDown?: ButtonHTMLAttributes<HTMLButtonElement>['onKeyDown'];
     onReorderPointerDown?: ButtonHTMLAttributes<HTMLButtonElement>['onPointerDown'];
     style?: CSSProperties;
 }
-
-const queueItemToneClass: Record<QueueTone, string> = {
-    current: 'border-[var(--b-color-focus)] bg-[var(--b-color-surface-item)]',
-    past: 'opacity-70',
-    upcoming: ''
-};
-
-const iconButtonClass = 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-0 bg-transparent text-[var(--b-color-text-muted)] transition-[color,background-color] duration-150 hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] [&_svg]:h-4 [&_svg]:w-4';
 
 export default function QueueItem({
     className,
@@ -46,6 +47,7 @@ export default function QueueItem({
     onSelect,
     onClick,
     onOpenActions,
+    onReorderKeyDown,
     onReorderPointerDown,
     style
 }: QueueItemProps) {
@@ -54,9 +56,12 @@ export default function QueueItem({
             data-queue-index={index}
             style={style}
             className={cx(
-                'flex min-h-[68px] items-center gap-2 rounded-2xl border border-transparent bg-[var(--b-color-surface-subtle)] transition-[background-color,border-color,opacity] duration-150 hover:bg-[linear-gradient(90deg,var(--b-color-surface-subtle),var(--b-color-surface-subtle)),var(--b-gradient-row-hover)] max-sm:min-h-[66px] max-sm:gap-1.5',
-                queueItemToneClass[tone],
-                isSelected && 'bg-[var(--b-color-surface-item)]',
+                listRowClass({
+                    layout: 'queue',
+                    surface: 'queue',
+                    tone,
+                    selected: isSelected
+                }),
                 className
             )}>
             {isSelectMode ? (
@@ -68,18 +73,20 @@ export default function QueueItem({
                     onClick={onSelect}
                 />
             ) : (
-                <button
-                    type="button"
-                    className={cx(iconButtonClass, 'ml-1 cursor-grab touch-none')}
-                    aria-label={`Reorder ${music.name}`}
+                <IconButton
+                    size="sm"
+                    tone="neutral"
+                    className="ml-1 cursor-grab touch-none text-[var(--b-color-text-muted)]"
+                    aria-label={`Move ${music.name} in queue`}
+                    onKeyDown={onReorderKeyDown}
                     onPointerDown={onReorderPointerDown}>
                     <Icon.Menu />
-                </button>
+                </IconButton>
             )}
 
             <button
                 type="button"
-                className="flex min-w-0 flex-1 items-center gap-3.5 border-0 bg-transparent py-2.5 text-left text-inherit max-sm:gap-3 max-sm:pr-0.5"
+                className={listRowButtonContentClass({ layout: 'queue' })}
                 onClick={isSelectMode ? onSelect : onClick}
                 onContextMenu={(e) => {
                     e.preventDefault();
@@ -89,7 +96,7 @@ export default function QueueItem({
                     }
                 }}>
                 <Image
-                    className="h-[52px] w-[52px] shrink-0 rounded-[15.2px] object-cover shadow-[0_10px_20px_rgba(2,8,11,0.12)] max-sm:h-12 max-sm:w-12"
+                    className="h-[52px] w-[52px] shrink-0 rounded-[var(--b-radius-lg)] object-cover shadow-[var(--b-shadow-queue-artwork)] max-sm:h-12 max-sm:w-12"
                     src={music.album.cover}
                     alt={music.album.name}
                     loading="eager"
@@ -106,7 +113,7 @@ export default function QueueItem({
                             {music.name}
                         </Text>
                         {tone === 'current' && (
-                            <span className="shrink-0 rounded-full bg-[var(--b-color-border-subtle)] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-normal text-[var(--b-color-text-secondary)]">Now</span>
+                            <Badge tone="subtle" className="shrink-0 uppercase">Now</Badge>
                         )}
                     </div>
 
@@ -117,13 +124,14 @@ export default function QueueItem({
             </button>
 
             {!isSelectMode && (
-                <button
-                    type="button"
-                    className={cx(iconButtonClass, 'mr-1')}
+                <IconButton
+                    size="sm"
+                    tone="neutral"
+                    className="mr-1 text-[var(--b-color-text-muted)]"
                     aria-label={`Open actions for ${music.name}`}
                     onClick={onOpenActions}>
                     <Icon.VerticalDots />
-                </button>
+                </IconButton>
             )}
         </li>
     );

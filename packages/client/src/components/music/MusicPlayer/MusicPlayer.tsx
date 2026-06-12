@@ -1,17 +1,16 @@
 import classNames from 'classnames';
 import { useNavigate } from 'react-router-dom';
+import type { KeyboardEvent, MouseEvent, TouchEvent } from 'react';
 
-import { Image } from '~/components/shared';
-import MusicActionPanelContent from '../MusicActionPanelContent';
+import { IconButton, Image } from '~/components/shared';
 import { useStoreValue } from '~/hooks';
 import * as Icon from '~/icon';
 import { useAppStore as useStore } from '~/store/base-store';
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
-import { panel } from '~/modules/panel';
+import { MusicListener } from '~/socket';
 
-const controlButtonClassName = 'relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent !text-[var(--b-color-text)] transition-[background-color,color,transform] duration-150 hover:bg-white/8 hover:!text-white active:scale-95 [&_svg]:h-[18px] [&_svg]:w-[18px] [&_svg]:opacity-100 [&_svg]:text-current';
-const secondaryControlClassName = '!text-[var(--b-color-text-secondary)] hover:!text-[var(--b-color-text)]';
+const cx = classNames;
 
 const MusicPlayer = () => {
     const navigate = useNavigate();
@@ -27,60 +26,88 @@ const MusicPlayer = () => {
         ? musicMap.get(currentTrackId)
         : null;
 
-    const openCurrentMusicActions = () => {
+    const toggleCurrentMusicLike = () => {
         if (!currentMusic) {
             return;
         }
 
-        panel.open({
-            title: 'More actions',
-            content: (
-                <MusicActionPanelContent
-                    id={currentMusic.id}
-                    onAlbumClick={() => navigate(`/album/${currentMusic.album.id}`)}
-                    onArtistClick={() => navigate(`/artist/${currentMusic.artist.id}`)}
-                />
-            )
-        });
+        MusicListener.like(currentMusic.id, !currentMusic.isLiked);
     };
 
-    // TODO: Fix type
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleClickProgress = (e: any) => {
-        const { width, left, right } = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-
-        let x = e.touches ? e.touches[0].clientX : e.clientX;
-        x = x < left ? left : x > right ? right : x;
-        const percent = (x - left) / width;
-        const duration = currentMusic?.duration || 1;
-
-        queueStore.seek(duration * percent);
-    };
-
-    // TODO: Fix type
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleMoveProgress = (e: any) => {
-        if (e.buttons === 1) {
-            handleClickProgress(e);
+    const seekToPercent = (percent: number) => {
+        if (!currentMusic) {
             return;
         }
 
-        if (e.touches?.length === 1) {
-            handleClickProgress(e);
+        const duration = currentMusic?.duration || 1;
+
+        queueStore.seek(duration * Math.max(0, Math.min(percent, 1)));
+    };
+
+    const seekFromClientX = (clientX: number, target: HTMLDivElement) => {
+        const { width, left, right } = target.getBoundingClientRect();
+        const x = Math.max(left, Math.min(clientX, right));
+
+        seekToPercent((x - left) / width);
+    };
+
+    const handleClickProgress = (event: MouseEvent<HTMLDivElement>) => {
+        seekFromClientX(event.clientX, event.currentTarget);
+    };
+
+    const handleMoveProgress = (event: MouseEvent<HTMLDivElement>) => {
+        if (event.buttons === 1) {
+            seekFromClientX(event.clientX, event.currentTarget);
+            return;
+        }
+    };
+
+    const handleTouchMoveProgress = (event: TouchEvent<HTMLDivElement>) => {
+        if (event.touches.length === 1) {
+            seekFromClientX(event.touches[0].clientX, event.currentTarget);
+        }
+    };
+
+    const handleProgressKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+        if (!currentMusic) {
+            return;
+        }
+
+        const step = event.shiftKey ? 10 : 5;
+        const nextProgress = {
+            ArrowLeft: progress - step,
+            ArrowDown: progress - step,
+            ArrowRight: progress + step,
+            ArrowUp: progress + step,
+            Home: 0,
+            End: 100
+        }[event.key];
+
+        if (nextProgress !== undefined) {
+            event.preventDefault();
+            seekToPercent(nextProgress / 100);
         }
     };
 
     return (
-        <div className="overflow-hidden border-t border-[var(--b-color-border-subtle)] bg-[rgba(9,9,11,0.96)] lg:col-span-2">
+        <div className="overflow-hidden border-t border-[var(--b-color-border-subtle)] bg-[var(--b-color-player-background)] lg:col-span-2">
             <div
-                className="h-[3px] w-full cursor-pointer overflow-hidden bg-[rgba(244,244,245,0.08)] transition-[height] duration-150 hover:h-1"
-                role="progressbar"
-                aria-valuenow={progress}
+                className={cx(
+                    'h-[3px] w-full overflow-hidden bg-[var(--b-color-progress-track)] transition-[height] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
+                    currentMusic ? 'cursor-pointer hover:h-1 focus-visible:h-1' : 'cursor-default'
+                )}
+                role="slider"
+                tabIndex={currentMusic ? 0 : -1}
+                aria-disabled={!currentMusic}
+                aria-label="Seek playback position"
+                aria-valuenow={Math.round(progress)}
                 aria-valuemin={0}
                 aria-valuemax={100}
+                aria-valuetext={`${Math.round(progress)}%`}
                 onClick={handleClickProgress}
+                onKeyDown={handleProgressKeyDown}
                 onMouseMove={handleMoveProgress}
-                onTouchMove={handleMoveProgress}>
+                onTouchMove={handleTouchMoveProgress}>
                 <div
                     className="h-full w-full bg-[var(--b-color-point)]"
                     style={{ transform: `translateX(-${100 - progress}%)` }}
@@ -89,7 +116,12 @@ const MusicPlayer = () => {
             <div className="flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-md)] py-[var(--b-spacing-sm)] lg:px-[var(--b-spacing-lg)]">
                 <button
                     type="button"
-                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-[var(--b-spacing-sm)] border-0 bg-transparent p-0 text-left lg:gap-[var(--b-spacing-md)]"
+                    className={cx(
+                        'flex min-w-0 flex-1 items-center gap-[var(--b-spacing-sm)] border-0 bg-transparent p-0 text-left lg:gap-[var(--b-spacing-md)]',
+                        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
+                        currentMusic ? 'cursor-pointer' : 'cursor-default'
+                    )}
+                    disabled={!currentMusic}
                     onClick={() => currentMusic && navigate('/player')}>
                     <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[var(--b-radius-md)] bg-[var(--b-color-surface-subtle)]">
                         <Image
@@ -110,59 +142,69 @@ const MusicPlayer = () => {
                     </div>
                 </button>
                 <div className="flex items-center gap-[var(--b-spacing-xs)]">
-                    <button
-                        type="button"
-                        className={classNames(controlButtonClassName, secondaryControlClassName, 'max-[768px]:hidden')}
+                    <IconButton
+                        size="compact"
+                        tone="muted"
+                        className="max-[768px]:hidden"
+                        aria-label={`Repeat mode ${repeatMode}`}
                         onClick={() => queueStore.changeRepeatMode()}>
                         {repeatMode === 'all' && <Icon.Repeat />}
                         {repeatMode === 'one' && <Icon.Infinite />}
                         {repeatMode === 'none' && <Icon.RightLeft />}
-                    </button>
-                    <button
-                        type="button"
-                        className={classNames(controlButtonClassName, secondaryControlClassName, 'max-[768px]:hidden')}
+                    </IconButton>
+                    <IconButton
+                        size="compact"
+                        tone="muted"
+                        className="max-[768px]:hidden"
+                        aria-label="Previous track"
                         onClick={() => queueStore.prev()}>
                         <Icon.SkipBack />
-                    </button>
-                    <button
-                        type="button"
-                        className={classNames(controlButtonClassName, 'h-11 w-11 !bg-[var(--b-color-point)] !text-black hover:!bg-[var(--b-color-point-dark)] hover:!text-black max-[768px]:order-2 [&_svg]:h-5 [&_svg]:w-5')}
+                    </IconButton>
+                    <IconButton
+                        size="play"
+                        tone="primary"
+                        className="max-[768px]:order-2"
+                        aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
                         onClick={() => isPlaying ? queueStore.pause() : queueStore.play()}>
                         {isPlaying ? <Icon.Pause /> : <Icon.Play />}
-                    </button>
-                    <button
-                        type="button"
-                        className={classNames(controlButtonClassName, secondaryControlClassName, 'max-[768px]:hidden')}
+                    </IconButton>
+                    <IconButton
+                        size="compact"
+                        tone="muted"
+                        className="max-[768px]:hidden"
+                        aria-label="Next track"
                         onClick={() => queueStore.next()}>
                         <Icon.SkipForward />
-                    </button>
-                    <button
-                        type="button"
-                        className={classNames(controlButtonClassName, secondaryControlClassName, 'max-[768px]:hidden', shuffle && '!text-[var(--b-color-point)] hover:!text-[var(--b-color-point)] [&_svg]:!stroke-[var(--b-color-point)] [&_path]:!stroke-[var(--b-color-point)]')}
+                    </IconButton>
+                    <IconButton
+                        size="compact"
+                        tone="muted"
+                        active={shuffle}
+                        className="max-[768px]:hidden"
+                        aria-label={shuffle ? 'Disable shuffle' : 'Enable shuffle'}
                         onClick={() => queueStore.toggleShuffle()}>
                         <Icon.Shuffle />
-                    </button>
-                    <button
-                        type="button"
-                        className={classNames(
-                            controlButtonClassName,
-                            secondaryControlClassName,
-                            'max-[768px]:order-3',
-                            currentMusic?.isLiked && '!text-[var(--b-color-point)] hover:!text-[var(--b-color-point)] [&_svg]:!fill-[var(--b-color-point)] [&_svg]:!stroke-[var(--b-color-point)]'
-                        )}
-                        aria-label={currentMusic?.isLiked ? 'Open more actions for liked current music' : 'Open more actions for current music'}
-                        aria-haspopup="dialog"
+                    </IconButton>
+                    <IconButton
+                        size="compact"
+                        tone="muted"
+                        active={currentMusic?.isLiked}
+                        filled={currentMusic?.isLiked}
+                        className="max-[768px]:order-3"
+                        aria-label={currentMusic?.isLiked ? 'Unlike current music' : 'Like current music'}
+                        aria-pressed={currentMusic?.isLiked}
                         disabled={!currentMusic}
-                        onClick={openCurrentMusicActions}>
+                        onClick={toggleCurrentMusicLike}>
                         <Icon.Heart />
-                    </button>
-                    <button
-                        type="button"
-                        className={classNames(controlButtonClassName, secondaryControlClassName, 'max-[768px]:order-4')}
+                    </IconButton>
+                    <IconButton
+                        size="compact"
+                        tone="muted"
+                        className="max-[768px]:order-4"
                         aria-label="Open queue"
                         onClick={() => navigate('/queue')}>
                         <Icon.ListMusic />
-                    </button>
+                    </IconButton>
                 </div>
             </div>
         </div>

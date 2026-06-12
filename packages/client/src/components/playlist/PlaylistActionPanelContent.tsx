@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { useModal } from '~/components/app/ModalProvider';
 import { GridImage, PanelContent } from '~/components/shared';
-import { panelContentClass } from '~/components/shared/PanelContent';
+import { PanelHeaderAction, panelContentClass } from '~/components/shared/PanelContent';
 import { TextEntryDialog } from '~/components/shared/Modal';
 import * as Icon from '~/icon';
 
@@ -50,8 +50,8 @@ export default function PlaylistActionPanelContent({
         <>
             <PanelContent
                 header={onPlaylistClick && (
-                    <button
-                        className={`${panelContentClass.actionLink} ${panelContentClass.albumLink}`}
+                    <PanelHeaderAction
+                        layout="album"
                         onClick={() => {
                             panel.close();
                             setTimeout(onPlaylistClick, 100);
@@ -68,7 +68,7 @@ export default function PlaylistActionPanelContent({
                                 {playlist.name}
                             </div>
                         </div>
-                    </button>
+                    </PanelHeaderAction>
 
                 )}
                 items={[

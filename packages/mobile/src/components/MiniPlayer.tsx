@@ -15,6 +15,7 @@ type MiniPlayerProps = {
   sessionCookie?: string | null;
   onProgressLayout: (width: number) => void;
   onSeek: (event: GestureResponderEvent) => void;
+  onSeekByStep: (direction: 'backward' | 'forward') => void;
   onPrevious: () => void;
   onTogglePlayback: () => void;
   onNext: () => void;
@@ -29,6 +30,7 @@ export function MiniPlayer({
   sessionCookie,
   onProgressLayout,
   onSeek,
+  onSeekByStep,
   onPrevious,
   onTogglePlayback,
   onNext,
@@ -36,8 +38,25 @@ export function MiniPlayer({
   return (
     <View style={styles.miniPlayer}>
       <Pressable
+        accessibilityLabel="Playback progress"
+        accessibilityRole="adjustable"
+        accessibilityActions={[
+          { name: 'increment', label: 'Seek forward 10 seconds' },
+          { name: 'decrement', label: 'Seek backward 10 seconds' },
+        ]}
+        accessibilityState={{ disabled: !canControlPlayback }}
+        accessibilityValue={{ min: 0, max: 100, now: Math.round(progressRatio * 100) }}
         disabled={!canControlPlayback}
         onLayout={event => onProgressLayout(Math.max(event.nativeEvent.layout.width, 1))}
+        onAccessibilityAction={event => {
+          if (event.nativeEvent.actionName === 'increment') {
+            onSeekByStep('forward');
+          }
+
+          if (event.nativeEvent.actionName === 'decrement') {
+            onSeekByStep('backward');
+          }
+        }}
         onPress={onSeek}
         style={styles.miniProgress}
       >
@@ -45,7 +64,7 @@ export function MiniPlayer({
       </Pressable>
       <View style={styles.miniPlayerRow}>
         <View style={styles.artworkFrame}>
-          <CachedArtwork cookie={sessionCookie} size={54} uri={typeof activeTrack?.artwork === 'string' ? activeTrack.artwork : null} />
+          <CachedArtwork cookie={sessionCookie} size={brand.layout.miniPlayerArtworkSize} uri={typeof activeTrack?.artwork === 'string' ? activeTrack.artwork : null} />
         </View>
         <View style={styles.miniMeta}>
           <Text numberOfLines={1} style={styles.miniTitle}>{activeTrack?.title ?? 'No track selected'}</Text>
@@ -54,13 +73,13 @@ export function MiniPlayer({
           </Text>
         </View>
         <View style={styles.controls}>
-          <Pressable accessibilityLabel="Previous track" disabled={!canControlPlayback} onPress={onPrevious} style={({ pressed }) => [styles.iconButton, pressed && canControlPlayback && styles.pressedButton, !canControlPlayback && styles.disabledButton]}>
+          <Pressable accessibilityLabel="Previous track" accessibilityRole="button" accessibilityState={{ disabled: !canControlPlayback }} disabled={!canControlPlayback} onPress={onPrevious} style={({ pressed }) => [styles.iconButton, pressed && canControlPlayback && styles.pressedControl, !canControlPlayback && styles.disabledButton]}>
             <TransportGlyph direction="previous" />
           </Pressable>
-          <Pressable accessibilityLabel={isPlaying ? 'Pause' : 'Play'} disabled={!canControlPlayback} onPress={onTogglePlayback} style={({ pressed }) => [styles.playCircle, pressed && canControlPlayback && styles.playCirclePressed, !canControlPlayback && styles.disabledButton]}>
+          <Pressable accessibilityLabel={isPlaying ? 'Pause' : 'Play'} accessibilityRole="button" accessibilityState={{ disabled: !canControlPlayback, selected: isPlaying }} disabled={!canControlPlayback} onPress={onTogglePlayback} style={({ pressed }) => [styles.playCircle, pressed && canControlPlayback && styles.pressedPrimary, !canControlPlayback && styles.disabledButton]}>
             {isPlaying ? <PauseGlyph /> : <PlayGlyph />}
           </Pressable>
-          <Pressable accessibilityLabel="Next track" disabled={!canControlPlayback} onPress={onNext} style={({ pressed }) => [styles.iconButton, pressed && canControlPlayback && styles.pressedButton, !canControlPlayback && styles.disabledButton]}>
+          <Pressable accessibilityLabel="Next track" accessibilityRole="button" accessibilityState={{ disabled: !canControlPlayback }} disabled={!canControlPlayback} onPress={onNext} style={({ pressed }) => [styles.iconButton, pressed && canControlPlayback && styles.pressedControl, !canControlPlayback && styles.disabledButton]}>
             <TransportGlyph direction="next" />
           </Pressable>
         </View>
@@ -94,40 +113,36 @@ function TransportGlyph({ direction }: { direction: 'previous' | 'next' }) {
 }
 
 const styles = StyleSheet.create({
-  disabledButton: { opacity: 0.38 },
+  disabledButton: { ...brand.components.disabledButton },
   miniPlayer: {
     position: 'absolute',
-    left: 14,
-    right: 14,
-    bottom: 14,
+    left: brand.space.lg,
+    right: brand.space.lg,
+    bottom: brand.space.lg,
     overflow: 'hidden',
-    borderRadius: 28,
-    backgroundColor: 'rgba(24,24,27,0.96)',
+    borderRadius: brand.radius['2xl'],
+    backgroundColor: brand.colors.surfaceOverlay,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.10)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.38,
-    shadowRadius: 28,
-    elevation: 18,
+    borderColor: brand.colors.borderSubtle,
+    ...brand.elevation.floating,
   },
-  miniProgress: { height: 6, justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
-  progressFill: { height: 6, borderRadius: 999, backgroundColor: brand.primary },
-  miniPlayerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 82, paddingHorizontal: 13, paddingVertical: 10 },
-  artworkFrame: { overflow: 'hidden', borderRadius: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.10)', backgroundColor: '#09090b' },
-  miniMeta: { flex: 1, minWidth: 0, gap: 4 },
-  miniTitle: { color: brand.text, fontSize: 15, fontWeight: '900', letterSpacing: -0.2 },
-  miniSubtitle: { color: brand.muted, fontSize: 12, lineHeight: 16 },
-  controls: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 4, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.055)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.07)' },
-  iconButton: { alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' },
-  pressedButton: { transform: [{ scale: 0.94 }], backgroundColor: 'rgba(255,255,255,0.14)' },
-  playCircle: { alignItems: 'center', justifyContent: 'center', width: 48, height: 48, borderRadius: 999, backgroundColor: brand.primary, shadowColor: brand.primary, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.38, shadowRadius: 14, elevation: 10 },
-  playCirclePressed: { transform: [{ scale: 0.95 }], backgroundColor: '#a78bfa' },
-  playGlyph: { marginLeft: 3, width: 0, height: 0, borderTopWidth: 9, borderBottomWidth: 9, borderLeftWidth: 14, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: '#ffffff' },
-  pauseGlyph: { flexDirection: 'row', gap: 5 },
-  pauseBar: { width: 5, height: 18, borderRadius: 999, backgroundColor: '#ffffff' },
-  transportGlyph: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  transportBar: { width: 3, height: 16, borderRadius: 999, backgroundColor: brand.text },
-  previousTriangle: { width: 0, height: 0, borderTopWidth: 7, borderBottomWidth: 7, borderRightWidth: 10, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRightColor: brand.text },
-  nextTriangle: { width: 0, height: 0, borderTopWidth: 7, borderBottomWidth: 7, borderLeftWidth: 10, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: brand.text },
+  miniProgress: { height: 6, justifyContent: 'center', backgroundColor: brand.colors.borderSubtle },
+  progressFill: { height: 6, borderRadius: brand.radius.full, backgroundColor: brand.colors.primary },
+  miniPlayerRow: { flexDirection: 'row', alignItems: 'center', gap: brand.space.md, minHeight: brand.layout.miniPlayerRowMinHeight, paddingHorizontal: brand.space.lg, paddingVertical: brand.space.md },
+  artworkFrame: { overflow: 'hidden', borderRadius: brand.radius.md, borderWidth: 1, borderColor: brand.colors.borderSubtle, backgroundColor: brand.colors.surface },
+  miniMeta: { flex: 1, minWidth: 0, gap: brand.space.xs },
+  miniTitle: { color: brand.colors.text, ...brand.typography.trackTitle },
+  miniSubtitle: { color: brand.colors.textMuted, ...brand.typography.caption },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: brand.space.sm, padding: brand.space.xs, borderRadius: brand.radius.full, backgroundColor: brand.colors.controlPanel, borderWidth: 1, borderColor: brand.colors.controlBorder },
+  iconButton: { width: brand.control.iconButtonSize, height: brand.control.iconButtonSize, borderRadius: brand.radius.full, backgroundColor: brand.colors.control, ...brand.components.centeredControl },
+  pressedControl: { ...brand.components.pressedControl },
+  playCircle: { width: brand.control.playButtonSize, height: brand.control.playButtonSize, borderRadius: brand.radius.full, ...brand.components.primaryButton, ...brand.elevation.primary },
+  pressedPrimary: { ...brand.components.pressedPrimary },
+  playGlyph: { marginLeft: 3, width: 0, height: 0, borderTopWidth: 9, borderBottomWidth: 9, borderLeftWidth: 14, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: brand.colors.white },
+  pauseGlyph: { flexDirection: 'row', gap: brand.icon.pauseGap },
+  pauseBar: { width: 5, height: 18, borderRadius: brand.radius.full, backgroundColor: brand.colors.white },
+  transportGlyph: { flexDirection: 'row', alignItems: 'center', gap: brand.icon.transportGap },
+  transportBar: { width: 3, height: 16, borderRadius: brand.radius.full, backgroundColor: brand.colors.text },
+  previousTriangle: { width: 0, height: 0, borderTopWidth: 7, borderBottomWidth: 7, borderRightWidth: 10, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRightColor: brand.colors.text },
+  nextTriangle: { width: 0, height: 0, borderTopWidth: 7, borderBottomWidth: 7, borderLeftWidth: 10, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: brand.colors.text },
 });

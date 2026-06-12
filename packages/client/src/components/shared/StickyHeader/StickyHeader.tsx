@@ -13,7 +13,7 @@ interface StickyHeaderActionsProps {
 
 const StickyHeader = ({ children }: StickyHeaderProps) => {
     return (
-        <div className={cx('sticky left-0 top-0 z-[5] flex flex-wrap justify-between gap-3 bg-[image:var(--b-gradient-sticky)] px-[var(--b-spacing-md)] pb-3 pt-[var(--b-spacing-md)]')}>
+        <div className={cx('sticky left-0 top-0 z-[5] flex flex-wrap justify-between gap-3 bg-[var(--b-color-background)] px-[var(--b-spacing-md)] pb-3 pt-[var(--b-spacing-md)]')}>
             {children}
         </div>
     );

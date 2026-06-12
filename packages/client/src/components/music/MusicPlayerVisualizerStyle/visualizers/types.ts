@@ -25,6 +25,11 @@ export interface VisualizerPalette {
 
 const IDENTITY_VIOLET_HUE = 258;
 const ALBUM_HUE_IDENTITY_PULL = 0;
+const VISUALIZER_NEUTRAL_SCRIM_RGB = '0, 0, 0';
+const VISUALIZER_UNDERLAY_RGB = '12, 8, 20';
+const VISUALIZER_CONTRAST_TOP_RGB = '14, 10, 24';
+const VISUALIZER_CONTRAST_MID_RGB = '10, 8, 18';
+const VISUALIZER_CONTRAST_BOTTOM_RGB = '8, 6, 14';
 
 export const DEFAULT_VISUALIZER_PALETTE: VisualizerPalette = {
     hueStart: IDENTITY_VIOLET_HUE,
@@ -118,8 +123,10 @@ export const visualizerUnderlayColor = (
 ) => {
     const resolvedPalette = palette ?? DEFAULT_VISUALIZER_PALETTE;
 
-    return `rgba(12, 8, 20, ${resolvedPalette.underlayAlpha * alpha})`;
+    return `rgba(${VISUALIZER_UNDERLAY_RGB}, ${resolvedPalette.underlayAlpha * alpha})`;
 };
+
+export const visualizerNeutralScrimColor = (alpha: number) => `rgba(${VISUALIZER_NEUTRAL_SCRIM_RGB}, ${alpha})`;
 
 export const drawVisualizerContrastLayer = (
     canvas: HTMLCanvasElement,
@@ -134,16 +141,16 @@ export const drawVisualizerContrastLayer = (
     ctx.save();
 
     const scrim = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    scrim.addColorStop(0, `rgba(14, 10, 24, ${resolvedPalette.scrimAlpha * 0.7})`);
-    scrim.addColorStop(0.55, `rgba(10, 8, 18, ${resolvedPalette.scrimAlpha * 0.36})`);
-    scrim.addColorStop(1, `rgba(8, 6, 14, ${resolvedPalette.scrimAlpha})`);
+    scrim.addColorStop(0, `rgba(${VISUALIZER_CONTRAST_TOP_RGB}, ${resolvedPalette.scrimAlpha * 0.7})`);
+    scrim.addColorStop(0.55, `rgba(${VISUALIZER_CONTRAST_MID_RGB}, ${resolvedPalette.scrimAlpha * 0.36})`);
+    scrim.addColorStop(1, `rgba(${VISUALIZER_CONTRAST_BOTTOM_RGB}, ${resolvedPalette.scrimAlpha})`);
     ctx.fillStyle = scrim;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const primaryWash = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, radius);
     primaryWash.addColorStop(0, hslaColor(resolvedPalette.glowHue, 100, 62, resolvedPalette.scrimAlpha * 0.22));
     primaryWash.addColorStop(0.62, hslaColor(resolvedPalette.glowHue, 100, 54, resolvedPalette.scrimAlpha * 0.06));
-    primaryWash.addColorStop(1, `rgba(0, 0, 0, ${resolvedPalette.scrimAlpha * 0.24})`);
+    primaryWash.addColorStop(1, visualizerNeutralScrimColor(resolvedPalette.scrimAlpha * 0.24));
     ctx.fillStyle = primaryWash;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 

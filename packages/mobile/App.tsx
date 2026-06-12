@@ -38,6 +38,7 @@ function OceanWaveMobileApp() {
     canControlPlayback,
     isPlaying,
     progressRatio,
+    seekByStep,
     seekToTouch,
     setProgressWidth,
     skipNext,
@@ -414,6 +415,7 @@ function OceanWaveMobileApp() {
       onProgressLayout={setProgressWidth}
       onSearchQueryChange={setSearchQuery}
       onSeek={seekToTouch}
+      onSeekByStep={seekByStep}
       onTogglePlayback={togglePlayback}
       onToggleOffline={handleToggleOffline}
       offlineSaveProgress={selectedOfflineSaveProgress}

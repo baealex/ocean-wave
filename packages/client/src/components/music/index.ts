@@ -1,9 +1,9 @@
 export { default as MusicActionPanelContent } from './MusicActionPanelContent';
 export { default as MusicListItem } from './MusicListItem';
 export { default as MusicPlayer } from './MusicPlayer';
-export { default as MusicSelector } from './MusicSelector';
 export { default as SmartMusicFilterPanelContent } from './SmartMusicFilterPanelContent';
 export { default as MusicTagFilterPanelContent } from './MusicTagFilterPanelContent';
 export { default as MusicTagPanelContent } from './MusicTagPanelContent';
+export { default as TagMatchModeControl } from './TagMatchModeControl';
 export { default as MusicPlayerDiskStyle } from './MusicPlayerDiskStyle';
 export { default as MusicPlayerVisualizerStyle } from './MusicPlayerVisualizerStyle';

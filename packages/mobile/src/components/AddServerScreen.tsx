@@ -38,30 +38,38 @@ export function AddServerScreen({
       </View>
       <View style={styles.card}>
         <Text style={styles.label}>Name</Text>
-        <TextInput onChangeText={onChangeServerName} placeholder="Server name" placeholderTextColor="#71717a" style={styles.input} value={serverName} />
+        <TextInput accessibilityLabel="Server name" onChangeText={onChangeServerName} placeholder="Server name" placeholderTextColor={brand.colors.textSubtle} style={styles.input} value={serverName} />
         <Text style={styles.label}>Server URL</Text>
-        <TextInput autoCapitalize="none" autoCorrect={false} inputMode="url" onChangeText={onChangeServerUrl} placeholder="Enter server URL" placeholderTextColor="#71717a" style={styles.input} value={serverUrl} />
+        <TextInput accessibilityLabel="Server URL" autoCapitalize="none" autoCorrect={false} inputMode="url" onChangeText={onChangeServerUrl} placeholder="Enter server URL" placeholderTextColor={brand.colors.textSubtle} style={styles.input} value={serverUrl} />
         <Text style={styles.label}>Password</Text>
-        <TextInput autoCapitalize="none" autoCorrect={false} onChangeText={onChangePassword} placeholder="Only if required" placeholderTextColor="#71717a" secureTextEntry style={styles.input} value={password} />
-        <Pressable disabled={isLoading} onPress={onSave} style={styles.wideButton}>
-          {isLoading ? <ActivityIndicator color={brand.background} /> : <Text style={styles.wideButtonText}>Save and connect</Text>}
+        <TextInput accessibilityLabel="Password" autoCapitalize="none" autoCorrect={false} onChangeText={onChangePassword} placeholder="Only if required" placeholderTextColor={brand.colors.textSubtle} secureTextEntry style={styles.input} value={password} />
+        <Pressable
+          accessibilityLabel={isLoading ? 'Saving server' : 'Save and connect'}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: isLoading, busy: isLoading }}
+          disabled={isLoading}
+          onPress={onSave}
+          style={[styles.wideButton, isLoading && styles.disabledButton]}
+        >
+          {isLoading ? <ActivityIndicator accessibilityLabel="Saving server" color={brand.colors.background} /> : <Text style={styles.wideButtonText}>Save and connect</Text>}
         </Pressable>
-        <Text style={styles.status}>{message}</Text>
+        <Text accessibilityLiveRegion="polite" style={styles.status}>{message}</Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  fullPage: { flex: 1, gap: 18, padding: 20, backgroundColor: brand.background },
-  header: { gap: 8, paddingTop: 10 },
-  kicker: { color: brand.primary, fontSize: 11, fontWeight: '800', letterSpacing: 1.4 },
-  title: { color: brand.text, fontSize: 32, fontWeight: '900', letterSpacing: -1.4 },
-  description: { color: brand.muted, fontSize: 15, lineHeight: 22 },
-  card: { gap: 12, padding: 14, borderRadius: 22, backgroundColor: brand.surface, borderWidth: 1, borderColor: brand.border },
-  label: { color: brand.text, fontSize: 13, fontWeight: '800' },
-  input: { minHeight: 48, borderRadius: 14, paddingHorizontal: 14, color: brand.text, backgroundColor: '#111113', borderWidth: 1, borderColor: brand.border, fontSize: 15 },
-  wideButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: brand.primary },
-  wideButtonText: { color: brand.background, fontSize: 14, fontWeight: '900' },
-  status: { color: brand.muted, fontSize: 13, lineHeight: 19 },
+  fullPage: { flex: 1, gap: brand.space.xl, padding: brand.space.xl, ...brand.components.page },
+  header: { gap: brand.space.sm, paddingTop: brand.space.md },
+  kicker: { color: brand.colors.primary, ...brand.typography.kicker },
+  title: { color: brand.colors.text, ...brand.typography.title },
+  description: { color: brand.colors.textMuted, ...brand.typography.body },
+  card: { gap: brand.space.md, padding: brand.space.lg, borderRadius: brand.radius.xl, ...brand.components.surfaceCard },
+  label: { color: brand.colors.text, ...brand.typography.label },
+  input: { minHeight: brand.control.buttonHeightPrimary, borderRadius: brand.radius.md, paddingHorizontal: brand.space.lg, color: brand.colors.text, ...brand.components.inputSurface, ...brand.typography.body },
+  wideButton: { minHeight: brand.control.buttonHeightPrimary, borderRadius: brand.radius.md, ...brand.components.primaryButton },
+  disabledButton: { ...brand.components.disabledButton },
+  wideButtonText: { color: brand.colors.background, ...brand.typography.buttonLabel },
+  status: { color: brand.colors.textMuted, ...brand.typography.status },
 });

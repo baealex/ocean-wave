@@ -6,12 +6,14 @@ import React from 'react';
 
 type SurfaceElement = 'div' | 'section' | 'article' | 'aside';
 
-const surfaceVariants = cva('border border-[var(--b-color-border-subtle)] text-[var(--b-color-text)]', {
+const surfaceVariants = cva('', {
     variants: {
         variant: {
-            subtle: 'bg-[var(--b-color-surface-subtle)]',
-            panel: 'bg-[var(--b-color-background-layer-1)]',
-            modal: 'bg-[var(--b-color-surface-modal)]'
+            subtle: 'ow-surface-base ow-surface-subtle',
+            panel: 'ow-surface-base ow-surface-panel',
+            modal: 'ow-surface-base ow-surface-modal',
+            item: 'ow-surface-base bg-[var(--b-color-surface-item)]',
+            bare: ''
         },
         radius: {
             none: 'rounded-none',
@@ -22,7 +24,9 @@ const surfaceVariants = cva('border border-[var(--b-color-border-subtle)] text-[
         padding: {
             none: '',
             md: 'p-4',
-            lg: 'p-6'
+            lg: 'p-6',
+            responsive: 'p-[clamp(16px,2.4vw,20px)]',
+            hero: 'p-[clamp(16px,3vw,24px)]'
         }
     },
     defaultVariants: {

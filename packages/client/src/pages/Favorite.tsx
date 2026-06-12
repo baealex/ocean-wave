@@ -9,7 +9,8 @@ import {
     Loading,
     FixedVirtualList,
     ItemSortPanelContent,
-    SearchField
+    SearchField,
+    StateMessage
 } from '~/components/shared';
 import { MusicListItem, MusicActionPanelContent, SmartMusicFilterPanelContent } from '~/components/music';
 import * as Icon from '~/icon';
@@ -91,16 +92,16 @@ export default function Music() {
                     onChange={handleSearchChange}
                 />
                 <StickyHeaderActions>
-                    <Button onClick={() => void resetQueue(filteredMusics.map(music => music.id))}>
+                    <Button
+                        disabled={filteredMusics.length === 0}
+                        onClick={() => void resetQueue(filteredMusics.map(music => music.id))}>
                         <Icon.Play /> Play
                     </Button>
                     <Button
                         size="sm"
+                        active={isSmartFilterActive}
                         aria-pressed={isSmartFilterActive}
                         aria-label="Filter favorite music"
-                        className={isSmartFilterActive
-                            ? 'border-[var(--b-color-focus)] bg-[var(--b-color-active)] !text-[var(--b-color-point)] [&_svg]:!text-[var(--b-color-point)]'
-                            : undefined}
                         onClick={() => panel.open({
                             title: 'Favorite Filter',
                             content: (
@@ -114,6 +115,7 @@ export default function Music() {
                     </Button>
                     <Button
                         size="sm"
+                        aria-label="Sort favorite music"
                         onClick={() => panel.open({
                             title: 'Music Sort',
                             content: (
@@ -133,6 +135,16 @@ export default function Music() {
                     rowHeight={FAVORITE_LIST_ROW_HEIGHT}
                     overscanPx={FAVORITE_LIST_ROW_HEIGHT * 6}
                     getKey={(music) => music.id}
+                    emptyState={(
+                        <StateMessage
+                            className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-2xl)]"
+                            icon={<Icon.Heart />}
+                            heading={query.trim() || isSmartFilterActive ? 'No favorites found.' : 'No favorites yet.'}
+                            description={query.trim() || isSmartFilterActive
+                                ? 'Try a different search or favorite filter.'
+                                : 'Liked songs will appear here.'}
+                        />
+                    )}
                     renderItem={(music) => (
                         <MusicListItem
                             key={music.id}

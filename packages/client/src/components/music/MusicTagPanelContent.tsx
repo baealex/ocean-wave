@@ -6,7 +6,8 @@ import { useAppStore as useStore } from '~/store/base-store';
 import {
     Button,
     Input,
-    Loading
+    Loading,
+    TagButton
 } from '~/components/shared';
 import * as Icon from '~/icon';
 
@@ -151,16 +152,15 @@ export default function MusicTagPanelContent({ id }: MusicTagPanelContentProps) 
                 {music.tags.length > 0 ? (
                     <div className="flex flex-wrap gap-2">
                         {music.tags.map(tag => (
-                            <button
+                            <TagButton
                                 key={tag.id}
-                                type="button"
-                                className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border border-[var(--b-color-focus)] bg-[var(--b-color-active)] px-3 py-1.5 text-sm font-semibold text-[var(--b-color-text)] transition-[background-color,color] hover:bg-[var(--b-color-hover)] disabled:cursor-not-allowed disabled:opacity-50"
+                                selected
                                 disabled={isBusy}
                                 aria-label={`Remove ${tag.name}`}
                                 onClick={() => void handleRemove(tag.id)}>
                                 <span className="min-w-0 truncate">{tag.name}</span>
                                 <Icon.Close className="h-3.5 w-3.5 shrink-0" />
-                            </button>
+                            </TagButton>
                         ))}
                     </div>
                 ) : (
@@ -199,15 +199,13 @@ export default function MusicTagPanelContent({ id }: MusicTagPanelContentProps) 
                     availableTags.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                             {availableTags.map(tag => (
-                                <button
+                                <TagButton
                                     key={tag.id}
-                                    type="button"
-                                    className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-input)] px-3 py-1.5 text-sm font-semibold text-[var(--b-color-text-secondary)] transition-[background-color,color,border-color] hover:border-[var(--b-color-focus)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)] disabled:cursor-not-allowed disabled:opacity-50"
                                     disabled={isBusy}
                                     onClick={() => void handleAdd(tag.id)}>
                                     <Icon.Plus className="h-3.5 w-3.5 shrink-0" />
                                     <span className="min-w-0 truncate">{tag.name}</span>
-                                </button>
+                                </TagButton>
                             ))}
                         </div>
                     ) : (

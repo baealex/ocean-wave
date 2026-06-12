@@ -16,7 +16,7 @@ export default function ItemSortPanelContent({ items }: ItemSortPanelContentProp
             items={items.map(item => ({
                 icon: <Icon.Sort />,
                 text: item.text,
-                isActive: item.isActive,
+                active: item.isActive,
                 onClick: () => {
                     item.onClick();
                     panel.close();

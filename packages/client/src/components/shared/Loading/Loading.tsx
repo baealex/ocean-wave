@@ -15,12 +15,16 @@ const Loading = () => {
 
     return (
         shouldShow && (
-            <div className="flex flex-1 items-center justify-center">
-                <div className="flex h-10 w-15 items-center justify-between gap-2">
+            <div
+                className="flex flex-1 items-center justify-center"
+                role="status"
+                aria-live="polite"
+                aria-label="Loading">
+                <div className="flex h-10 w-15 items-center justify-between gap-2" aria-hidden="true">
                     {waveDelays.map((delay) => (
                         <div
                             key={delay}
-                            className="block h-1.5 w-2.5 rounded-lg bg-[var(--b-color-point-dark)] animate-[audio-wave_2.2s_infinite_ease-in-out] motion-reduce:h-3 motion-reduce:animate-none motion-reduce:transform-none"
+                            className="block h-1.5 w-2.5 rounded-[var(--b-radius-lg)] bg-[var(--b-color-point-dark)] animate-[audio-wave_2.2s_infinite_ease-in-out] motion-reduce:h-3 motion-reduce:animate-none motion-reduce:transform-none"
                             style={{ animationDelay: delay }}
                         />
                     ))}

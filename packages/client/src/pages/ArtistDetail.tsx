@@ -4,9 +4,9 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { AlbumListItem } from '~/components/album';
 import { ArtistSummary } from '~/components/artist';
-import { TwoToneLayout } from '~/components/layout';
+import { TwoToneLayout, TwoTonePrimaryAction } from '~/components/layout';
 import { MusicActionPanelContent, MusicListItem } from '~/components/music';
-import { Text } from '~/components/shared';
+import { Button, Loading, StateMessage, Text } from '~/components/shared';
 import { Play } from '~/icon';
 
 import { getArtist } from '~/api/library';
@@ -23,7 +23,7 @@ export default function ArtistDetail() {
 
     const { id } = useParams<{ id: string }>();
 
-    const { data: artist } = useQuery({
+    const { data: artist, isError, isLoading } = useQuery({
         queryKey: queryKeys.artists.detail(id),
         queryFn: async () => {
             const { data } = await getArtist(id!);
@@ -34,15 +34,32 @@ export default function ArtistDetail() {
 
     const [{ musicMap }] = useStore(musicStore);
 
-    if (!artist) {
-        return null;
+    if (isLoading) {
+        return <Loading />;
+    }
+
+    if (isError || !artist) {
+        return (
+            <div className="flex min-h-full items-center justify-center p-[var(--b-spacing-lg)]">
+                <StateMessage
+                    surface
+                    icon={<Play />}
+                    heading="Artist not found."
+                    description="The artist could not be loaded. Go back and choose another artist."
+                    actions={(
+                        <Button variant="primary" onClick={() => navigate(-1)}>
+                            Go back
+                        </Button>
+                    )}
+                />
+            </div>
+        );
     }
 
     const listenedCount = artist.musics.reduce((acc, { id }) => acc += musicMap.get(id)?.playCount || 0, 0);
 
     return (
         <TwoToneLayout
-            backgroundImage={artist.latestAlbum?.cover || ''}
             header={(
                 <ArtistSummary
                     name={artist.name}
@@ -51,9 +68,12 @@ export default function ArtistDetail() {
                 />
             )}
             primaryAction={(
-                <button onClick={() => void resetQueue(artist.musics.map(music => music.id))}>
+                <TwoTonePrimaryAction
+                    aria-label={`Play ${artist.name}`}
+                    disabled={artist.musics.length === 0}
+                    onClick={() => void resetQueue(artist.musics.map(music => music.id))}>
                     <Play />
-                </button>
+                </TwoTonePrimaryAction>
             )}>
             <div className="mb-[var(--b-spacing-2xl)] last:mb-0">
                 <div className="mb-[var(--b-spacing-sm)] flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">

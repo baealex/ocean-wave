@@ -1,5 +1,6 @@
 import {
     visualizerColor,
+    visualizerNeutralScrimColor,
     visualizerUnderlayColor,
     type RenderVisualizer
 } from './types';
@@ -43,8 +44,8 @@ const line: RenderVisualizer = (
     const maxAmplitude = 255;
 
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
-    gradient.addColorStop(1, 'rgba(0, 0, 0, 0.75)');
+    gradient.addColorStop(0, visualizerNeutralScrimColor(0));
+    gradient.addColorStop(1, visualizerNeutralScrimColor(0.75));
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = gradient;
@@ -69,7 +70,7 @@ const line: RenderVisualizer = (
     const fillGradient = ctx.createLinearGradient(0, canvas.height * 0.28, 0, canvas.height);
     fillGradient.addColorStop(0, visualizerColor(palette, 0.86, 0.28));
     fillGradient.addColorStop(0.72, visualizerColor(palette, 0.54, 0.08));
-    fillGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    fillGradient.addColorStop(1, visualizerNeutralScrimColor(0));
 
     drawConnectedPath(ctx, points);
     ctx.lineTo(canvas.width, canvas.height);

@@ -1,5 +1,6 @@
 import classNames from 'classnames';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { activeFilledIconClassName, activeIconClassName, filledIconClassName } from '../iconStateClass';
 const cx = classNames;
 
 import React from 'react';
@@ -18,20 +19,43 @@ const buttonVariants = cva(
                 primary: 'border-[var(--b-color-point)] bg-[var(--b-color-point)] text-[var(--b-color-background)] hover:border-[var(--b-color-point-dark)] hover:bg-[var(--b-color-point-dark)] hover:text-[var(--b-color-background)]',
                 secondary: 'border-transparent bg-[var(--b-color-secondary-button)] text-[var(--b-color-text-secondary)] hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
                 ghost: 'border-transparent bg-transparent text-[var(--b-color-text-secondary)] hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
-                danger: 'border-transparent bg-red-500/15 text-red-100/90 hover:bg-red-400/20 hover:text-[var(--b-color-text)]'
+                danger: 'border-transparent bg-[var(--b-color-badge-danger-background)] text-[var(--b-color-badge-danger-text)] hover:bg-[var(--b-color-danger-hover)] hover:text-[var(--b-color-text)]'
             },
             size: {
+                xs: 'min-h-8 min-w-8 px-2.5 py-1',
                 sm: 'min-h-9 min-w-9 px-2.5 py-1.5',
                 md: 'min-h-9 min-w-9 px-3 py-1.5'
             },
             fullWidth: {
                 true: 'w-full'
+            },
+            active: {
+                true: `border-[var(--b-color-focus)] ow-active-background ${activeIconClassName}`,
+                false: ''
+            },
+            filled: {
+                true: '',
+                false: ''
             }
         },
+        compoundVariants: [
+            {
+                active: false,
+                filled: true,
+                className: filledIconClassName
+            },
+            {
+                active: true,
+                filled: true,
+                className: activeFilledIconClassName
+            }
+        ],
         defaultVariants: {
             variant: 'secondary',
             size: 'md',
-            fullWidth: false
+            fullWidth: false,
+            active: false,
+            filled: false
         }
     }
 );
@@ -44,6 +68,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
     variant,
     size,
     fullWidth,
+    active,
+    filled,
     className,
     type = 'button',
     children,
@@ -53,7 +79,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(({
         <button
             ref={ref}
             type={type}
-            className={cx(buttonVariants({ variant, size, fullWidth }), className)}
+            className={cx(buttonVariants({ active, filled, variant, size, fullWidth }), className)}
             {...props}>
             {children}
         </button>

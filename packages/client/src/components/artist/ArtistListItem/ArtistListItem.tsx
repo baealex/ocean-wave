@@ -1,7 +1,4 @@
-import classNames from 'classnames';
-const cx = classNames;
-
-import { ArtistArtwork } from '~/components/shared';
+import { ArtistArtwork, libraryRowClass } from '~/components/shared';
 
 interface ArtistListItemProps {
     artistName: string;
@@ -21,10 +18,7 @@ const ArtistListItem = ({
     return (
         <button
             type="button"
-            className={cx(
-                'group/row flex w-full cursor-pointer flex-row items-center gap-4 px-6 py-4 text-left transition-colors',
-                'hover:bg-[image:var(--b-gradient-row-hover)] active:bg-[var(--b-color-active)]'
-            )}
+            className={libraryRowClass()}
             onClick={onClick}>
             <ArtistArtwork src={artistCover} alt={artistName} />
             <div className="flex min-w-0 flex-1 flex-col gap-1">

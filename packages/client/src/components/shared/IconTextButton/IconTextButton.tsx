@@ -1,12 +1,13 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import classNames from 'classnames';
 import React from 'react';
+import { activeFilledIconClassName, activeIconClassName, filledIconClassName } from '../iconStateClass';
 
 const cx = classNames;
 
 const iconTextButtonVariants = cva(
     [
-        'inline-flex items-center justify-start gap-2 rounded-[var(--b-radius-md)] border text-left text-xs font-semibold',
+        'inline-flex items-center gap-2 rounded-[var(--b-radius-md)] border text-left text-xs font-semibold',
         'transition-[color,background-color,border-color,transform] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[var(--b-color-focus)]',
         'active:enabled:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40'
     ],
@@ -20,12 +21,66 @@ const iconTextButtonVariants = cva(
             size: {
                 sm: 'min-h-9 px-3 py-1.5',
                 md: 'min-h-10 px-3 py-2',
-                lg: 'min-h-11 px-3.5 py-2.5'
+                lg: 'min-h-11 px-3.5 py-2.5',
+                menu: 'min-h-[52px] px-3 py-2.5'
+            },
+            shape: {
+                md: 'rounded-[var(--b-radius-md)]',
+                pill: 'rounded-full'
+            },
+            layout: {
+                start: 'justify-start',
+                between: 'justify-between'
+            },
+            active: {
+                true: `border-[var(--b-color-focus)] ow-active-background ${activeIconClassName}`,
+                false: ''
+            },
+            filled: {
+                true: '',
+                false: ''
+            },
+            fullWidth: {
+                true: 'w-full',
+                false: ''
+            }
+        },
+        compoundVariants: [
+            {
+                active: false,
+                filled: true,
+                className: filledIconClassName
+            },
+            {
+                active: true,
+                filled: true,
+                className: activeFilledIconClassName
+            }
+        ],
+        defaultVariants: {
+            variant: 'secondary',
+            size: 'md',
+            shape: 'md',
+            layout: 'start',
+            active: false,
+            filled: false,
+            fullWidth: false
+        }
+    }
+);
+
+const iconTextButtonMetaVariants = cva(
+    'truncate text-[var(--b-font-size-caption-compact)] font-normal text-[var(--b-color-text-tertiary)]',
+    {
+        variants: {
+            parentVariant: {
+                primary: 'text-[var(--b-color-on-primary-muted)]',
+                secondary: '',
+                ghost: ''
             }
         },
         defaultVariants: {
-            variant: 'secondary',
-            size: 'md'
+            parentVariant: 'secondary'
         }
     }
 );
@@ -34,12 +89,19 @@ export interface IconTextButtonProps extends React.ButtonHTMLAttributes<HTMLButt
     icon?: React.ReactNode;
     label: React.ReactNode;
     meta?: React.ReactNode;
+    trailing?: React.ReactNode;
 }
 
 const IconTextButton = React.forwardRef<HTMLButtonElement, IconTextButtonProps>(({
     icon,
     label,
     meta,
+    trailing,
+    active,
+    filled,
+    fullWidth,
+    layout,
+    shape,
     variant,
     size,
     className,
@@ -50,13 +112,16 @@ const IconTextButton = React.forwardRef<HTMLButtonElement, IconTextButtonProps>(
         <button
             ref={ref}
             type={type}
-            className={cx(iconTextButtonVariants({ variant, size }), className)}
+            className={cx(iconTextButtonVariants({ active, filled, fullWidth, layout, shape, variant, size }), className)}
             {...props}>
-            {icon && <span className="inline-flex shrink-0 items-center justify-start [&_svg]:h-4 [&_svg]:w-4">{icon}</span>}
-            <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="truncate text-inherit">{label}</span>
-                {meta && <span className={cx('truncate text-[11px] font-normal text-[var(--b-color-text-tertiary)]', variant === 'primary' && 'text-black/60')}>{meta}</span>}
+            <span className={cx('flex min-w-0 items-center gap-2', layout === 'between' && 'flex-1')}>
+                {icon && <span className="inline-flex shrink-0 items-center justify-start [&_svg]:h-4 [&_svg]:w-4">{icon}</span>}
+                <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate text-inherit">{label}</span>
+                    {meta && <span className={iconTextButtonMetaVariants({ parentVariant: variant })}>{meta}</span>}
+                </span>
             </span>
+            {trailing && <span className="inline-flex shrink-0 items-center justify-center [&_svg]:h-4 [&_svg]:w-4">{trailing}</span>}
         </button>
     );
 });

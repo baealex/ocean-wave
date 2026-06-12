@@ -4,7 +4,7 @@ import classNames from 'classnames';
 
 const cx = classNames;
 
-export type PageContainerWidth = 'narrow' | 'content' | 'wide' | 'focus' | 'player' | 'full';
+export type PageContainerWidth = 'compact' | 'narrow' | 'standard' | 'wide' | 'full';
 export type PageContainerPadding = 'page' | 'content' | 'focus' | 'none';
 
 export interface PageContainerProps {
@@ -15,23 +15,22 @@ export interface PageContainerProps {
 }
 
 const WIDTH_MAP: Record<PageContainerWidth, string> = {
-    narrow: 'w-[min(100%,800px)]',
-    content: 'w-full max-w-[860px]',
+    compact: 'w-[min(100%,480px)]',
+    narrow: 'w-[min(100%,608px)]',
+    standard: 'w-full max-w-[860px]',
     wide: 'w-[min(100%,1152px)]',
-    focus: 'w-[min(100%,608px)]',
-    player: 'w-[min(100%,480px)]',
     full: 'w-full'
 };
 
 const PADDING_MAP: Record<PageContainerPadding, string> = {
-    page: 'p-[clamp(16px,3vw,32px)] pb-[calc(clamp(24px,4vw,48px)+env(safe-area-inset-bottom))] max-sm:p-[var(--b-spacing-md)] max-sm:pb-[calc(var(--b-spacing-xl)+env(safe-area-inset-bottom))]',
+    page: 'p-[clamp(16px,3vw,32px)] pb-[calc(clamp(16px,3vw,32px)+env(safe-area-inset-bottom))] max-sm:p-[var(--b-spacing-md)] max-sm:pb-[calc(var(--b-spacing-md)+env(safe-area-inset-bottom))]',
     content: 'px-4 py-6 sm:px-6 sm:py-10 lg:px-10 lg:py-12',
     focus: 'px-4 pb-[calc(24px+env(safe-area-inset-bottom))] max-sm:px-3.5',
     none: ''
 };
 
 const PageContainer = ({
-    width = 'narrow',
+    width = 'standard',
     padding = 'page',
     className,
     children

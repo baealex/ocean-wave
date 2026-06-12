@@ -28,6 +28,7 @@ export {
     Shuffle,
     SkipBack,
     SkipForward,
+    Square,
     SquareCheckBig as CheckBox,
     Tags,
     Trash2 as TrashCan,

@@ -1,10 +1,7 @@
 import * as SelectPrimitive from '@baejino/react-ui/select';
 import { cva } from 'class-variance-authority';
-import classNames from 'classnames';
 
 import * as Icon from '~/icon';
-
-const cx = classNames;
 
 interface Option {
     value: string;
@@ -35,7 +32,8 @@ const contentClass = cva([
 const itemClass = cva([
     'relative flex min-h-9 cursor-default select-none items-center rounded-[var(--b-radius-md)] py-2 pl-3 pr-9',
     'text-xs leading-[1.45] text-[var(--b-color-text)] transition-[background-color,color,transform] duration-150',
-    'data-[highlighted]:bg-[var(--b-color-active)] data-[highlighted]:outline-none data-[state=checked]:bg-[var(--b-color-hover)]'
+    'data-[highlighted]:bg-[var(--b-color-hover)] data-[highlighted]:outline-none',
+    'ow-select-checked data-[state=checked]:font-semibold'
 ]);
 
 const EMPTY_OPTION_VALUE = '__ocean-wave-empty-option__';
@@ -50,7 +48,7 @@ export default function Select({ selected, options, onChange }: SelectProps) {
             onValueChange={(value) => onChange(fromInternalValue(value))}>
             <SelectPrimitive.Trigger className={triggerClass()}>
                 <SelectPrimitive.Value placeholder="Select an option" />
-                <SelectPrimitive.Icon className={cx('shrink-0 text-[var(--b-color-text-muted)] [&_svg]:h-4 [&_svg]:w-4')}>
+                <SelectPrimitive.Icon className="shrink-0 text-[var(--b-color-text-muted)] [&_svg]:h-4 [&_svg]:w-4">
                     <Icon.ChevronDown />
                 </SelectPrimitive.Icon>
             </SelectPrimitive.Trigger>
@@ -69,7 +67,7 @@ export default function Select({ selected, options, onChange }: SelectProps) {
                                 <SelectPrimitive.ItemText>
                                     {option.label}
                                 </SelectPrimitive.ItemText>
-                                <SelectPrimitive.ItemIndicator className="absolute right-3.5 top-1/2 flex -translate-y-1/2 items-center justify-center text-[var(--b-color-point)] [&_svg]:h-[15px] [&_svg]:w-[15px]">
+                                <SelectPrimitive.ItemIndicator className="absolute right-3.5 top-1/2 flex -translate-y-1/2 items-center justify-center text-[var(--b-color-point)] [&_svg]:h-[15px] [&_svg]:w-[15px] [&_svg]:stroke-[var(--b-color-point)]">
                                     <Icon.Check />
                                 </SelectPrimitive.ItemIndicator>
                             </SelectPrimitive.Item>

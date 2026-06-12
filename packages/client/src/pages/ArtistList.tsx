@@ -8,7 +8,9 @@ import {
     Loading,
     Button,
     StickyHeader,
-    SearchField
+    StickyHeaderActions,
+    SearchField,
+    StateMessage
 } from '~/components/shared';
 import { ArtistListItem } from '~/components/artist';
 
@@ -54,16 +56,19 @@ export default function ArtistList() {
                     ariaLabel="Search artists"
                     onChange={handleSearchChange}
                 />
-                <Button
-                    size="sm"
-                    onClick={() => panel.open({
-                        title: 'Artist Sort',
-                        content: (
-                            <ItemSortPanelContent items={artistStore.sortItems} />
-                        )
-                    })}>
-                    <Icon.Sort />
-                </Button>
+                <StickyHeaderActions>
+                    <Button
+                        size="sm"
+                        aria-label="Sort artists"
+                        onClick={() => panel.open({
+                            title: 'Artist Sort',
+                            content: (
+                                <ItemSortPanelContent items={artistStore.sortItems} />
+                            )
+                        })}>
+                        <Icon.Sort />
+                    </Button>
+                </StickyHeaderActions>
             </StickyHeader>
             {!loaded && (
                 <Loading />
@@ -74,6 +79,16 @@ export default function ArtistList() {
                     rowHeight={ARTIST_LIST_ROW_HEIGHT}
                     overscanPx={ARTIST_LIST_ROW_HEIGHT * 5}
                     getKey={(artist) => artist.id}
+                    emptyState={(
+                        <StateMessage
+                            className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-2xl)]"
+                            icon={<Icon.User />}
+                            heading={query.trim() ? 'No artists found.' : 'No artists yet.'}
+                            description={query.trim()
+                                ? 'Try a different artist search.'
+                                : 'Artists will appear after music is added to your library.'}
+                        />
+                    )}
                     renderItem={(artist) => (
                         <ArtistListItem
                             key={artist.id}

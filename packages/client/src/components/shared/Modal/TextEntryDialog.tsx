@@ -3,6 +3,7 @@ import Input from '~/components/shared/Input';
 import Text from '~/components/shared/Text';
 
 import * as Dialog from '@baejino/react-ui/modal/dialog';
+import { dialogChromeClass, dialogContentClass, dialogOverlayClass } from './DialogShell';
 
 interface TextEntryDialogProps {
     open: boolean;
@@ -19,14 +20,14 @@ interface TextEntryDialogProps {
 }
 
 const dialogClass = {
-    overlay: 'fixed inset-0 z-[122] bg-[var(--b-color-overlay-strong)] animate-[fade-in_180ms_ease]',
-    content: 'fixed left-1/2 top-1/2 z-[123] w-[min(calc(100vw_-_24px),448px)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-modal)] p-4 text-[var(--b-color-text)] shadow-[var(--b-card-shadow-sub)] focus:outline-none max-sm:w-[min(calc(100vw_-_16px),448px)] max-sm:p-3.5',
+    overlay: dialogOverlayClass({ layer: 'form', tone: 'strong' }),
+    content: dialogContentClass({ layer: 'form', width: 'form', padding: 'form' }),
     form: 'flex flex-col gap-4',
-    header: 'flex flex-col gap-2',
-    title: 'tracking-normal',
-    description: 'leading-[1.45]',
-    actions: 'flex justify-end gap-2.5 max-sm:flex-col-reverse',
-    button: 'min-w-[88px] max-sm:w-full'
+    header: dialogChromeClass.header,
+    title: dialogChromeClass.title,
+    description: dialogChromeClass.description,
+    actions: dialogChromeClass.actions,
+    button: dialogChromeClass.button
 };
 
 export default function TextEntryDialog({

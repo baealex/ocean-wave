@@ -9,7 +9,8 @@ import {
     StickyHeaderActions,
     ItemSortPanelContent,
     Loading,
-    SearchField
+    SearchField,
+    StateMessage
 } from '~/components/shared';
 import {
     MusicListItem,
@@ -136,16 +137,16 @@ export default function Music() {
                     onChange={handleSearchChange}
                 />
                 <StickyHeaderActions>
-                    <Button onClick={() => void resetQueue(filteredMusics.map(music => music.id))}>
+                    <Button
+                        disabled={filteredMusics.length === 0}
+                        onClick={() => void resetQueue(filteredMusics.map(music => music.id))}>
                         <Icon.Play /> Play
                     </Button>
                     <Button
                         size="sm"
+                        active={isSmartFilterActive}
                         aria-pressed={isSmartFilterActive}
                         aria-label="Filter music"
-                        className={isSmartFilterActive
-                            ? 'border-[var(--b-color-focus)] bg-[var(--b-color-active)] !text-[var(--b-color-point)] [&_svg]:!text-[var(--b-color-point)]'
-                            : undefined}
                         onClick={() => panel.open({
                             title: 'Music Filter',
                             content: (
@@ -159,11 +160,9 @@ export default function Music() {
                     </Button>
                     <Button
                         size="sm"
+                        active={isTagFilterActive}
                         aria-pressed={isTagFilterActive}
                         aria-label="Filter music by tags"
-                        className={isTagFilterActive
-                            ? 'border-[var(--b-color-focus)] bg-[var(--b-color-active)] !text-[var(--b-color-point)] [&_svg]:!text-[var(--b-color-point)]'
-                            : undefined}
                         onClick={() => panel.open({
                             title: 'Tag Filter',
                             content: (
@@ -178,6 +177,7 @@ export default function Music() {
                     </Button>
                     <Button
                         size="sm"
+                        aria-label="Sort music"
                         onClick={() => panel.open({
                             title: 'Music Sort',
                             content: (
@@ -197,6 +197,16 @@ export default function Music() {
                     rowHeight={MUSIC_LIST_ROW_HEIGHT}
                     overscanPx={MUSIC_LIST_ROW_HEIGHT * 6}
                     getKey={(music) => music.id}
+                    emptyState={(
+                        <StateMessage
+                            className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-2xl)]"
+                            icon={<Icon.Music />}
+                            heading={query.trim() ? 'No music found.' : 'No music yet.'}
+                            description={query.trim()
+                                ? 'Try a different search, filter, or tag combination.'
+                                : 'Add music to your library to start listening.'}
+                        />
+                    )}
                     renderItem={(music) => (
                         <MusicListItem
                             key={music.id}

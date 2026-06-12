@@ -15,6 +15,7 @@ const vendorModules = [
     '@dnd-kit/modifiers',
     '@dnd-kit/utilities'
 ];
+const serverOrigin = process.env.OCEAN_WAVE_SERVER_ORIGIN ?? 'http://localhost:44100';
 
 function getManualChunk(id: string) {
     const normalizedId = id.replaceAll('\\', '/');
@@ -46,16 +47,16 @@ export default defineConfig({
     server: {
         host: '0.0.0.0',
         proxy: {
-            '/api': { target: 'http://localhost:44100' },
-            '/cache': { target: 'http://localhost:44100' },
-            '/graphql': { target: 'http://localhost:44100' },
-            '/login': { target: 'http://localhost:44100' },
-            '/logout': { target: 'http://localhost:44100' },
+            '/api': { target: serverOrigin },
+            '/cache': { target: serverOrigin },
+            '/graphql': { target: serverOrigin },
+            '/login': { target: serverOrigin },
+            '/logout': { target: serverOrigin },
             '/socket.io': {
-                target: 'http://localhost:44100',
+                target: serverOrigin,
                 ws: true,
                 onProxyReqWs: (proxyReq) => {
-                    proxyReq.setHeader('Origin', 'http://localhost:44100');
+                    proxyReq.setHeader('Origin', serverOrigin);
                 }
             }
         }

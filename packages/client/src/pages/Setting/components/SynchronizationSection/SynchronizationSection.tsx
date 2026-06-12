@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { cva } from 'class-variance-authority';
 
 import { Badge, Button, SettingSection, SettingItem, Text } from '~/components/shared';
 import { getLatestSyncReport } from '~/api/sync';
@@ -43,6 +44,21 @@ const formatTimestamp = (value: string | null) => {
 const syncStatusTone = (status: SyncReport['status']) => {
     return status === 'success' ? 'success' : 'danger';
 };
+
+const progressBarClass = cva(
+    'h-full w-[30%] rounded-full bg-[var(--b-gradient-primary)]',
+    {
+        variants: {
+            syncing: {
+                true: 'animate-[progress_1.5s_ease-in-out_infinite]',
+                false: ''
+            }
+        },
+        defaultVariants: {
+            syncing: false
+        }
+    }
+);
 
 export const SynchronizationSection = ({ onSyncMusic }: SynchronizationSectionProps) => {
     const [progressMessage, setProgressMessage] = useState('');
@@ -102,7 +118,7 @@ export const SynchronizationSection = ({ onSyncMusic }: SynchronizationSectionPr
                         <div className="mb-[var(--b-spacing-sm)] w-[min(288px,100%)]">
                             <div className="mb-[var(--b-spacing-sm)] h-[3px] overflow-hidden rounded-full bg-[var(--b-color-hover)]">
                                 <div
-                                    className={`h-full w-[30%] rounded-full bg-[var(--b-gradient-primary)] ${isSyncing ? 'animate-[progress_1.5s_ease-in-out_infinite]' : ''}`}
+                                    className={progressBarClass({ syncing: isSyncing })}
                                 />
                             </div>
                             <Text as="p" size="sm" variant="secondary" className="m-0">

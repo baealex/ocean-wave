@@ -17,15 +17,17 @@ const AlbumSummary = ({
     return (
         <div className="flex flex-col items-center gap-[var(--b-spacing-md)] text-center">
             <div className="mb-[var(--b-spacing-sm)] w-[260px] max-w-[76%]">
-                <div className="relative aspect-square overflow-hidden rounded-[var(--b-radius-xl)] shadow-[0_12px_32px_rgba(0,0,0,0.45)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[var(--b-radius-xl)] after:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] after:content-['']">
+                <div className="relative aspect-square overflow-hidden rounded-[var(--b-radius-xl)] shadow-[var(--b-shadow-artwork-summary)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[var(--b-radius-xl)] after:shadow-[var(--b-shadow-inset-artwork-ring)] after:content-['']">
                     <Image className="h-full w-full object-cover" src={getOriginalImage(cover)} alt={name} icon={<Disc />} />
                 </div>
             </div>
-            <Text as="h1" size="xl" weight="bold" className="drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]">
+            <Text as="h1" size="xl" weight="bold" className="drop-shadow-[var(--b-shadow-summary-title)]">
                 {name}
             </Text>
             <div className="flex items-center gap-[var(--b-spacing-sm)]">
-                <Link className="no-underline transition-opacity duration-150 hover:opacity-80" to={`/artist/${artist.id}`}>
+                <Link
+                    className="inline-flex min-h-8 items-center rounded-full px-1 no-underline transition-opacity duration-150 hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"
+                    to={`/artist/${artist.id}`}>
                     <Text variant="secondary" size="md">
                         {artist.name}
                     </Text>

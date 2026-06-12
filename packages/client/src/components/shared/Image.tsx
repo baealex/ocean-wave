@@ -1,4 +1,5 @@
 import classNames from 'classnames';
+import { cva } from 'class-variance-authority';
 import {
     useState, useEffect, type ImgHTMLAttributes, type ReactNode, type ReactEventHandler
 } from 'react';
@@ -6,6 +7,21 @@ import {
 import { DEFAULT_ALBUM_ART } from '~/modules/image';
 
 const cx = classNames;
+
+const imageClass = cva(
+    'bg-[var(--b-color-surface-subtle)] text-transparent opacity-0 transition-opacity duration-300 motion-reduce:transition-none',
+    {
+        variants: {
+            loaded: {
+                true: 'opacity-100',
+                false: ''
+            }
+        },
+        defaultVariants: {
+            loaded: false
+        }
+    }
+);
 
 interface ImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
     src?: string;
@@ -52,11 +68,7 @@ export default function Image({
         <img
             src={effectiveSrc}
             loading={loading}
-            className={cx(
-                'bg-[var(--b-color-surface-subtle)] text-transparent opacity-0 transition-opacity duration-300 motion-reduce:transition-none',
-                loaded && 'opacity-100',
-                className
-            )}
+            className={cx(imageClass({ loaded }), className)}
             style={style}
             onError={handleError}
             onLoad={handleLoad}

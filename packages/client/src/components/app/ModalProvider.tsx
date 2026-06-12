@@ -8,15 +8,16 @@ import * as AlertDialog from '@baejino/react-ui/modal/alert-dialog';
 import type { ReactNode } from 'react';
 
 import { Button, Text } from '~/components/shared';
+import { dialogChromeClass, dialogContentClass, dialogOverlayClass } from '~/components/shared/Modal/DialogShell';
 
 const modalClass = {
-    overlay: 'fixed inset-0 z-[120] bg-[var(--b-color-overlay-default)] animate-[fade-in_180ms_ease]',
-    content: 'fixed left-1/2 top-1/2 z-[121] w-[min(calc(100vw_-_24px),416px)] -translate-x-1/2 -translate-y-1/2 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-modal)] p-3.5 text-[var(--b-color-text)] shadow-[0_12px_28px_rgba(2,8,11,0.22)] focus:outline-none max-sm:w-[min(calc(100vw_-_16px),416px)]',
-    header: 'flex flex-col gap-2',
-    title: 'tracking-normal',
-    description: 'leading-[1.45]',
-    actions: 'mt-4 flex justify-end gap-2.5 max-sm:flex-col-reverse',
-    button: 'min-w-[88px] max-sm:w-full'
+    overlay: dialogOverlayClass({ layer: 'alert', tone: 'default' }),
+    content: dialogContentClass({ layer: 'alert', width: 'confirm', padding: 'compact' }),
+    header: dialogChromeClass.header,
+    title: dialogChromeClass.title,
+    description: dialogChromeClass.description,
+    actions: `${dialogChromeClass.actions} mt-4`,
+    button: dialogChromeClass.button
 };
 
 const AlertModal = ({ open, options, onClose }: AlertComponentProps) => {

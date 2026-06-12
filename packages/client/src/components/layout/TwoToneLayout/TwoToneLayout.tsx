@@ -1,14 +1,44 @@
-import classNames from 'classnames';
+import { cva } from 'class-variance-authority';
 import React from 'react';
 
-const cx = classNames;
+import IconButton from '~/components/shared/IconButton';
+
+const contentClass = cva('relative z-[1]', {
+    variants: {
+        hasPrimaryAction: {
+            true: 'pt-[var(--b-spacing-2xl)]',
+            false: ''
+        }
+    },
+    defaultVariants: {
+        hasPrimaryAction: false
+    }
+});
 
 interface TwoToneLayoutProps {
-    backgroundImage?: string;
     header: React.ReactNode;
     primaryAction?: React.ReactNode;
     children: React.ReactNode;
 }
+
+export interface TwoTonePrimaryActionProps extends Omit<React.ComponentProps<typeof IconButton>, 'size' | 'tone'> {}
+
+export const TwoTonePrimaryAction = React.forwardRef<HTMLButtonElement, TwoTonePrimaryActionProps>(({
+    className,
+    type = 'button',
+    ...props
+}, ref) => (
+    <IconButton
+        ref={ref}
+        size="floating"
+        tone="primary"
+        type={type}
+        className={className}
+        {...props}
+    />
+));
+
+TwoTonePrimaryAction.displayName = 'TwoTonePrimaryAction';
 
 const TwoToneLayout = ({
     header,
@@ -16,19 +46,20 @@ const TwoToneLayout = ({
     children
 }: TwoToneLayoutProps) => {
     return (
-        <div className="relative min-h-full bg-[var(--b-color-background)]">
-            <div className="relative z-[3] border-b border-[var(--b-color-border-subtle)]">
-                <div className="relative z-[1] px-[var(--b-spacing-lg)] py-[calc(var(--b-spacing-2xl)+var(--b-spacing-lg))]">
+        <div className="relative min-h-full">
+            <div className="relative z-[2]">
+                <div className="relative px-[var(--b-spacing-lg)] py-[calc(var(--b-spacing-2xl)+var(--b-spacing-lg))]">
                     {header}
                     {primaryAction && (
-                        <div className="absolute bottom-0 right-[var(--b-spacing-lg)] z-10 translate-y-1/2 [&_button]:flex [&_button]:h-16 [&_button]:w-16 [&_button]:cursor-pointer [&_button]:items-center [&_button]:justify-center [&_button]:rounded-full [&_button]:border-0 [&_button]:bg-[var(--b-color-point)] [&_button]:text-black [&_button]:shadow-none [&_button]:transition-colors [&_button]:duration-150 hover:[&_button]:bg-[var(--b-color-point-dark)] active:[&_button]:scale-95 [&_button_svg]:h-7 [&_button_svg]:w-7">
+                        <div className="absolute bottom-0 right-[var(--b-spacing-lg)] z-20 translate-y-1/2">
                             {primaryAction}
                         </div>
                     )}
                 </div>
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-px bg-[var(--b-color-border-subtle)]" aria-hidden="true" />
             </div>
 
-            <div className={cx('relative z-[1]', Boolean(primaryAction) && 'pt-[var(--b-spacing-2xl)]')}>
+            <div className={contentClass({ hasPrimaryAction: Boolean(primaryAction) })}>
                 {children}
             </div>
         </div>

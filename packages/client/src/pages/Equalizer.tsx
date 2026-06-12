@@ -4,7 +4,7 @@ import {
     type ChangeEvent
 } from 'react';
 
-import { Button, Card, Text } from '~/components/shared';
+import { Badge, Button, Card, Text } from '~/components/shared';
 import EqualizerPreset from '~/components/shared/EqualizerPreset';
 import type { Preset } from '~/components/shared/EqualizerPreset';
 import EqualizerSlider from '~/components/shared/EqualizerSlider';
@@ -22,8 +22,8 @@ const layoutClass = {
     panel: 'min-w-0 bg-[var(--b-color-surface-subtle)]',
     panelBody: 'flex flex-col gap-4',
     panelHeader: 'flex items-start justify-between gap-3 max-[640px]:flex-col',
-    rangeLabel: 'shrink-0 rounded-full border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-item)] px-2.5 py-1.5 text-xs font-medium text-[var(--b-color-text-tertiary)] max-[640px]:self-start',
-    eqDeck: 'overflow-x-auto rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[rgba(202,247,249,0.025)]',
+    rangeLabel: 'shrink-0 max-[640px]:self-start',
+    eqDeck: 'overflow-x-auto rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)]',
     eqDeckInner: 'min-w-[672px] p-4',
     sliderGroup: 'grid min-h-[384px] grid-cols-7 gap-3'
 };
@@ -249,7 +249,7 @@ const Equalizer = () => {
                     <div className={layoutClass.panelBody}>
                         <div className={layoutClass.panelHeader}>
                             <div>
-                                <Text as="span" size="xs" weight="semibold" className="tracking-[0.08em] text-[var(--b-color-point-light)] uppercase">
+                                <Text as="span" variant="muted" size="xs" weight="semibold" className="tracking-normal uppercase">
                                     Preset
                                 </Text>
                                 <Text as="h2" id="equalizer-presets-title" size="title" weight="semibold" className="mt-1 mb-0">
@@ -274,7 +274,7 @@ const Equalizer = () => {
                     <div className={layoutClass.panelBody}>
                         <div className={layoutClass.panelHeader}>
                             <div>
-                                <Text as="span" size="xs" weight="semibold" className="tracking-[0.08em] text-[var(--b-color-point-light)] uppercase">
+                                <Text as="span" variant="muted" size="xs" weight="semibold" className="tracking-normal uppercase">
                                     7-band EQ
                                 </Text>
                                 <Text as="h2" id="equalizer-bands-title" size="title" weight="semibold" className="mt-1 mb-0">
@@ -282,7 +282,7 @@ const Equalizer = () => {
                                 </Text>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
-                                <span className={layoutClass.rangeLabel}>-10 dB · +10 dB</span>
+                                <Badge tone="subtle" className={layoutClass.rangeLabel}>-10 dB · +10 dB</Badge>
                                 <Button
                                     size="sm"
                                     disabled={isFlat}

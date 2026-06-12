@@ -2,9 +2,74 @@
 
 @theme {
     --font-sans: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --color-ow-background: var(--b-color-background);
+    --color-ow-surface: var(--b-color-background-layer-1);
+    --color-ow-surface-subtle: var(--b-color-surface-subtle);
+    --color-ow-surface-modal: var(--b-color-surface-modal);
+    --color-ow-border: var(--b-color-border);
+    --color-ow-border-subtle: var(--b-color-border-subtle);
+    --color-ow-text: var(--b-color-text);
+    --color-ow-text-secondary: var(--b-color-text-secondary);
+    --color-ow-text-tertiary: var(--b-color-text-tertiary);
+    --color-ow-point: var(--b-color-point);
+    --radius-ow-md: var(--b-radius-md);
+    --radius-ow-lg: var(--b-radius-lg);
+    --radius-ow-xl: var(--b-radius-xl);
+    --radius-ow-2xl: var(--b-radius-2xl);
+    --spacing-ow-xs: var(--b-spacing-xs);
+    --spacing-ow-sm: var(--b-spacing-sm);
+    --spacing-ow-md: var(--b-spacing-md);
+    --spacing-ow-lg: var(--b-spacing-lg);
+    --spacing-ow-xl: var(--b-spacing-xl);
 }
 
 @layer base, components;
+
+@utility ow-focus-ring {
+  outline: 2px solid var(--b-color-focus);
+  outline-offset: 2px;
+}
+
+@utility ow-surface-base {
+  border: 1px solid var(--b-color-border-subtle);
+  color: var(--b-color-text);
+}
+
+@utility ow-surface-subtle {
+  background: var(--b-color-surface-subtle);
+}
+
+@utility ow-surface-panel {
+  background: var(--b-color-background-layer-1);
+}
+
+@utility ow-surface-modal {
+  background: var(--b-color-surface-modal);
+}
+
+@utility ow-muted-text {
+  color: var(--b-color-text-tertiary);
+}
+
+.ow-active-background,
+.ow-active-background:hover {
+  background-color: var(--b-color-active);
+}
+
+.ow-active-surface,
+.ow-active-surface:hover {
+  background-color: var(--b-color-active);
+  box-shadow: var(--b-shadow-inset-selected);
+}
+
+.ow-active-press:active {
+  background-color: var(--b-color-active);
+}
+
+.ow-select-checked[data-state="checked"] {
+  background-color: var(--b-color-active);
+  box-shadow: var(--b-shadow-inset-selected);
+}
 
 @layer components {
 :root {
@@ -29,23 +94,58 @@
   --b-color-border: rgba(244, 244, 245, 0.14);
   --b-color-border-subtle: rgba(244, 244, 245, 0.08);
   --b-color-cd-border: rgba(244, 244, 245, 0.14);
+  --b-color-disk-groove: rgba(244, 244, 245, 0.045);
+  --b-color-disk-inset-highlight: rgba(244, 244, 245, 0.018);
+  --b-color-disk-inset-shadow: rgba(0, 0, 0, 0.14);
+  --b-color-disk-inset-shadow-strong: rgba(0, 0, 0, 0.16);
+  --b-color-disk-sheen: rgba(244, 244, 245, 0.08);
+  --b-color-disk-edge-shadow: rgba(0, 0, 0, 0.34);
+  --b-color-disk-image-edge: rgba(0, 0, 0, 0.28);
   --b-color-overlay-default: rgba(2, 9, 12, 0.68);
   --b-color-overlay-strong: rgba(2, 9, 12, 0.72);
+  --b-color-splash-backdrop: rgba(9, 9, 11, 0.78);
+  --b-color-splash-surface: rgba(18, 18, 20, 0.82);
+  --b-color-splash-track: rgba(244, 244, 245, 0.1);
   --b-color-badge-success-background: rgba(56, 189, 120, 0.1);
   --b-color-badge-success-text: rgba(129, 222, 168, 0.92);
   --b-color-badge-warning-background: rgba(245, 158, 11, 0.12);
   --b-color-badge-warning-text: rgba(255, 210, 138, 0.95);
   --b-color-badge-danger-background: rgba(244, 63, 94, 0.1);
   --b-color-badge-danger-text: rgba(255, 154, 173, 0.92);
+  --b-color-danger-border: rgba(247, 113, 113, 0.28);
+  --b-color-danger-surface: rgba(78, 18, 22, 0.58);
+  --b-color-danger-text: #ffd9d9;
+  --b-color-danger-hover: rgba(248, 113, 113, 0.2);
+  --b-color-control-strong-hover: rgba(255, 255, 255, 0.08);
+  --b-color-static-white: #ffffff;
+  --b-color-on-primary-muted: rgba(9, 9, 11, 0.6);
+  --b-color-drag-handle: rgba(255, 255, 255, 0.18);
+  --b-color-toast-border: rgba(244, 244, 245, 0.1);
+  --b-color-toast-highlight: rgba(255, 255, 255, 0.055);
+  --b-color-toast-inset: rgba(255, 255, 255, 0.02);
+  --b-gradient-toast-surface: linear-gradient(135deg, rgba(24, 24, 27, 0.94), rgba(18, 18, 20, 0.9));
+  --b-shadow-toast: 0 14px 34px rgba(0, 0, 0, 0.28), 0 0 0 1px var(--b-color-toast-inset) inset;
   --b-card-shadow-main: none;
   --b-card-shadow-hover: none;
   --b-card-shadow-glow: none;
   --b-card-shadow-sub: none;
+  --b-shadow-artwork-hero: 0 18px 42px rgba(0, 0, 0, 0.28);
+  --b-shadow-artwork-placeholder: 0 18px 42px rgba(0, 0, 0, 0.24);
+  --b-shadow-artwork-summary: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --b-shadow-artist-summary: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --b-shadow-summary-title: 0 2px 8px rgba(0, 0, 0, 0.5);
+  --b-shadow-inset-artwork-ring: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  --b-shadow-inset-visualizer-ring: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --b-shadow-inset-selected: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --b-shadow-queue-artwork: 0 10px 20px rgba(2, 8, 11, 0.12);
+  --b-shadow-queue-drag: 0 16px 24px rgba(0, 0, 0, 0.36);
   --b-backdrop-filter-panel-background: none;
   --b-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --b-transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
   --b-transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
   --b-transition-bounce: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --b-font-size-badge: 10px;
+  --b-font-size-caption-compact: 11px;
   --b-spacing-xs: 4px;
   --b-spacing-sm: 8px;
   --b-spacing-md: 16px;
@@ -57,18 +157,24 @@
   --b-radius-lg: 14px;
   --b-radius-xl: 20px;
   --b-radius-2xl: 28px;
+  --b-radius-player-visualizer: 32px;
   --b-radius-full: 9999px;
   --b-app-shell-background: #121214;
   --b-app-shell-border: rgba(244, 244, 245, 0.08);
   --b-app-shell-shadow: none;
   --b-gradient-page: #09090b;
   --b-gradient-sticky: linear-gradient(180deg, #09090b 0%, rgba(9, 9, 11, 0.92) 64%, rgba(9, 9, 11, 0) 100%);
+  --b-gradient-subpage-fullscreen: linear-gradient(180deg, rgba(9, 9, 11, 0.98) 0%, rgb(6, 6, 8) 100%);
+  --b-gradient-subpage-content: linear-gradient(180deg, rgba(9, 9, 11, 0.52) 0%, rgba(9, 9, 11, 0) 100%);
   --b-gradient-row-hover: linear-gradient(90deg, rgba(139, 92, 246, 0.08), transparent 48%);
+  --b-gradient-detail-header-scrim: linear-gradient(180deg, rgba(9, 9, 11, 0.42), var(--b-color-background));
   --b-color-surface-modal: #18181b;
   --b-color-surface-dropdown: #18181b;
   --b-color-surface-input: #27272a;
   --b-color-surface-input-hover: #3f3f46;
   --b-color-surface-input-focus: #3f3f46;
+  --b-color-player-background: rgba(9, 9, 11, 0.96);
+  --b-color-progress-track: rgba(244, 244, 245, 0.08);
   --b-color-surface-item: rgba(244, 244, 245, 0.06);
   --b-color-surface-subtle: rgba(244, 244, 245, 0.04);
   --b-color-glow-ambient: transparent;
@@ -78,6 +184,8 @@
   --app-toast-safe-area-bottom-offset: max(14px, env(safe-area-inset-bottom));
   --app-mini-player-toast-offset: 68px;
   --app-toast-mini-player-bottom-offset: calc(var(--app-mini-player-toast-offset) + var(--app-toast-safe-area-bottom-offset));
+  --app-mini-player-content-offset: calc(88px + env(safe-area-inset-bottom));
+  --app-mini-player-content-offset-lg: 92px;
 }
 
 *,
@@ -158,6 +266,7 @@ main {
   display: flex;
   flex-direction: column;
   height: 100%;
+  background: var(--b-color-background);
 }
 @media (min-width: 1024px) {
   main {
@@ -181,13 +290,13 @@ body {
 
 .app-toast {
   min-height: 52px !important;
-  border: 1px solid rgba(244, 244, 245, 0.1) !important;
-  border-radius: 20px !important;
+  border: 1px solid var(--b-color-toast-border) !important;
+  border-radius: var(--b-radius-xl) !important;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.055), transparent 38%),
-    linear-gradient(135deg, rgba(24, 24, 27, 0.94), rgba(18, 18, 20, 0.9)) !important;
+    linear-gradient(135deg, var(--b-color-toast-highlight), transparent 38%),
+    var(--b-gradient-toast-surface) !important;
   color: var(--b-color-text) !important;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.02) inset !important;
+  box-shadow: var(--b-shadow-toast) !important;
   backdrop-filter: blur(14px) saturate(1.12) !important;
 }
 
@@ -201,9 +310,9 @@ body {
 
 .app-toast-title {
   color: var(--b-color-text) !important;
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 650;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .app-toast-description {

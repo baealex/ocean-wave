@@ -2,6 +2,7 @@ import classNames from 'classnames';
 import { useEffect, useRef, useState } from 'react';
 
 import * as Icon from '~/icon';
+import IconButton from '../IconButton';
 
 const cx = classNames;
 
@@ -73,13 +74,14 @@ export default function SearchField({
                 }}
             />
             {draftValue && (
-                <button
-                    type="button"
-                    className={cx('mr-0.5 flex h-7 w-7 items-center justify-center rounded-full text-[var(--b-color-text-secondary)] transition-[color,background-color] duration-150 hover:bg-white/[0.06] hover:text-[var(--b-color-text)] [&_svg]:h-3.5 [&_svg]:w-3.5')}
+                <IconButton
+                    size="xs"
+                    tone="muted"
+                    className="mr-0.5 min-h-8 min-w-8"
                     aria-label="Clear search"
                     onClick={handleClear}>
                     <Icon.Close />
-                </button>
+                </IconButton>
             )}
         </label>
     );
