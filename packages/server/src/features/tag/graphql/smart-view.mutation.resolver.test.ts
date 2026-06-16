@@ -3,12 +3,12 @@ import { connectors } from '~/socket/connectors';
 import { TAG_LIST_INVALIDATED } from '~/socket/tag';
 
 import {
-    createCreateTagViewMutationResolver,
-    createDeleteTagViewMutationResolver,
-    createRenameTagViewMutationResolver
-} from './tag-view.mutation.resolver';
+    createCreateSmartViewMutationResolver,
+    createDeleteSmartViewMutationResolver,
+    createRenameSmartViewMutationResolver
+} from './smart-view.mutation.resolver';
 
-describe('tag view mutation resolvers', () => {
+describe('smart view mutation resolvers', () => {
     beforeEach(async () => {
         jest.restoreAllMocks();
 
@@ -18,7 +18,7 @@ describe('tag view mutation resolvers', () => {
         await models.tag.deleteMany();
     });
 
-    it('creates a view and notifies tag view invalidation', async () => {
+    it('creates a view and notifies smart view invalidation', async () => {
         const tag = await models.tag.create({
             data: {
                 name: 'Focus',
@@ -26,7 +26,7 @@ describe('tag view mutation resolvers', () => {
             }
         });
         const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
-        const resolver = createCreateTagViewMutationResolver();
+        const resolver = createCreateSmartViewMutationResolver();
 
         const result = await resolver(null, {
             name: 'Focus View',
@@ -37,7 +37,7 @@ describe('tag view mutation resolvers', () => {
 
         expect(result.name).toBe('Focus View');
         expect(notifySpy).toHaveBeenCalledWith(TAG_LIST_INVALIDATED, {
-            reason: 'tag-views-changed',
+            reason: 'smart-views-changed',
             affectedSmartViewIds: [result.id.toString()],
             originClientId: 'client-1'
         });
@@ -62,8 +62,8 @@ describe('tag view mutation resolvers', () => {
             }
         });
         const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
-        const renameResolver = createRenameTagViewMutationResolver();
-        const deleteResolver = createDeleteTagViewMutationResolver();
+        const renameResolver = createRenameSmartViewMutationResolver();
+        const deleteResolver = createDeleteSmartViewMutationResolver();
 
         await expect(renameResolver(null, {
             id: view.id.toString(),
@@ -78,7 +78,7 @@ describe('tag view mutation resolvers', () => {
         });
 
         expect(notifySpy).toHaveBeenCalledWith(TAG_LIST_INVALIDATED, {
-            reason: 'tag-views-changed',
+            reason: 'smart-views-changed',
             affectedSmartViewIds: [view.id.toString()]
         });
     });

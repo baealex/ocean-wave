@@ -1,8 +1,8 @@
 import models, { type SmartView } from '~/models';
 
-import { tagViewFieldResolvers } from './tag-view.field.resolver';
+import { smartViewFieldResolvers } from './smart-view.field.resolver';
 
-describe('tag view field resolvers', () => {
+describe('smart view field resolvers', () => {
     beforeEach(async () => {
         await models.smartViewTag.deleteMany();
         await models.smartView.deleteMany();
@@ -41,7 +41,7 @@ describe('tag view field resolvers', () => {
             }
         });
 
-        const resolvers = tagViewFieldResolvers as {
+        const resolvers = smartViewFieldResolvers as {
             tags: (view: SmartView) => Promise<Array<{ id: number }>>;
             tagIds: (view: SmartView) => Promise<string[]>;
         };

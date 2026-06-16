@@ -38,8 +38,8 @@ export const queryKeys = {
             unusedOnly
         }] as const
     },
-    tagViews: {
-        all: () => ['tag-views'] as const,
-        list: () => ['tag-views', { scope: 'list' }] as const
+    smartViews: {
+        all: () => ['smart-views'] as const,
+        list: () => ['smart-views', { scope: 'list' }] as const
     }
 };

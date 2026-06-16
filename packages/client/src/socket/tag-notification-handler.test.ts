@@ -94,14 +94,14 @@ describe('createTagNotificationHandlers', () => {
             exact: false
         });
         expect(invalidateQueries).toHaveBeenCalledWith({
-            queryKey: ['tag-views'],
+            queryKey: ['smart-views'],
             exact: false
         });
         expect(removeTagFromMusics).toHaveBeenCalledWith('tag-1', ['music-1', 'music-2']);
         expect(removeTagFromMusics).toHaveBeenCalledWith('tag-2', ['music-1', 'music-2']);
     });
 
-    it('invalidates tag views after view change notifications', () => {
+    it('invalidates smart views after view change notifications', () => {
         const handlers = createTagNotificationHandlers({
             queryClient: { invalidateQueries },
             musicStore: {
@@ -111,7 +111,7 @@ describe('createTagNotificationHandlers', () => {
         });
 
         handlers.onListInvalidated({
-            reason: 'tag-views-changed',
+            reason: 'smart-views-changed',
             affectedSmartViewIds: ['view-1']
         });
 
@@ -120,7 +120,7 @@ describe('createTagNotificationHandlers', () => {
             exact: false
         });
         expect(invalidateQueries).toHaveBeenCalledWith({
-            queryKey: ['tag-views'],
+            queryKey: ['smart-views'],
             exact: false
         });
         expect(removeTagFromMusics).not.toHaveBeenCalled();

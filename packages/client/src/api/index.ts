@@ -4,4 +4,4 @@ export * from './library';
 export * from './playback';
 export * from './sync';
 export * from './tags';
-export * from './tag-views';
+export * from './smart-views';

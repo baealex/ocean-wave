@@ -30,7 +30,7 @@ export const tagType = gql`
         tags: [Tag!]!
     }
 
-    type TagView {
+    type SmartView {
         id: ID!
         scopeKey: String!
         name: String!
@@ -43,9 +43,9 @@ export const tagType = gql`
         updatedAt: String!
     }
 
-    type TagViews {
+    type SmartViews {
         totalCount: Int!
-        views: [TagView!]!
+        views: [SmartView!]!
     }
 
     type TagDeleteResult {
@@ -58,7 +58,7 @@ export const tagType = gql`
 export const tagQuery = gql`
     type Query {
         allTags(searchFilter: SearchFilterInput, pagination: PaginationInput): Tags!
-        tagViews: TagViews!
+        smartViews: SmartViews!
     }
 `;
 
@@ -70,12 +70,12 @@ export const tagMutation = gql`
         addTagToMusic(musicId: ID!, tagId: ID!, originClientId: String): Music!
         createAndAddTagToMusic(musicId: ID!, name: String!, originClientId: String): Music!
         removeTagFromMusic(musicId: ID!, tagId: ID!, originClientId: String): Music!
-        createTagView(name: String!, tagIds: [ID!]!, tagMode: String!, originClientId: String): TagView!
-        renameTagView(id: ID!, name: String!, originClientId: String): TagView!
-        deleteTagView(id: ID!, originClientId: String): TagViewDeleteResult!
+        createSmartView(name: String!, tagIds: [ID!]!, tagMode: String!, originClientId: String): SmartView!
+        renameSmartView(id: ID!, name: String!, originClientId: String): SmartView!
+        deleteSmartView(id: ID!, originClientId: String): SmartViewDeleteResult!
     }
 
-    type TagViewDeleteResult {
+    type SmartViewDeleteResult {
         id: ID!
     }
 `;
