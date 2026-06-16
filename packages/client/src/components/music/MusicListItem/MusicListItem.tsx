@@ -67,8 +67,10 @@ const MusicListItem = ({
                             <span className="min-w-6 text-xs text-[var(--b-color-text-muted)]">{trackNumber}.</span>
                         )}
                         <span className="truncate">{musicName}</span>
-                        {musicCodec && musicCodec.toLowerCase() === 'flac' && (
-                            <span className="shrink-0 text-[var(--b-font-size-badge)] font-semibold uppercase tracking-normal text-[var(--b-color-text-tertiary)]">{musicCodec}</span>
+                        {musicCodec?.toLowerCase() === 'flac' && (
+                            <span className="inline-flex min-h-[12px] shrink-0 items-center rounded-full border border-[rgba(139,92,246,0.28)] bg-[rgba(139,92,246,0.08)] px-1 text-[8px] font-normal leading-none text-[var(--b-color-point-light)]">
+                                {musicCodec.toUpperCase()}
+                            </span>
                         )}
                     </span>
                     <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">

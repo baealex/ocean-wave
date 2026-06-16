@@ -25,9 +25,9 @@ export const createTagNotificationHandlers = ({
         });
     };
 
-    const invalidateTagViews = () => {
+    const invalidateSmartViews = () => {
         queryClient.invalidateQueries({
-            queryKey: queryKeys.tagViews.all(),
+            queryKey: queryKeys.smartViews.all(),
             exact: false
         });
     };
@@ -42,7 +42,7 @@ export const createTagNotificationHandlers = ({
         },
         onListInvalidated: (payload: TagListInvalidatedPayload) => {
             invalidateTagLists();
-            invalidateTagViews();
+            invalidateSmartViews();
 
             if (payload.reason === 'tag-deleted') {
                 for (const tagId of payload.affectedTagIds ?? []) {

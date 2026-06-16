@@ -5,27 +5,27 @@ import { withOriginClientId } from '~/socket/origin-client';
 import { TAG_LIST_INVALIDATED } from '~/socket/tag';
 
 import {
-    createTagView,
-    deleteTagView,
-    isTagViewServiceError,
-    renameTagView
-} from '../services/tag-views';
+    createSmartView,
+    deleteSmartView,
+    isSmartViewServiceError,
+    renameSmartView
+} from '../services/smart-views';
 
-class TagViewGraphQLError extends Error {
+class SmartViewGraphQLError extends Error {
     extensions: {
         code: string;
     };
 
     constructor(message: string, code: string) {
         super(message);
-        this.name = 'TagViewGraphQLError';
+        this.name = 'SmartViewGraphQLError';
         this.extensions = { code };
     }
 }
 
 const toGraphQLError = (error: unknown) => {
-    if (isTagViewServiceError(error)) {
-        return new TagViewGraphQLError(error.message, error.code);
+    if (isSmartViewServiceError(error)) {
+        return new SmartViewGraphQLError(error.message, error.code);
     }
 
     return error;
@@ -39,18 +39,18 @@ const notifySafely = (callback: () => void) => {
     }
 };
 
-const notifyTagViewsChanged = (
+const notifySmartViewsChanged = (
     affectedSmartViewIds: string[],
     originClientId?: string | null
 ) => notifySafely(() => {
     connectors.notify(TAG_LIST_INVALIDATED, withOriginClientId({
-        reason: 'tag-views-changed',
+        reason: 'smart-views-changed',
         affectedSmartViewIds
     }, originClientId));
 });
 
-export const createCreateTagViewMutationResolver = (
-    createView = createTagView
+export const createCreateSmartViewMutationResolver = (
+    createView = createSmartView
 ) => {
     return async (_: unknown, {
         name,
@@ -66,7 +66,7 @@ export const createCreateTagViewMutationResolver = (
         try {
             const view = await createView({ name, tagIds, tagMode });
 
-            notifyTagViewsChanged([view.id.toString()], originClientId);
+            notifySmartViewsChanged([view.id.toString()], originClientId);
 
             return view;
         } catch (error) {
@@ -75,8 +75,8 @@ export const createCreateTagViewMutationResolver = (
     };
 };
 
-export const createRenameTagViewMutationResolver = (
-    renameView = renameTagView
+export const createRenameSmartViewMutationResolver = (
+    renameView = renameSmartView
 ) => {
     return async (_: unknown, {
         id,
@@ -90,7 +90,7 @@ export const createRenameTagViewMutationResolver = (
         try {
             const view = await renameView({ id, name });
 
-            notifyTagViewsChanged([view.id.toString()], originClientId);
+            notifySmartViewsChanged([view.id.toString()], originClientId);
 
             return view;
         } catch (error) {
@@ -99,8 +99,8 @@ export const createRenameTagViewMutationResolver = (
     };
 };
 
-export const createDeleteTagViewMutationResolver = (
-    deleteView = deleteTagView
+export const createDeleteSmartViewMutationResolver = (
+    deleteView = deleteSmartView
 ) => {
     return async (_: unknown, {
         id,
@@ -112,7 +112,7 @@ export const createDeleteTagViewMutationResolver = (
         try {
             const result = await deleteView({ id });
 
-            notifyTagViewsChanged([result.id], originClientId);
+            notifySmartViewsChanged([result.id], originClientId);
 
             return result;
         } catch (error) {
@@ -121,10 +121,10 @@ export const createDeleteTagViewMutationResolver = (
     };
 };
 
-type TagViewMutationResolvers = NonNullable<IResolvers['Mutation']>;
+type SmartViewMutationResolvers = NonNullable<IResolvers['Mutation']>;
 
-export const tagViewMutationResolvers: TagViewMutationResolvers = {
-    createTagView: createCreateTagViewMutationResolver(),
-    renameTagView: createRenameTagViewMutationResolver(),
-    deleteTagView: createDeleteTagViewMutationResolver()
+export const smartViewMutationResolvers: SmartViewMutationResolvers = {
+    createSmartView: createCreateSmartViewMutationResolver(),
+    renameSmartView: createRenameSmartViewMutationResolver(),
+    deleteSmartView: createDeleteSmartViewMutationResolver()
 };

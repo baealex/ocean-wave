@@ -38,11 +38,11 @@ import {
     renameTag
 } from '~/api/tags';
 import {
-    createTagView,
-    deleteTagView,
-    fetchTagViews,
-    renameTagView
-} from '~/api/tag-views';
+    createSmartView,
+    deleteSmartView,
+    fetchSmartViews,
+    renameSmartView
+} from '~/api/smart-views';
 import { queryKeys } from '~/api/query-keys';
 import { toast } from '~/modules/toast';
 import {
@@ -54,7 +54,7 @@ import {
 } from '~/modules/music-tags';
 import type {
     Tag,
-    TagView
+    SmartView
 } from '~/models/type';
 import { musicStore } from '~/store/music';
 
@@ -65,7 +65,7 @@ const TAG_LIST_SECTION_PARAM = 'section';
 
 type TagListSection = 'tags' | 'views';
 
-interface TagViewDraft {
+interface SmartViewDraft {
     tagIds: string[];
     tagMode: MusicTagFilterMode;
 }
@@ -82,7 +82,7 @@ const TAG_LIST_SECTION_OPTIONS: SegmentedControlOption<TagListSection>[] = [
     },
     {
         value: 'views',
-        label: 'Saved filters',
+        label: 'Smart views',
         icon: <Icon.Filter />,
         id: 'tag-list-views-tab',
         ariaControls: 'tag-list-views-panel'
@@ -126,11 +126,11 @@ const getGraphQueryErrorMessage = (response: {
     errors: { message: string }[];
 }) => response.errors[0]?.message ?? 'Tag request failed';
 
-const getTagViewModeLabel = (mode: MusicTagFilterMode) => {
+const getSmartViewModeLabel = (mode: MusicTagFilterMode) => {
     return mode === 'any' ? 'Match any' : 'Match all';
 };
 
-const getTagViewModeDescription = (mode: MusicTagFilterMode) => {
+const getSmartViewModeDescription = (mode: MusicTagFilterMode) => {
     return mode === 'any' ? 'At least one selected tag' : 'Every selected tag';
 };
 
@@ -142,8 +142,8 @@ const getTagCountLabel = (count: number) => {
     return count === 1 ? '1 tag' : `${count} tags`;
 };
 
-const getTagViewSummary = (view: TagView) => {
-    return `${getTagCountLabel(view.tagIds.length)} · ${getTagViewModeLabel(view.tagMode)}`;
+const getSmartViewSummary = (view: SmartView) => {
+    return `${getTagCountLabel(view.tagIds.length)} · ${getSmartViewModeLabel(view.tagMode)}`;
 };
 
 function TagListItem({
@@ -238,14 +238,14 @@ function TagListItem({
     );
 }
 
-function TagViewListItem({
+function SmartViewListItem({
     view,
     pending,
     onClick,
     onRename,
     onDelete
 }: {
-    view: TagView;
+    view: SmartView;
     pending: boolean;
     onClick: () => void;
     onRename: () => void;
@@ -263,8 +263,8 @@ function TagViewListItem({
             <button
                 type="button"
                 aria-label={hasTags
-                    ? `Open ${view.name} saved filter`
-                    : `${view.name} saved filter has no tags`}
+                    ? `Open ${view.name} smart view`
+                    : `${view.name} smart view has no tags`}
                 className={cx(
                     listRowClass({ columns: 'content', disabled: true }),
                     listRowButtonContentClass()
@@ -279,15 +279,15 @@ function TagViewListItem({
                         {view.name}
                     </Text>
                     <Text variant="muted" size="xs" truncate>
-                        {hasTags ? view.tags.map(tag => tag.name).join(', ') : 'No tags left in this saved filter'}
+                        {hasTags ? view.tags.map(tag => tag.name).join(', ') : 'No tags left in this smart view'}
                     </Text>
                 </span>
-                <Badge>{getTagViewSummary(view)}</Badge>
+                <Badge>{getSmartViewSummary(view)}</Badge>
             </button>
             <div className={listRowActionRailClass}>
                 <IconButton
                     size="sm"
-                    aria-label={`Rename ${view.name} saved filter`}
+                    aria-label={`Rename ${view.name} smart view`}
                     disabled={pending}
                     onClick={onRename}>
                     <Icon.Pencil />
@@ -295,7 +295,7 @@ function TagViewListItem({
                 <IconButton
                     size="sm"
                     tone="danger"
-                    aria-label={`Delete ${view.name} saved filter`}
+                    aria-label={`Delete ${view.name} smart view`}
                     disabled={pending}
                     onClick={onDelete}>
                     <Icon.TrashCan />
@@ -314,9 +314,9 @@ export default function TagList() {
     const [createName, setCreateName] = useState('');
     const [editingTag, setEditingTag] = useState<Tag | null>(null);
     const [editName, setEditName] = useState('');
-    const [savingViewDraft, setSavingViewDraft] = useState<TagViewDraft | null>(null);
+    const [savingViewDraft, setSavingViewDraft] = useState<SmartViewDraft | null>(null);
     const [saveViewName, setSaveViewName] = useState('');
-    const [editingView, setEditingView] = useState<TagView | null>(null);
+    const [editingView, setEditingView] = useState<SmartView | null>(null);
     const [editViewName, setEditViewName] = useState('');
     const [pendingAction, setPendingAction] = useState<string | null>(null);
     const [isSelectMode, setIsSelectMode] = useState(false);
@@ -343,8 +343,8 @@ export default function TagList() {
     });
 
     const viewsQuery = useQuery({
-        queryKey: queryKeys.tagViews.list(),
-        queryFn: fetchTagViews
+        queryKey: queryKeys.smartViews.list(),
+        queryFn: fetchSmartViews
     });
 
     const invalidateTagLists = () => {
@@ -354,16 +354,16 @@ export default function TagList() {
         });
     };
 
-    const invalidateTagViews = () => {
+    const invalidateSmartViews = () => {
         queryClient.invalidateQueries({
-            queryKey: queryKeys.tagViews.all(),
+            queryKey: queryKeys.smartViews.all(),
             exact: false
         });
     };
 
     const invalidateTagDomain = () => {
         invalidateTagLists();
-        invalidateTagViews();
+        invalidateSmartViews();
     };
 
     const handleSectionChange = (nextSection: TagListSection) => {
@@ -537,7 +537,7 @@ export default function TagList() {
                 setSelectedTagIds((currentTagIds) => currentTagIds.filter(id => id !== response.deleteTag.id));
                 invalidateTagDomain();
                 toast.success(response.deleteTag.affectedSmartViewIds.length > 0
-                    ? 'Deleted tag and updated saved filters'
+                    ? 'Deleted tag and updated smart views'
                     : 'Deleted tag');
             } finally {
                 setPendingAction(null);
@@ -562,7 +562,7 @@ export default function TagList() {
             setPendingAction('create-view');
 
             try {
-                const response = await createTagView({
+                const response = await createSmartView({
                     name,
                     tagIds: savingViewDraft.tagIds,
                     tagMode: savingViewDraft.tagMode
@@ -579,14 +579,14 @@ export default function TagList() {
                 setIsSelectMode(false);
                 invalidateTagDomain();
                 handleSectionChange('views');
-                toast.success('Saved filter');
+                toast.success('Smart view');
             } finally {
                 setPendingAction(null);
             }
         })();
     };
 
-    const handleStartRenameView = (view: TagView) => {
+    const handleStartRenameView = (view: SmartView) => {
         setEditingView(view);
         setEditViewName(view.name);
     };
@@ -602,7 +602,7 @@ export default function TagList() {
             setPendingAction(`rename-view:${viewId}`);
 
             try {
-                const response = await renameTagView({
+                const response = await renameSmartView({
                     id: viewId,
                     name
                 });
@@ -614,18 +614,18 @@ export default function TagList() {
 
                 setEditingView(null);
                 setEditViewName('');
-                invalidateTagViews();
-                toast.success('Renamed saved filter');
+                invalidateSmartViews();
+                toast.success('Renamed smart view');
             } finally {
                 setPendingAction(null);
             }
         })();
     };
 
-    const handleDeleteView = async (view: TagView) => {
+    const handleDeleteView = async (view: SmartView) => {
         if (!(await confirm({
             title: `Delete “${view.name}”?`,
-            description: 'This saved filter will be removed. Your tags and music will stay unchanged.',
+            description: 'This smart view will be removed. Your tags and music will stay unchanged.',
             confirmLabel: 'Delete filter',
             tone: 'danger'
         }))) {
@@ -636,7 +636,7 @@ export default function TagList() {
             setPendingAction(`delete-view:${view.id}`);
 
             try {
-                const response = await deleteTagView(view.id);
+                const response = await deleteSmartView(view.id);
 
                 if (response.type === 'error') {
                     toast.error(getGraphQueryErrorMessage(response));
@@ -644,7 +644,7 @@ export default function TagList() {
                 }
 
                 invalidateTagDomain();
-                toast.success('Deleted saved filter');
+                toast.success('Deleted smart view');
             } finally {
                 setPendingAction(null);
             }
@@ -655,7 +655,7 @@ export default function TagList() {
         ? tagsQuery.data.allTags.tags
         : [];
     const views = viewsQuery.data?.type === 'success'
-        ? viewsQuery.data.tagViews.views.filter((view) => {
+        ? viewsQuery.data.smartViews.views.filter((view) => {
             const normalizedQuery = deferredQuery.toLowerCase();
 
             return view.name.toLowerCase().includes(normalizedQuery) ||
@@ -669,8 +669,8 @@ export default function TagList() {
             <StickyHeader>
                 <SearchField
                     value={query}
-                    placeholder={section === 'views' ? 'Search saved filters' : 'Search tags'}
-                    ariaLabel={section === 'views' ? 'Search saved filters' : 'Search tags'}
+                    placeholder={section === 'views' ? 'Search smart views' : 'Search tags'}
+                    ariaLabel={section === 'views' ? 'Search smart views' : 'Search tags'}
                     onChange={handleSearchChange}
                 />
             </StickyHeader>
@@ -690,11 +690,11 @@ export default function TagList() {
             <section className="flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)] max-sm:flex-col max-sm:items-start">
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <Text as="h2" size="title" weight="semibold" className="truncate">
-                        {section === 'views' ? 'Saved filters' : 'Tags'}
+                        {section === 'views' ? 'Smart views' : 'Tags'}
                     </Text>
                     <Text as="p" variant="muted" size="xs" className="truncate">
                         {section === 'views'
-                            ? `${views.length} saved filters`
+                            ? `${views.length} smart views`
                             : unusedOnly
                                 ? `${tags.length} unused tags`
                                 : `${tags.length} tags`}
@@ -705,7 +705,7 @@ export default function TagList() {
                     {section === 'views' ? (
                         <Button
                             size="sm"
-                            aria-label="Create saved filter"
+                            aria-label="Create smart view"
                             onClick={handleStartCreateFilter}>
                             <Icon.Plus /> Create
                         </Button>
@@ -797,7 +797,7 @@ export default function TagList() {
                         views.length > 0 ? (
                             <div className="pb-[var(--b-spacing-2xl)]">
                                 {views.map(view => (
-                                    <TagViewListItem
+                                    <SmartViewListItem
                                         key={view.id}
                                         view={view}
                                         pending={pendingAction === `rename-view:${view.id}` || pendingAction === `delete-view:${view.id}`}
@@ -810,7 +810,7 @@ export default function TagList() {
                         ) : (
                             <div className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
                                 <Text as="p" variant="muted" size="sm">
-                                    No saved filters yet. Create one to reuse a tag combination.
+                                    No smart views yet. Create one to reuse a tag combination.
                                 </Text>
                             </div>
                         )
@@ -825,7 +825,7 @@ export default function TagList() {
                         onChange={setSelectedTagMode}
                     />
                     <Text as="p" variant="muted" size="xs" className="px-1" truncate>
-                        {getTagCountLabel(selectedTagIds.length)} · {getTagViewModeDescription(selectedTagMode)}
+                        {getTagCountLabel(selectedTagIds.length)} · {getSmartViewModeDescription(selectedTagMode)}
                     </Text>
                     <div className={tagSelectionActionGridClass({ singleAction: tagSelectionIntent === 'create-filter' })}>
                         {tagSelectionIntent !== 'create-filter' && (
@@ -838,7 +838,7 @@ export default function TagList() {
                         <ActionBarButton
                             variant="primary"
                             onClick={handleStartSaveView}>
-                            <Icon.Plus /> Save filter
+                            <Icon.Plus /> Save smart view
                         </ActionBarButton>
                     </div>
                 </ActionBar>
@@ -861,13 +861,13 @@ export default function TagList() {
 
             <TextEntryDialog
                 open={savingViewDraft !== null}
-                title="Save filter"
+                title="Save smart view"
                 description={savingViewDraft
-                    ? `${getTagViewModeLabel(savingViewDraft.tagMode)} · ${getTagCountLabel(savingViewDraft.tagIds.length)}. Stored under Tags > Saved filters.`
+                    ? `${getSmartViewModeLabel(savingViewDraft.tagMode)} · ${getTagCountLabel(savingViewDraft.tagIds.length)}. Stored under Tags > Smart views.`
                     : undefined}
                 value={saveViewName}
-                placeholder="Filter name"
-                confirmLabel="Save filter"
+                placeholder="Smart view name"
+                confirmLabel="Save smart view"
                 pending={pendingAction === 'create-view'}
                 onValueChange={setSaveViewName}
                 onConfirm={handleCreateViewConfirm}
@@ -879,9 +879,9 @@ export default function TagList() {
 
             <TextEntryDialog
                 open={editingView !== null}
-                title="Rename saved filter"
+                title="Rename smart view"
                 value={editViewName}
-                placeholder="Filter name"
+                placeholder="Smart view name"
                 confirmLabel="Rename"
                 pending={editingView ? pendingAction === `rename-view:${editingView.id}` : false}
                 onValueChange={setEditViewName}

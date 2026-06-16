@@ -2,13 +2,13 @@ import type { IResolvers } from '@graphql-tools/utils';
 
 import models, { type SmartView } from '~/models';
 
-type TagViewSource =
+type SmartViewSource =
     | Pick<SmartView, 'id'>
     | {
         id: string;
     };
 
-type TagViewFieldResolvers = NonNullable<IResolvers['TagView']>;
+type SmartViewFieldResolvers = NonNullable<IResolvers['SmartView']>;
 
 const getSmartViewTags = async (viewId: string | number) => {
     const viewTags = await models.smartViewTag.findMany({
@@ -23,9 +23,9 @@ const getSmartViewTags = async (viewId: string | number) => {
     return viewTags.map(viewTag => viewTag.Tag);
 };
 
-export const tagViewFieldResolvers: TagViewFieldResolvers = {
-    tags: (view: TagViewSource) => getSmartViewTags(view.id),
-    tagIds: async (view: TagViewSource) => {
+export const smartViewFieldResolvers: SmartViewFieldResolvers = {
+    tags: (view: SmartViewSource) => getSmartViewTags(view.id),
+    tagIds: async (view: SmartViewSource) => {
         const viewTags = await models.smartViewTag.findMany({
             where: { smartViewId: Number(view.id) },
             orderBy: [

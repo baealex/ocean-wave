@@ -1,13 +1,13 @@
 import models from '~/models';
 
 import {
-    createTagView,
-    deleteTagView,
-    renameTagView,
-    TAG_VIEW_ERROR_CODE
-} from './tag-views';
+    createSmartView,
+    deleteSmartView,
+    renameSmartView,
+    SMART_VIEW_ERROR_CODE
+} from './smart-views';
 
-describe('tag view service', () => {
+describe('smart view service', () => {
     beforeEach(async () => {
         await models.smartViewTag.deleteMany();
         await models.smartView.deleteMany();
@@ -29,7 +29,7 @@ describe('tag view service', () => {
             }
         });
 
-        const view = await createTagView({
+        const view = await createSmartView({
             name: '  Night   Drive  ',
             tagIds: [firstTag.id.toString(), secondTag.id.toString()],
             tagMode: 'all'
@@ -55,18 +55,18 @@ describe('tag view service', () => {
             }
         });
 
-        await createTagView({
+        await createSmartView({
             name: 'Focus View',
             tagIds: [tag.id.toString()],
             tagMode: 'all'
         });
 
-        await expect(createTagView({
+        await expect(createSmartView({
             name: 'focus view',
             tagIds: [tag.id.toString()],
             tagMode: 'any'
         })).rejects.toMatchObject({
-            code: TAG_VIEW_ERROR_CODE.viewNameConflict
+            code: SMART_VIEW_ERROR_CODE.viewNameConflict
         });
     });
 
@@ -77,20 +77,20 @@ describe('tag view service', () => {
                 normalizedName: 'bath'
             }
         });
-        const view = await createTagView({
+        const view = await createSmartView({
             name: 'Bath',
             tagIds: [tag.id.toString()],
             tagMode: 'any'
         });
 
-        await expect(renameTagView({
+        await expect(renameSmartView({
             id: view.id.toString(),
             name: 'Bath Time'
         })).resolves.toEqual(expect.objectContaining({
             name: 'Bath Time',
             normalizedName: 'bath time'
         }));
-        await expect(deleteTagView({ id: view.id.toString() })).resolves.toEqual({
+        await expect(deleteSmartView({ id: view.id.toString() })).resolves.toEqual({
             id: view.id.toString()
         });
         await expect(models.smartView.count()).resolves.toBe(0);

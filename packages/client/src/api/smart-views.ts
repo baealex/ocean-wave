@@ -1,4 +1,4 @@
-import type { TagView } from '~/models/type';
+import type { SmartView } from '~/models/type';
 
 import { graphQuery } from './graphql';
 import {
@@ -6,7 +6,7 @@ import {
     withOriginClientId
 } from './origin-client';
 
-const TAG_VIEW_FIELDS = `
+const SMART_VIEW_FIELDS = `
     id
     scopeKey
     name
@@ -31,85 +31,85 @@ const TAG_VIEW_FIELDS = `
     updatedAt
 `;
 
-export function fetchTagViews() {
+export function fetchSmartViews() {
     return graphQuery<{
-        tagViews: {
+        smartViews: {
             totalCount: number;
-            views: TagView[];
+            views: SmartView[];
         };
     }>(
-        `query FetchTagViews {
-            tagViews {
+        `query FetchSmartViews {
+            smartViews {
                 totalCount
                 views {
-                    ${TAG_VIEW_FIELDS}
+                    ${SMART_VIEW_FIELDS}
                 }
             }
         }`
     );
 }
 
-export function createTagView({
+export function createSmartView({
     name,
     tagIds,
     tagMode
 }: {
     name: string;
     tagIds: string[];
-    tagMode: TagView['tagMode'];
+    tagMode: SmartView['tagMode'];
 }) {
     return graphQuery<{
-        createTagView: TagView;
+        createSmartView: SmartView;
     }, {
         name: string;
         tagIds: string[];
-        tagMode: TagView['tagMode'];
+        tagMode: SmartView['tagMode'];
     } & OriginClientVariables>(
-        `mutation CreateTagView(
+        `mutation CreateSmartView(
             $name: String!,
             $tagIds: [ID!]!,
             $tagMode: String!,
             $originClientId: String
         ) {
-            createTagView(
+            createSmartView(
                 name: $name,
                 tagIds: $tagIds,
                 tagMode: $tagMode,
                 originClientId: $originClientId
             ) {
-                ${TAG_VIEW_FIELDS}
+                ${SMART_VIEW_FIELDS}
             }
         }`,
         withOriginClientId({ name, tagIds, tagMode })
     );
 }
 
-export function renameTagView({ id, name }: { id: string; name: string }) {
+export function renameSmartView({ id, name }: { id: string; name: string }) {
     return graphQuery<{
-        renameTagView: TagView;
+        renameSmartView: SmartView;
     }, {
         id: string;
         name: string;
     } & OriginClientVariables>(
-        `mutation RenameTagView($id: ID!, $name: String!, $originClientId: String) {
-            renameTagView(id: $id, name: $name, originClientId: $originClientId) {
-                ${TAG_VIEW_FIELDS}
+        `mutation RenameSmartView($id: ID!, $name: String!, $originClientId: String) {
+            renameSmartView(id: $id, name: $name, originClientId: $originClientId) {
+                ${SMART_VIEW_FIELDS}
             }
         }`,
         withOriginClientId({ id, name })
     );
 }
 
-export function deleteTagView(id: string) {
+export function deleteSmartView(id: string) {
     return graphQuery<{
-        deleteTagView: {
+        deleteSmartView: {
             id: string;
         };
     }, {
         id: string;
     } & OriginClientVariables>(
-        `mutation DeleteTagView($id: ID!, $originClientId: String) {
-            deleteTagView(id: $id, originClientId: $originClientId) {
+        `mutation DeleteSmartView($id: ID!, $originClientId: String) {
+            deleteSmartView(id: $id, originClientId: $originClientId) {
                 id
             }
         }`,

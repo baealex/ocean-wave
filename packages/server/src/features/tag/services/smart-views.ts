@@ -9,29 +9,29 @@ import {
     TAG_SCOPE_KEY
 } from './normalization';
 
-export const TAG_VIEW_ERROR_CODE = {
-    invalidViewId: 'INVALID_TAG_VIEW_ID',
-    invalidViewName: 'INVALID_TAG_VIEW_NAME',
-    invalidTagIds: 'INVALID_TAG_VIEW_TAG_IDS',
-    invalidTagMode: 'INVALID_TAG_VIEW_MODE',
-    viewNameConflict: 'TAG_VIEW_NAME_CONFLICT',
-    viewNotFound: 'TAG_VIEW_NOT_FOUND',
-    tagNotFound: 'TAG_VIEW_TAG_NOT_FOUND'
+export const SMART_VIEW_ERROR_CODE = {
+    invalidViewId: 'INVALID_SMART_VIEW_ID',
+    invalidViewName: 'INVALID_SMART_VIEW_NAME',
+    invalidTagIds: 'INVALID_SMART_VIEW_TAG_IDS',
+    invalidTagMode: 'INVALID_SMART_VIEW_MODE',
+    viewNameConflict: 'SMART_VIEW_NAME_CONFLICT',
+    viewNotFound: 'SMART_VIEW_NOT_FOUND',
+    tagNotFound: 'SMART_VIEW_TAG_NOT_FOUND'
 } as const;
 
-export type TagViewMode = 'all' | 'any';
+export type SmartViewMode = 'all' | 'any';
 
-export class TagViewServiceError extends Error {
-    code: typeof TAG_VIEW_ERROR_CODE[keyof typeof TAG_VIEW_ERROR_CODE];
+export class SmartViewServiceError extends Error {
+    code: typeof SMART_VIEW_ERROR_CODE[keyof typeof SMART_VIEW_ERROR_CODE];
 
-    constructor(code: typeof TAG_VIEW_ERROR_CODE[keyof typeof TAG_VIEW_ERROR_CODE], message: string) {
+    constructor(code: typeof SMART_VIEW_ERROR_CODE[keyof typeof SMART_VIEW_ERROR_CODE], message: string) {
         super(message);
-        this.name = 'TagViewServiceError';
+        this.name = 'SmartViewServiceError';
         this.code = code;
     }
 }
 
-export interface TagViewDeleteResult {
+export interface SmartViewDeleteResult {
     id: string;
 }
 
@@ -39,7 +39,7 @@ const parseId = (value: string | number) => {
     const id = Number(value);
 
     if (!Number.isInteger(id) || id <= 0) {
-        throw new TagViewServiceError(TAG_VIEW_ERROR_CODE.invalidViewId, 'Saved filter id is invalid.');
+        throw new SmartViewServiceError(SMART_VIEW_ERROR_CODE.invalidViewId, 'Smart view id is invalid.');
     }
 
     return id;
@@ -56,18 +56,18 @@ const parseTagIds = (tagIds: string[]) => {
         parsedTagIds.length === 0 ||
         parsedTagIds.some(tagId => !Number.isInteger(tagId) || tagId <= 0)
     ) {
-        throw new TagViewServiceError(TAG_VIEW_ERROR_CODE.invalidTagIds, 'Saved filter needs at least one valid tag.');
+        throw new SmartViewServiceError(SMART_VIEW_ERROR_CODE.invalidTagIds, 'Smart view needs at least one valid tag.');
     }
 
     return parsedTagIds;
 };
 
-const parseTagMode = (tagMode: string): TagViewMode => {
+const parseTagMode = (tagMode: string): SmartViewMode => {
     if (tagMode === 'all' || tagMode === 'any') {
         return tagMode;
     }
 
-    throw new TagViewServiceError(TAG_VIEW_ERROR_CODE.invalidTagMode, 'Saved filter match mode is invalid.');
+    throw new SmartViewServiceError(SMART_VIEW_ERROR_CODE.invalidTagMode, 'Smart view match mode is invalid.');
 };
 
 const ensureTagsExist = async (tagIds: number[]) => {
@@ -80,11 +80,11 @@ const ensureTagsExist = async (tagIds: number[]) => {
     });
 
     if (tags.length !== tagIds.length) {
-        throw new TagViewServiceError(TAG_VIEW_ERROR_CODE.tagNotFound, 'One or more tags were not found.');
+        throw new SmartViewServiceError(SMART_VIEW_ERROR_CODE.tagNotFound, 'One or more tags were not found.');
     }
 };
 
-export const listTagViews = async (): Promise<SmartView[]> => {
+export const listSmartViews = async (): Promise<SmartView[]> => {
     return models.smartView.findMany({
         where: { scopeKey: TAG_SCOPE_KEY },
         orderBy: [
@@ -94,7 +94,7 @@ export const listTagViews = async (): Promise<SmartView[]> => {
     });
 };
 
-export const createTagView = async ({
+export const createSmartView = async ({
     name,
     tagIds,
     tagMode
@@ -108,7 +108,7 @@ export const createTagView = async ({
     const parsedTagMode = parseTagMode(tagMode);
 
     if (!normalized) {
-        throw new TagViewServiceError(TAG_VIEW_ERROR_CODE.invalidViewName, 'Saved filter name is invalid.');
+        throw new SmartViewServiceError(SMART_VIEW_ERROR_CODE.invalidViewName, 'Smart view name is invalid.');
     }
 
     await ensureTagsExist(parsedTagIds);
@@ -136,14 +136,14 @@ export const createTagView = async ({
         });
     } catch (error) {
         if (isUniqueConstraintError(error)) {
-            throw new TagViewServiceError(TAG_VIEW_ERROR_CODE.viewNameConflict, 'Saved filter name already exists.');
+            throw new SmartViewServiceError(SMART_VIEW_ERROR_CODE.viewNameConflict, 'Smart view name already exists.');
         }
 
         throw error;
     }
 };
 
-export const renameTagView = async ({
+export const renameSmartView = async ({
     id,
     name
 }: {
@@ -154,7 +154,7 @@ export const renameTagView = async ({
     const normalized = normalizeTagName(name);
 
     if (!normalized) {
-        throw new TagViewServiceError(TAG_VIEW_ERROR_CODE.invalidViewName, 'Saved filter name is invalid.');
+        throw new SmartViewServiceError(SMART_VIEW_ERROR_CODE.invalidViewName, 'Smart view name is invalid.');
     }
 
     try {
@@ -167,25 +167,25 @@ export const renameTagView = async ({
         });
     } catch (error) {
         if (isUniqueConstraintError(error)) {
-            throw new TagViewServiceError(TAG_VIEW_ERROR_CODE.viewNameConflict, 'Saved filter name already exists.');
+            throw new SmartViewServiceError(SMART_VIEW_ERROR_CODE.viewNameConflict, 'Smart view name already exists.');
         }
 
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-            throw new TagViewServiceError(TAG_VIEW_ERROR_CODE.viewNotFound, 'Saved filter not found.');
+            throw new SmartViewServiceError(SMART_VIEW_ERROR_CODE.viewNotFound, 'Smart view not found.');
         }
 
         throw error;
     }
 };
 
-export const deleteTagView = async ({ id }: { id: string }): Promise<TagViewDeleteResult> => {
+export const deleteSmartView = async ({ id }: { id: string }): Promise<SmartViewDeleteResult> => {
     const viewId = parseId(id);
 
     try {
         await models.smartView.delete({ where: { id: viewId } });
     } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-            throw new TagViewServiceError(TAG_VIEW_ERROR_CODE.viewNotFound, 'Saved filter not found.');
+            throw new SmartViewServiceError(SMART_VIEW_ERROR_CODE.viewNotFound, 'Smart view not found.');
         }
 
         throw error;
@@ -194,6 +194,6 @@ export const deleteTagView = async ({ id }: { id: string }): Promise<TagViewDele
     return { id: viewId.toString() };
 };
 
-export const isTagViewServiceError = (error: unknown): error is TagViewServiceError => {
-    return error instanceof TagViewServiceError;
+export const isSmartViewServiceError = (error: unknown): error is SmartViewServiceError => {
+    return error instanceof SmartViewServiceError;
 };

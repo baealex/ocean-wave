@@ -35,7 +35,7 @@ export interface Tag {
     updatedAt: string;
 }
 
-export interface TagView {
+export interface SmartView {
     id: string;
     scopeKey: string;
     name: string;

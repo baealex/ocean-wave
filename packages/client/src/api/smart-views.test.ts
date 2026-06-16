@@ -16,11 +16,11 @@ vi.mock('~/socket/socket', () => ({
 }));
 
 import {
-    createTagView,
-    deleteTagView,
-    fetchTagViews,
-    renameTagView
-} from './tag-views';
+    createSmartView,
+    deleteSmartView,
+    fetchSmartViews,
+    renameSmartView
+} from './smart-views';
 
 interface GraphqlPayload {
     operationName?: string;
@@ -28,16 +28,16 @@ interface GraphqlPayload {
     variables?: Record<string, unknown>;
 }
 
-describe('tag view API requests', () => {
+describe('smart view API requests', () => {
     afterEach(() => {
         vi.restoreAllMocks();
     });
 
-    it('fetches tag views through GraphQL', async () => {
+    it('fetches smart views through GraphQL', async () => {
         const post = vi.spyOn(axios, 'post').mockResolvedValue({
             data: {
                 data: {
-                    tagViews: {
+                    smartViews: {
                         totalCount: 0,
                         views: []
                     }
@@ -45,19 +45,19 @@ describe('tag view API requests', () => {
             }
         });
 
-        await fetchTagViews();
+        await fetchSmartViews();
 
         const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
 
-        expect(payload.query).toContain('query FetchTagViews');
-        expect(payload.query).toContain('tagViews');
+        expect(payload.query).toContain('query FetchSmartViews');
+        expect(payload.query).toContain('smartViews');
     });
 
-    it('creates a tag view through GraphQL variables', async () => {
+    it('creates a smart view through GraphQL variables', async () => {
         const post = vi.spyOn(axios, 'post').mockResolvedValue({
             data: {
                 data: {
-                    createTagView: {
+                    createSmartView: {
                         id: '1',
                         name: 'Night Drive'
                     }
@@ -65,7 +65,7 @@ describe('tag view API requests', () => {
             }
         });
 
-        await createTagView({
+        await createSmartView({
             name: 'Night Drive',
             tagIds: ['1', '2'],
             tagMode: 'all'
@@ -79,15 +79,15 @@ describe('tag view API requests', () => {
             tagMode: 'all',
             originClientId: 'client-1'
         });
-        expect(payload.query).toContain('createTagView(');
+        expect(payload.query).toContain('createSmartView(');
         expect(payload.query).not.toContain('Night Drive');
     });
 
-    it('renames a tag view through GraphQL variables', async () => {
+    it('renames a smart view through GraphQL variables', async () => {
         const post = vi.spyOn(axios, 'post').mockResolvedValue({
             data: {
                 data: {
-                    renameTagView: {
+                    renameSmartView: {
                         id: '1',
                         name: 'Bath'
                     }
@@ -95,7 +95,7 @@ describe('tag view API requests', () => {
             }
         });
 
-        await renameTagView({
+        await renameSmartView({
             id: '1',
             name: 'Bath'
         });
@@ -107,21 +107,21 @@ describe('tag view API requests', () => {
             name: 'Bath',
             originClientId: 'client-1'
         });
-        expect(payload.query).toContain('renameTagView(id: $id, name: $name, originClientId: $originClientId)');
+        expect(payload.query).toContain('renameSmartView(id: $id, name: $name, originClientId: $originClientId)');
     });
 
-    it('deletes a tag view through GraphQL variables', async () => {
+    it('deletes a smart view through GraphQL variables', async () => {
         const post = vi.spyOn(axios, 'post').mockResolvedValue({
             data: {
                 data: {
-                    deleteTagView: {
+                    deleteSmartView: {
                         id: '1'
                     }
                 }
             }
         });
 
-        await deleteTagView('1');
+        await deleteSmartView('1');
 
         const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
 
@@ -129,6 +129,6 @@ describe('tag view API requests', () => {
             id: '1',
             originClientId: 'client-1'
         });
-        expect(payload.query).toContain('deleteTagView(id: $id, originClientId: $originClientId)');
+        expect(payload.query).toContain('deleteSmartView(id: $id, originClientId: $originClientId)');
     });
 });

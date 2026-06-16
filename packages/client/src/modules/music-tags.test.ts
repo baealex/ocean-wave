@@ -52,18 +52,18 @@ describe('music tag filters', () => {
         expect(pruneUnavailableMusicTagIds(['1', '2', '3'], ['1', '3'])).toEqual(['1', '3']);
     });
 
-    it('summarizes tag usage across music and saved filters', () => {
+    it('summarizes tag usage across music and smart views', () => {
         expect(getTagUsageSummary({
             musicCount: 2,
             smartViewCount: 1
-        })).toBe('2 songs · 1 saved filter');
+        })).toBe('2 songs · 1 smart view');
         expect(getTagUsageSummary({
             musicCount: 0,
             smartViewCount: 0
         })).toBe('Unused');
     });
 
-    it('detects unused tags across music and saved filters', () => {
+    it('detects unused tags across music and smart views', () => {
         expect(isUnusedTag({
             musicCount: 0,
             smartViewCount: 0
@@ -78,7 +78,7 @@ describe('music tag filters', () => {
         expect(buildTagDeleteConfirmationMessage({
             musicCount: 3,
             smartViewCount: 2
-        })).toContain('3 songs and 2 saved filters');
+        })).toContain('3 songs and 2 smart views');
         expect(buildTagDeleteConfirmationMessage({
             musicCount: 0,
             smartViewCount: 0
