@@ -4,6 +4,23 @@ export interface QueueDerivedState {
     queueLength: number;
 }
 
+export interface QueueRestoreState extends QueueDerivedState {
+    items: string[];
+    sourceItems: string[];
+    currentTime: number;
+    progress: number;
+}
+
+export interface QueueRestoreSnapshot {
+    selected?: unknown;
+    currentTrackId?: unknown;
+    currentTime?: unknown;
+    items?: unknown;
+    sourceItems?: unknown;
+}
+
+const RESUME_ENDING_GRACE_SECONDS = 3;
+
 const isValidSelectedIndex = (items: string[], selected: number | null) => {
     return selected !== null && selected >= 0 && selected < items.length;
 };
@@ -42,6 +59,57 @@ export const deriveQueueState = (items: string[], selected: number | null): Queu
 
 export const deriveQueueStateFromTrack = (items: string[], trackId: string | null) => {
     return deriveQueueState(items, getSelectedIndexForTrack(items, trackId));
+};
+
+const getStringItems = (value: unknown) => {
+    return Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string')
+        : [];
+};
+
+export const getSafeResumeTime = (time: unknown, duration: number | undefined) => {
+    if (typeof time !== 'number' || !Number.isFinite(time) || time <= 0) {
+        return 0;
+    }
+
+    if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) {
+        return time;
+    }
+
+    if (time >= duration - RESUME_ENDING_GRACE_SECONDS) {
+        return 0;
+    }
+
+    return Math.min(time, duration);
+};
+
+export const restoreQueueState = (
+    snapshot: QueueRestoreSnapshot,
+    isTrackAvailable: (id: string) => boolean,
+    getTrackDuration: (id: string) => number | undefined
+): QueueRestoreState => {
+    const items = getStringItems(snapshot.items).filter(isTrackAvailable);
+    const sourceItems = getStringItems(snapshot.sourceItems).filter(isTrackAvailable);
+    const selectedTrackId = typeof snapshot.currentTrackId === 'string'
+        ? snapshot.currentTrackId
+        : null;
+    const selectedFromTrack = getSelectedIndexForTrack(items, selectedTrackId);
+    const selectedFromSnapshot = typeof snapshot.selected === 'number'
+        ? snapshot.selected
+        : null;
+    const selected = selectedTrackId ? selectedFromTrack : selectedFromSnapshot;
+    const queueState = deriveQueueState(items, selected);
+    const currentTime = queueState.currentTrackId
+        ? getSafeResumeTime(snapshot.currentTime, getTrackDuration(queueState.currentTrackId))
+        : 0;
+
+    return {
+        ...queueState,
+        items,
+        sourceItems,
+        currentTime,
+        progress: 0
+    };
 };
 
 export const reorderQueueItems = (items: string[], activeId: string, overId: string) => {

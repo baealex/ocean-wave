@@ -17,4 +17,5 @@ export interface AudioChannel {
     stop: () => void;
     seek: (time: number) => void;
     download: (music: Music) => void;
+    dispose: () => void;
 }

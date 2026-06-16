@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
     deriveQueueState,
     deriveQueueStateFromTrack,
+    getSafeResumeTime,
     moveQueueItemToIndex,
-    reorderQueueItems
+    reorderQueueItems,
+    restoreQueueState
 } from './queue-state';
 
 describe('queue-state', () => {
@@ -48,5 +50,61 @@ describe('queue-state', () => {
             'a',
             'd'
         ]);
+    });
+
+    it('restores a persisted queue around the selected track and prunes missing songs', () => {
+        expect(restoreQueueState({
+            items: ['missing', 'a', 'b'],
+            sourceItems: ['b', 'missing', 'a'],
+            selected: 2,
+            currentTrackId: 'b',
+            currentTime: 42
+        }, id => id !== 'missing', id => id === 'b' ? 120 : 60)).toEqual({
+            items: ['a', 'b'],
+            sourceItems: ['b', 'a'],
+            selected: 1,
+            currentTrackId: 'b',
+            queueLength: 2,
+            currentTime: 42,
+            progress: 0
+        });
+    });
+
+    it('clears invalid persisted selection safely', () => {
+        expect(restoreQueueState({
+            items: ['a'],
+            selected: 4,
+            currentTime: 12
+        }, () => true, () => 60)).toEqual({
+            items: ['a'],
+            sourceItems: [],
+            selected: null,
+            currentTrackId: null,
+            queueLength: 1,
+            currentTime: 0,
+            progress: 0
+        });
+    });
+
+    it('does not select a different song when the persisted current track disappeared', () => {
+        expect(restoreQueueState({
+            items: ['a', 'b'],
+            selected: 1,
+            currentTrackId: 'missing',
+            currentTime: 12
+        }, id => id !== 'missing', () => 60)).toEqual({
+            items: ['a', 'b'],
+            sourceItems: [],
+            selected: null,
+            currentTrackId: null,
+            queueLength: 2,
+            currentTime: 0,
+            progress: 0
+        });
+    });
+
+    it('does not resume too close to the end of a track', () => {
+        expect(getSafeResumeTime(118, 120)).toBe(0);
+        expect(getSafeResumeTime(60, 120)).toBe(60);
     });
 });
