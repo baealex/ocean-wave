@@ -12,7 +12,8 @@ import {
     deriveQueueState,
     deriveQueueStateFromTrack,
     moveQueueItemToIndex,
-    reorderQueueItems
+    reorderQueueItems,
+    restoreQueueState
 } from '~/modules/queue-state';
 import { toast } from '~/modules/toast';
 import { convertToMillisecond } from '~/modules/time';
@@ -52,12 +53,21 @@ const createQueueState = (items: string[], selected: number | null) => ({
     ...deriveQueueState(items, selected)
 });
 
+const getProgress = (time: number, duration: number | undefined) => {
+    if (!duration) {
+        return 0;
+    }
+
+    return Number((time / duration * 100).toFixed(2));
+};
+
 class QueueStore extends BaseStore<QueueStoreState> {
     saveTimer: ReturnType<typeof setTimeout> | null = null;
     audioChannel: AudioChannel;
     playbackSessionTracker: PlaybackSessionTracker;
     lastCheckpointClientSessionId: string | null = null;
     lastCheckpointPlayedMs = 0;
+    private musicStoreUnsubscribe: (() => void) | null = null;
 
     constructor() {
         super();
@@ -165,18 +175,16 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
         this.audioChannel = new WebAudioChannel(audioChannelEventHandler);
 
-        const key = musicStore.subscribe(async ({ loaded }) => {
+        this.musicStoreUnsubscribe = musicStore.subscribe(async ({ loaded }) => {
             if (loaded) {
                 const queue = localStorage.getItem('queue');
                 if (queue) {
                     const persistedState = JSON.parse(queue) as Partial<QueueStoreState>;
-                    const restoredItems = Array.isArray(persistedState.items)
-                        ? persistedState.items
-                        : [];
-                    const restoredSelected = typeof persistedState.selected === 'number'
-                        ? persistedState.selected
-                        : null;
-                    const restoredQueueState = createQueueState(restoredItems, restoredSelected);
+                    const restoredQueueState = restoreQueueState(
+                        persistedState,
+                        id => getMusic(id) !== undefined,
+                        id => getMusic(id)?.duration
+                    );
 
                     await this.set({
                         ...restoredQueueState,
@@ -186,33 +194,38 @@ class QueueStore extends BaseStore<QueueStoreState> {
                         repeatMode: persistedState.repeatMode ?? 'none',
                         playMode: persistedState.playMode ?? 'later',
                         mixMode: persistedState.mixMode ?? 'none',
-                        currentTime: 0,
-                        progress: 0,
-                        sourceItems: Array.isArray(persistedState.sourceItems)
-                            ? persistedState.sourceItems
-                            : []
+                        progress: getProgress(
+                            restoredQueueState.currentTime,
+                            restoredQueueState.currentTrackId
+                                ? getMusic(restoredQueueState.currentTrackId)?.duration
+                                : undefined
+                        )
                     });
 
                     if (restoredQueueState.selected !== null) {
                         this.select(restoredQueueState.selected, false);
+                        if (restoredQueueState.currentTime > 0) {
+                            this.audioChannel.seek(restoredQueueState.currentTime);
+                            this.set({
+                                currentTime: restoredQueueState.currentTime,
+                                progress: getProgress(
+                                    restoredQueueState.currentTime,
+                                    restoredQueueState.currentTrackId
+                                        ? getMusic(restoredQueueState.currentTrackId)?.duration
+                                        : undefined
+                                )
+                            });
+                        }
                     }
                 }
-                musicStore.unsubscribe(key);
+                this.musicStoreUnsubscribe?.();
+                this.musicStoreUnsubscribe = null;
             }
         });
 
-        window.addEventListener('beforeunload', () => {
-            this.commitPlaybackEvent('queue-unload');
-            this.audioChannel.stop();
-        });
-        window.addEventListener('pagehide', () => {
-            void this.persistPlaybackCheckpoint('queue-pagehide', true).persisted;
-        });
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                void this.persistPlaybackCheckpoint('queue-visibilitychange', true).persisted;
-            }
-        });
+        window.addEventListener('beforeunload', this.handleBeforeUnload);
+        window.addEventListener('pagehide', this.handlePageHide);
+        document.addEventListener('visibilitychange', this.handleVisibilityChange);
     }
 
     commitPlaybackEvent(source: string) {
@@ -485,15 +498,51 @@ class QueueStore extends BaseStore<QueueStoreState> {
         }
 
         this.saveTimer = setTimeout(() => {
-            localStorage.setItem('queue', JSON.stringify({
-                ...this.state,
-                isPlaying: false,
-                currentTime: 0,
-                progress: 0
-            }));
+            this.persistQueueState();
             this.saveTimer = null;
         }, 3000);
     }
+
+    dispose() {
+        this.persistQueueState();
+
+        if (this.saveTimer) {
+            clearTimeout(this.saveTimer);
+            this.saveTimer = null;
+        }
+
+        this.musicStoreUnsubscribe?.();
+        this.musicStoreUnsubscribe = null;
+        window.removeEventListener('beforeunload', this.handleBeforeUnload);
+        window.removeEventListener('pagehide', this.handlePageHide);
+        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+        this.audioChannel.dispose();
+    }
+
+    private persistQueueState() {
+        localStorage.setItem('queue', JSON.stringify({
+            ...this.state,
+            isPlaying: false
+        }));
+    }
+
+    private handleBeforeUnload = () => {
+        this.commitPlaybackEvent('queue-unload');
+        this.persistQueueState();
+        this.audioChannel.stop();
+    };
+
+    private handlePageHide = () => {
+        this.persistQueueState();
+        void this.persistPlaybackCheckpoint('queue-pagehide', true).persisted;
+    };
+
+    private handleVisibilityChange = () => {
+        if (document.hidden) {
+            this.persistQueueState();
+            void this.persistPlaybackCheckpoint('queue-visibilitychange', true).persisted;
+        }
+    };
 
     private persistPlaybackCheckpoint(source: string, force: boolean, now = Date.now()) {
         const checkpoint = this.playbackSessionTracker.createCheckpoint(source, now);
@@ -547,3 +596,9 @@ class QueueStore extends BaseStore<QueueStoreState> {
 }
 
 export const queueStore = new QueueStore();
+
+if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+        queueStore.dispose();
+    });
+}
