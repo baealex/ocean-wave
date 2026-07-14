@@ -8,5 +8,7 @@
 /docs/*
 !/docs/process/
 !/docs/process/*.md
+!/docs/architecture/
+!/docs/architecture/*.md
 /.worktrees/
 TODO.md
