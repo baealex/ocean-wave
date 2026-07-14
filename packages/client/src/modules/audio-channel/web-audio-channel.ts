@@ -11,12 +11,14 @@ export class WebAudioChannel implements AudioChannel {
     private handler: AudioChannelEventHandler;
     private mixInterval: ReturnType<typeof setInterval> | null;
     private loadedDuration: number | null;
+    private pendingSeekTime: number | null;
 
     constructor(_handler: AudioChannelEventHandler) {
         this.audio = new Audio();
         this.backgroundAudio = new Audio();
         this.mixInterval = null;
         this.loadedDuration = null;
+        this.pendingSeekTime = null;
         this.handler = {
             onPlay: () => _handler.onPlay?.(),
             onPause: () => _handler.onPause?.(),
@@ -77,6 +79,7 @@ export class WebAudioChannel implements AudioChannel {
         this.audio.addEventListener('abort', this.handler.onStop!);
         this.audio.addEventListener('ended', this.handler.onEnded!);
         this.audio.addEventListener('timeupdate', this.handler.onTimeUpdate as () => void);
+        this.audio.addEventListener('loadedmetadata', this.applyPendingSeek);
     }
 
     swapAudio() {
@@ -86,6 +89,7 @@ export class WebAudioChannel implements AudioChannel {
         tempAudio.removeEventListener('abort', this.handler.onStop!);
         tempAudio.removeEventListener('ended', this.handler.onEnded!);
         tempAudio.removeEventListener('timeupdate', this.handler.onTimeUpdate as () => void);
+        tempAudio.removeEventListener('loadedmetadata', this.applyPendingSeek);
         this.backgroundAudio = tempAudio;
     }
 
@@ -94,6 +98,7 @@ export class WebAudioChannel implements AudioChannel {
 
         const { format, bitrate, useOriginal } = audioSettingsStore.state;
         this.loadedDuration = music.duration;
+        this.pendingSeekTime = null;
 
         if (useOriginal) {
             audioResource = `/api/audio/${music.id}?notranscode=true`;
@@ -121,11 +126,21 @@ export class WebAudioChannel implements AudioChannel {
     }
 
     stop() {
+        this.pendingSeekTime = null;
         this.audio.pause();
         this.audio.currentTime = 0;
     }
 
     seek(time: number) {
+        if (!Number.isFinite(time) || time < 0) {
+            return;
+        }
+
+        if (this.audio.readyState === 0) {
+            this.pendingSeekTime = time;
+            return;
+        }
+
         this.audio.currentTime = time;
     }
 
@@ -136,4 +151,32 @@ export class WebAudioChannel implements AudioChannel {
         a.download = music.filePath.split('/').pop()!;
         a.click();
     }
+
+    dispose() {
+        if (this.mixInterval) {
+            clearInterval(this.mixInterval);
+            this.mixInterval = null;
+        }
+
+        this.audio.removeEventListener('play', this.handler.onPlay!);
+        this.audio.removeEventListener('pause', this.handler.onPause!);
+        this.audio.removeEventListener('abort', this.handler.onStop!);
+        this.audio.removeEventListener('ended', this.handler.onEnded!);
+        this.audio.removeEventListener('timeupdate', this.handler.onTimeUpdate as () => void);
+        this.audio.removeEventListener('loadedmetadata', this.applyPendingSeek);
+        this.audio.pause();
+        this.backgroundAudio.pause();
+        webAudioContext.disconnect(this.audio);
+        webAudioContext.disconnect(this.backgroundAudio);
+    }
+
+    private applyPendingSeek = () => {
+        if (this.pendingSeekTime === null) {
+            return;
+        }
+
+        const time = this.pendingSeekTime;
+        this.pendingSeekTime = null;
+        this.seek(time);
+    };
 }
