@@ -7,6 +7,7 @@ import { cacheRemoteImage } from '../storage/nativeKeyValue';
 type CachedArtworkProps = {
   active?: boolean;
   cookie?: string | null;
+  radius?: number;
   size?: number;
   uri?: string | null;
 };
@@ -15,9 +16,10 @@ const artworkCache = new Map<string, string>();
 const artworkFailureCache = new Map<string, number>();
 const ARTWORK_RETRY_DELAY_MS = 1000 * 60 * 5;
 
-export const CachedArtwork = memo(function CachedArtwork({
+export const CachedArtwork = memo(function CachedArtworkComponent({
   active = false,
   cookie,
+  radius = brand.radius.md,
   size = brand.layout.listArtworkSize,
   uri,
 }: CachedArtworkProps) {
@@ -58,7 +60,7 @@ export const CachedArtwork = memo(function CachedArtwork({
   }, [cookie, remoteUri]);
 
   return (
-    <View style={[styles.frame, { width: size, height: size, borderRadius: brand.radius.md }, active && styles.activeFrame]}>
+    <View style={[styles.frame, { width: size, height: size, borderRadius: radius }, active && styles.activeFrame]}>
       {artworkUri ? (
         <Image resizeMode="cover" source={{ uri: artworkUri }} style={{ width: size, height: size }} />
       ) : (
