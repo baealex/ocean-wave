@@ -20,8 +20,8 @@ const VERTICAL_PADDING_BOTTOM = 32;
 export interface FixedVirtualGridLayout {
     columnGap: number;
     columnCount: number;
+    gridOffsetLeft: number;
     gridWidth: number;
-    horizontalPadding: number;
     itemHeight: number;
     itemWidth: number;
     rowCount: number;
@@ -61,6 +61,8 @@ export const resolveFixedVirtualGridLayout = ({
     const maximumGridWidth = columnCount * MAX_ITEM_WIDTH
         + (columnCount - 1) * columnGap;
     const gridWidth = Math.min(availableWidth, maximumGridWidth);
+    const gridOffsetLeft = horizontalPadding
+        + Math.max((availableWidth - gridWidth) / 2, 0);
     const itemWidth = Math.max(
         (gridWidth - (columnCount - 1) * columnGap) / columnCount,
         0
@@ -78,8 +80,8 @@ export const resolveFixedVirtualGridLayout = ({
     return {
         columnGap,
         columnCount,
+        gridOffsetLeft,
         gridWidth,
-        horizontalPadding,
         itemHeight,
         itemWidth,
         rowCount,

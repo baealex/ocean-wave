@@ -236,7 +236,7 @@ export default function FixedVirtualGrid<T>({
                     className="absolute min-w-0"
                     style={{
                         top: `${layout.verticalPaddingTop + rowIndex * layout.rowStride}px`,
-                        left: `${layout.horizontalPadding + columnIndex * (layout.itemWidth + layout.columnGap)}px`,
+                        left: `${layout.gridOffsetLeft + columnIndex * (layout.itemWidth + layout.columnGap)}px`,
                         width: `${layout.itemWidth}px`,
                         height: `${layout.itemHeight}px`
                     }}>
