@@ -648,7 +648,7 @@ export default function FixedVirtualSortableList<T>({
                     <div
                         aria-hidden="true"
                         className={cx(
-                            'pointer-events-none absolute left-14 right-2 z-[3] h-[3px] -translate-y-1/2 rounded-full bg-[var(--b-color-point-light)] shadow-[0_0_0_1px_var(--b-color-border)]',
+                            'pointer-events-none absolute left-[72px] right-2 z-[5] h-[3.2px] -translate-y-1/2 rounded-full bg-[var(--b-color-point-light)] shadow-[0_0_0_1px_var(--b-color-border)]',
                             dragIndicatorClassName
                         )}
                         style={{ top: `${dropIndicatorTop}px` }}

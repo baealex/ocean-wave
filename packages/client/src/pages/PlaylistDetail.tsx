@@ -221,7 +221,7 @@ export default function PlaylistDetail() {
                             };
 
                             return (
-                                <div className={`${listRowClass({ layout: 'selection', surface: 'plain', selected: isSelected })} h-full transition-opacity ${sortable.isDragging && !sortable.isDragOverlay ? 'opacity-15' : ''} ${sortable.isDragOverlay ? 'rounded-[var(--b-radius-lg)] border border-[var(--b-color-focus)] bg-[var(--b-color-background-layer-1)] shadow-[var(--b-shadow-queue-drag)]' : ''}`}>
+                                <div className={`${listRowClass({ layout: 'selection', surface: 'plain', selected: isSelected })} h-full transition-opacity ${sortable.isDragging && !sortable.isDragOverlay ? 'opacity-15' : ''} ${sortable.isDragOverlay ? 'rounded-[var(--b-radius-lg)] border border-transparent bg-[var(--b-color-surface-subtle)] shadow-[var(--b-shadow-queue-drag)]' : ''}`}>
                                     {isSelectMode ? (
                                         <SelectionCheckButton
                                             selected={isSelected}
