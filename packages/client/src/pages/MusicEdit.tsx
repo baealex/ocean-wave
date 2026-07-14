@@ -62,7 +62,7 @@ const Field = ({
     hint?: string;
     children: ReactNode;
 }) => (
-    <label className="grid min-w-0 gap-2">
+    <label className="grid min-w-0 content-start gap-2">
         <span className="text-xs font-semibold text-[var(--b-color-text-secondary)]">{label}</span>
         {children}
         {hint && (
