@@ -20,6 +20,7 @@ import {
     PLAYLIST_REMOVE_MUSIC,
     PLAYLIST_UPDATE
 } from './playlist-listener';
+import { PLAYBACK_STATE_UPDATED } from './playback-listener';
 import {
     TAG_CREATED,
     TAG_LIST_INVALIDATED,
@@ -41,6 +42,7 @@ describe('socket event names', () => {
             PLAYLIST_MOVE_MUSIC,
             PLAYLIST_REMOVE_MUSIC,
             PLAYLIST_CHANGE_MUSIC_ORDER,
+            PLAYBACK_STATE_UPDATED,
             TAG_CREATED,
             TAG_RENAMED,
             TAG_LIST_INVALIDATED
@@ -57,10 +59,10 @@ describe('socket event names', () => {
             PLAYLIST_MOVE_MUSIC: 'playlist:music-moved',
             PLAYLIST_REMOVE_MUSIC: 'playlist:music-removed',
             PLAYLIST_CHANGE_MUSIC_ORDER: 'playlist:music-order-updated',
+            PLAYBACK_STATE_UPDATED: 'playback:state-updated',
             TAG_CREATED: 'tag:created',
             TAG_RENAMED: 'tag:renamed',
             TAG_LIST_INVALIDATED: 'tag:list-invalidated'
         });
     });
 });
-

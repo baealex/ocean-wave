@@ -85,6 +85,7 @@ model Music {
     MusicHate     MusicHate[]
     MusicTag      MusicTag[]
     PlaybackEvent PlaybackEvent[]
+    PlaybackSession PlaybackSession[]
     PlaylistMusic PlaylistMusic[]
 
     @@index([contentHash])
@@ -189,6 +190,24 @@ model PlaybackEvent {
     musicId        Int
 
     @@index([musicId, endedAt])
+}
+
+model PlaybackSession {
+    id                   Int      @id @default(autoincrement())
+    scopeKey             String   @unique @default("local")
+    state                String   @default("stopped")
+    activeDeviceId       String?
+    activeDeviceSequence Int      @default(0)
+    currentMusicId       Int?
+    positionMs           Float    @default(0)
+    positionUpdatedAt    DateTime @default(now())
+    startedAt            DateTime?
+    revision             Int      @default(0)
+    createdAt            DateTime @default(now())
+    updatedAt            DateTime @updatedAt
+    Music                Music?   @relation(fields: [currentMusicId], references: [id], onDelete: SetNull)
+
+    @@index([currentMusicId])
 }
 
 model MusicLike {

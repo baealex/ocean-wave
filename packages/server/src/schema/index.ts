@@ -3,6 +3,7 @@ import { albumResolvers, albumTypeDefs } from './album';
 import { artistResolvers, artistTypeDefs } from './artist';
 import { musicResolvers, musicTypeDefs } from '../features/music/graphql';
 import { playlistResolvers, playlistTypeDefs } from '../features/playlist/graphql';
+import { playbackResolvers, playbackTypeDefs } from '../features/playback/graphql';
 import { syncReportResolvers, syncReportTypeDefs } from './sync-report';
 import { tagResolvers, tagTypeDefs } from '../features/tag/graphql';
 
@@ -12,6 +13,7 @@ const schema = makeExecutableSchema({
         artistTypeDefs,
         musicTypeDefs,
         playlistTypeDefs,
+        playbackTypeDefs,
         syncReportTypeDefs,
         tagTypeDefs
     ],
@@ -20,6 +22,7 @@ const schema = makeExecutableSchema({
         artistResolvers,
         musicResolvers,
         playlistResolvers,
+        playbackResolvers,
         syncReportResolvers,
         tagResolvers
     ]
