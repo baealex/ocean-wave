@@ -29,9 +29,9 @@
         "smoke:docker": "node tests/smoke/docker-server-smoke.mjs"
     },
     "devDependencies": {
-        "@biomejs/biome": "^2.4.13",
-        "concurrently": "^9.1.2",
-        "lefthook": "^2.1.6"
+        "@biomejs/biome": "^2.5.3",
+        "concurrently": "^10.0.3",
+        "lefthook": "^2.1.10"
     },
     "pnpm": {
         "onlyBuiltDependencies": [
@@ -48,12 +48,11 @@
             "lefthook"
         ],
         "overrides": {
-            "tar": "^7.5.11",
-            "@hono/node-server": "^1.19.13",
-            "@prisma/dev": "0.24.7",
-            "hono": "4.12.18",
-            "fast-uri": "3.1.2",
-            "brace-expansion": "5.0.6"
+            "tar": "^7.5.20",
+            "@hono/node-server": "^2.0.8",
+            "@prisma/dev": "0.24.14",
+            "hono": "4.12.30",
+            "fast-uri": "4.1.0"
         },
         "patchedDependencies": {
             "react-native-track-player@4.1.2": "patches/react-native-track-player@4.1.2.patch"
