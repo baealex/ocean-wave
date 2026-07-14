@@ -64,6 +64,8 @@ describe('fixed virtual grid layout', () => {
         expect(layout.columnCount).toBe(6);
         expect(layout.itemWidth).toBe(232);
         expect(layout.gridWidth).toBe(1472);
+        expect(layout.gridOffsetLeft).toBe(224);
+        expect(layout.gridOffsetLeft * 2 + layout.gridWidth).toBe(1920);
     });
 
     it('returns zero content height for an empty collection', () => {
