@@ -1,6 +1,7 @@
 import { BaseStore } from './base-store';
 
 import { musicStore } from './music';
+import { playbackSessionStore } from './playback-session';
 
 import {
     type AudioChannel,
@@ -107,18 +108,21 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 }
 
                 this.set({ isPlaying: true });
+                this.reportSharedPlaybackState('playing', true);
             },
             onPause: () => {
                 const now = Date.now();
                 this.playbackSessionTracker.pause(now);
                 void this.persistPlaybackCheckpoint('queue-pause', true, now).persisted;
                 this.set({ isPlaying: false });
+                this.reportSharedPlaybackState('paused');
             },
             onStop: () => {
                 const now = Date.now();
                 this.playbackSessionTracker.pause(now);
                 void this.persistPlaybackCheckpoint('queue-stop', true, now).persisted;
                 this.set({ isPlaying: false });
+                this.reportSharedPlaybackState('stopped');
             },
             onEnded: () => {
                 if (this.state.selected === null) return;
@@ -164,6 +168,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                     currentTime: time,
                     progress
                 });
+                this.reportSharedPlaybackState('playing', false, time, true);
             },
             onSkipToNext: () => {
                 this.next();
@@ -245,6 +250,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
     async reset(ids: string[]) {
         this.commitPlaybackEvent('queue-reset');
+        this.reportSharedPlaybackState('stopped');
 
         await this.set({
             ...createQueueState(ids, null),
@@ -321,6 +327,10 @@ class QueueStore extends BaseStore<QueueStoreState> {
             this.commitPlaybackEvent('queue-remove');
         }
 
+        if (newItems.length === 0) {
+            this.reportSharedPlaybackState('stopped');
+        }
+
         await this.set({
             ...deriveQueueStateFromTrack(newItems, prevSelectedItem),
             items: newItems,
@@ -391,6 +401,11 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
     seek(time: number) {
         this.audioChannel.seek(time);
+        this.reportSharedPlaybackState(
+            this.state.isPlaying ? 'playing' : 'paused',
+            this.state.isPlaying,
+            time
+        );
     }
 
     setPlayMode(mode: 'later' | 'immediately') {
@@ -534,15 +549,41 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
     private handlePageHide = () => {
         this.persistQueueState();
+        this.reportSharedPlaybackState(
+            this.state.isPlaying ? 'playing' : 'paused'
+        );
         void this.persistPlaybackCheckpoint('queue-pagehide', true).persisted;
     };
 
     private handleVisibilityChange = () => {
         if (document.hidden) {
             this.persistQueueState();
+            this.reportSharedPlaybackState(
+                this.state.isPlaying ? 'playing' : 'paused'
+            );
             void this.persistPlaybackCheckpoint('queue-visibilitychange', true).persisted;
         }
     };
+
+    private reportSharedPlaybackState(
+        state: 'playing' | 'paused' | 'stopped',
+        claimActive = false,
+        currentTime = this.state.currentTime,
+        checkpoint = false
+    ) {
+        if (!this.state.currentTrackId) {
+            return;
+        }
+
+        playbackSessionStore.report({
+            state,
+            currentMusicId: this.state.currentTrackId,
+            positionMs: convertToMillisecond(currentTime)
+        }, {
+            claimActive,
+            checkpoint
+        });
+    }
 
     private persistPlaybackCheckpoint(source: string, force: boolean, now = Date.now()) {
         const checkpoint = this.playbackSessionTracker.createCheckpoint(source, now);

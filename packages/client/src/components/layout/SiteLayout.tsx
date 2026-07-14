@@ -11,6 +11,7 @@ import {
 import SiteHeader from '../shared/SiteHeader';
 import SubPageHeader from '../shared/SubPageHeader';
 import MusicPlayer from '../music/MusicPlayer';
+import SharedPlaybackStatus from '../music/SharedPlaybackStatus';
 import Loading from '../shared/Loading';
 import PageContainer from '../shared/PageContainer';
 import type { PageContainerProps } from '../shared/PageContainer';
@@ -209,6 +210,7 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                     </div>
                 )}
             </div>
+            {hasMiniPlayer && <SharedPlaybackStatus />}
             {hasMiniPlayer && <MusicPlayer />}
             <ToastProvider avoidMiniPlayer={shouldAvoidMiniPlayerForToast} />
             </main>

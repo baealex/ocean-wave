@@ -7,6 +7,7 @@ import { redirectToLogin } from '~/modules/auth-redirect';
 import { albumStore } from '~/store/album';
 import { artistStore } from '~/store/artist';
 import { musicStore } from '~/store/music';
+import { playbackSessionStore } from '~/store/playback-session';
 import {
     MusicListener,
     socket,
@@ -48,6 +49,14 @@ export default function AuthenticatedAppRuntime({
             listener.disconnect();
         };
     }, [queryClient]);
+
+    useEffect(() => {
+        playbackSessionStore.connect();
+
+        return () => {
+            playbackSessionStore.disconnect();
+        };
+    }, []);
 
     useEffect(() => {
         const handleConnect = () => {

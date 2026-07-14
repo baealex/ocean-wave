@@ -12,6 +12,7 @@ export class WebAudioChannel implements AudioChannel {
     private mixInterval: ReturnType<typeof setInterval> | null;
     private loadedDuration: number | null;
     private pendingSeekTime: number | null;
+    private ignoreNextPause: boolean;
 
     constructor(_handler: AudioChannelEventHandler) {
         this.audio = new Audio();
@@ -19,9 +20,17 @@ export class WebAudioChannel implements AudioChannel {
         this.mixInterval = null;
         this.loadedDuration = null;
         this.pendingSeekTime = null;
+        this.ignoreNextPause = false;
         this.handler = {
             onPlay: () => _handler.onPlay?.(),
-            onPause: () => _handler.onPause?.(),
+            onPause: () => {
+                if (this.ignoreNextPause) {
+                    this.ignoreNextPause = false;
+                    return;
+                }
+
+                _handler.onPause?.();
+            },
             onStop: () => _handler.onStop?.(),
             onEnded: () => _handler.onEnded(),
             onTimeUpdate: () => {
@@ -127,8 +136,10 @@ export class WebAudioChannel implements AudioChannel {
 
     stop() {
         this.pendingSeekTime = null;
+        this.ignoreNextPause = !this.audio.paused;
         this.audio.pause();
         this.audio.currentTime = 0;
+        this.handler.onStop?.();
     }
 
     seek(time: number) {
