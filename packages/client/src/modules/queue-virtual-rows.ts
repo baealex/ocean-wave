@@ -1,4 +1,5 @@
 import type { QueueTone } from '~/pages/Queue/QueueDndItem';
+import { resolveFixedVirtualSortableDropIndex } from './fixed-virtual-sortable-list';
 
 export const QUEUE_TRACK_CARD_HEIGHT = 72;
 export const QUEUE_TRACK_ROW_GAP = 8;
@@ -169,19 +170,4 @@ export const getQueueDropIndicatorTop = (rows: QueueVirtualRow[], dropSlot: numb
     return trackRows[dropSlot].top;
 };
 
-export const resolveQueueDropIndex = (
-    trackCount: number,
-    activeIndex: number,
-    dropSlot: number
-) => {
-    if (trackCount <= 0) {
-        return 0;
-    }
-
-    const safeDropSlot = Math.min(Math.max(dropSlot, 0), trackCount);
-    const nextIndex = safeDropSlot > activeIndex
-        ? safeDropSlot - 1
-        : safeDropSlot;
-
-    return Math.min(Math.max(nextIndex, 0), trackCount - 1);
-};
+export const resolveQueueDropIndex = resolveFixedVirtualSortableDropIndex;
