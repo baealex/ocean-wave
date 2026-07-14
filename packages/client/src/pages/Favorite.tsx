@@ -4,11 +4,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
     Button,
-    StickyHeader,
+    CollectionHeader,
     StickyHeaderActions,
     Loading,
     FixedVirtualList,
     ItemSortPanelContent,
+    PanelContent,
     SearchField,
     StateMessage
 } from '~/components/shared';
@@ -69,9 +70,7 @@ export default function Music() {
 
         nextSearchParams.delete('py');
 
-        window.addEventListener('popstate', () => {
-            setSearchParams(nextSearchParams, { replace: true });
-        }, { once: true });
+        setSearchParams(nextSearchParams, { replace: true });
     };
 
     const favoriteMusics = (musics?.filter(music => !music.isHated && music.isLiked)) ?? [];
@@ -81,10 +80,66 @@ export default function Music() {
         music.artist.name.toLowerCase().includes(deferredQuery) ||
         music.album.name.toLowerCase().includes(deferredQuery)
     );
+    const hasActiveFilters = Boolean(query.trim()) || isSmartFilterActive;
+    const summary = !loaded
+        ? 'Loading favorites'
+        : hasActiveFilters
+            ? `${filteredMusics.length.toLocaleString()} of ${favoriteMusics.length.toLocaleString()} liked songs`
+            : `${favoriteMusics.length.toLocaleString()} liked songs`;
+
+    const openSmartFilter = () => panel.open({
+        title: 'Favorite Filter',
+        content: (
+            <SmartMusicFilterPanelContent
+                activeFilterId={smartFilterId}
+                onSelect={handleSmartFilterChange}
+            />
+        )
+    });
+
+    const openSort = () => panel.open({
+        title: 'Music Sort',
+        content: <ItemSortPanelContent items={musicStore.sortItems} />
+    });
+
+    const openMobileOptions = () => panel.open({
+        title: 'Favorite options',
+        content: (
+            <PanelContent
+                items={[
+                    {
+                        id: 'smart-filter',
+                        icon: <Icon.Filter />,
+                        text: 'Favorite filter',
+                        description: activeSmartFilter.label,
+                        active: isSmartFilterActive,
+                        onClick: openSmartFilter
+                    },
+                    {
+                        id: 'sort',
+                        icon: <Icon.Sort />,
+                        text: 'Sort favorites',
+                        description: musicStore.sortItems.find(item => item.isActive)?.text,
+                        onClick: openSort
+                    }
+                ]}
+            />
+        )
+    });
 
     return (
         <>
-            <StickyHeader>
+            <CollectionHeader
+                title="Favorites"
+                summary={summary}
+                actions={(
+                    <Button
+                        variant="primary"
+                        disabled={filteredMusics.length === 0}
+                        onClick={() => void resetQueue(filteredMusics.map(music => music.id))}>
+                        <Icon.Play /> Play
+                    </Button>
+                )}>
                 <SearchField
                     value={query}
                     placeholder="Search liked music"
@@ -93,39 +148,31 @@ export default function Music() {
                 />
                 <StickyHeaderActions>
                     <Button
-                        disabled={filteredMusics.length === 0}
-                        onClick={() => void resetQueue(filteredMusics.map(music => music.id))}>
-                        <Icon.Play /> Play
-                    </Button>
-                    <Button
+                        className="max-sm:hidden"
                         size="sm"
                         active={isSmartFilterActive}
                         aria-pressed={isSmartFilterActive}
                         aria-label="Filter favorite music"
-                        onClick={() => panel.open({
-                            title: 'Favorite Filter',
-                            content: (
-                                <SmartMusicFilterPanelContent
-                                    activeFilterId={smartFilterId}
-                                    onSelect={handleSmartFilterChange}
-                                />
-                            )
-                        })}>
+                        onClick={openSmartFilter}>
                         <Icon.Filter /> {activeSmartFilter.shortLabel}
                     </Button>
                     <Button
+                        className="max-sm:hidden"
                         size="sm"
                         aria-label="Sort favorite music"
-                        onClick={() => panel.open({
-                            title: 'Music Sort',
-                            content: (
-                                <ItemSortPanelContent items={musicStore.sortItems} />
-                            )
-                        })}>
+                        onClick={openSort}>
                         <Icon.Sort />
                     </Button>
+                    <Button
+                        className="sm:hidden"
+                        size="sm"
+                        active={isSmartFilterActive}
+                        aria-label="Open favorite filters and sorting"
+                        onClick={openMobileOptions}>
+                        <Icon.Filter /> Options
+                    </Button>
                 </StickyHeaderActions>
-            </StickyHeader>
+            </CollectionHeader>
             {!loaded && (
                 <Loading />
             )}

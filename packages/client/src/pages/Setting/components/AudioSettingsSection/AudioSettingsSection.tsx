@@ -83,6 +83,7 @@ export const AudioSettingsSection = () => {
                         title="Audio Format"
                         description="Choose the streaming format.">
                         <Select
+                            ariaLabel="Audio format"
                             selected={AUDIO_FORMATS.find(({ value }) => value === format)}
                             options={AUDIO_FORMATS}
                             onChange={(value) => audioSettingsStore.setFormat(value as 'mp3' | 'aac')}
@@ -93,6 +94,7 @@ export const AudioSettingsSection = () => {
                         title="Audio Quality"
                         description="Higher bitrate uses more data.">
                         <Select
+                            ariaLabel="Audio quality"
                             selected={AUDIO_BITRATES.find(({ value }) => value === bitrate)}
                             options={AUDIO_BITRATES}
                             onChange={(value) => audioSettingsStore.setBitrate(value as '64k' | '96k' | '128k' | '192k' | '256k' | '320k')}

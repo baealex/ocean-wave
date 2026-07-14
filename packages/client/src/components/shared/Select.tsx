@@ -11,11 +11,12 @@ interface Option {
 interface SelectProps {
     selected?: Option;
     options: Option[];
+    ariaLabel: string;
     onChange: (value: string) => void;
 }
 
 const triggerClass = cva([
-    'inline-flex min-h-9 w-[min(100%,320px)] min-w-56 items-center justify-between gap-3 rounded-[var(--b-radius-md)]',
+    'inline-flex min-h-10 w-[min(100%,320px)] min-w-56 items-center justify-between gap-3 rounded-[var(--b-radius-md)]',
     'border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] px-3 py-1.5',
     'text-xs font-semibold text-[var(--b-color-text-secondary)] transition-[border-color,background-color,box-shadow,color] duration-150',
     'hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
@@ -41,12 +42,12 @@ const EMPTY_OPTION_VALUE = '__ocean-wave-empty-option__';
 const toInternalValue = (value: string) => (value === '' ? EMPTY_OPTION_VALUE : value);
 const fromInternalValue = (value: string) => (value === EMPTY_OPTION_VALUE ? '' : value);
 
-export default function Select({ selected, options, onChange }: SelectProps) {
+export default function Select({ selected, options, ariaLabel, onChange }: SelectProps) {
     return (
         <SelectPrimitive.Root
             value={selected ? toInternalValue(selected.value) : undefined}
             onValueChange={(value) => onChange(fromInternalValue(value))}>
-            <SelectPrimitive.Trigger className={triggerClass()}>
+            <SelectPrimitive.Trigger className={triggerClass()} aria-label={ariaLabel}>
                 <SelectPrimitive.Value placeholder="Select an option" />
                 <SelectPrimitive.Icon className="shrink-0 text-[var(--b-color-text-muted)] [&_svg]:h-4 [&_svg]:w-4">
                     <Icon.ChevronDown />

@@ -11,6 +11,7 @@ const SubPageHeader = () => {
             <Button
                 variant="ghost"
                 className="h-10 w-10 rounded-full p-0 text-inherit lg:h-auto lg:w-auto lg:px-3 [&_svg]:!h-5 [&_svg]:!w-5"
+                aria-label="Back"
                 onClick={back}>
                 <ChevronLeft />
                 <Text as="span" size="sm" weight="medium" className="ml-[var(--b-spacing-sm)] hidden lg:block">
