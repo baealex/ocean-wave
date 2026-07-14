@@ -21,7 +21,7 @@ import { IconButton, IconTextButton, PageContainer, StateMessage, Text } from '~
 import { dialogChromeClass, dialogContentClass, dialogOverlayClass } from '~/components/shared/Modal/DialogShell';
 import * as Icon from '~/icon';
 
-import { useBack, useStoreValue } from '~/hooks';
+import { useBack, useDominantColor, useStoreValue } from '~/hooks';
 
 import { getImage } from '~/modules/image';
 import { panel } from '~/modules/panel';
@@ -69,7 +69,7 @@ const MIX_MODES = [
 ] as const;
 
 const visualizerFrameClass = cva(
-    'relative aspect-square w-[min(100%,304px)] max-sm:w-[min(100%,256px)]',
+    'relative aspect-square w-[min(72vw,34dvh,288px)] drop-shadow-[0_28px_56px_rgba(0,0,0,0.45)] sm:w-[min(54vw,36dvh,360px)] lg:w-[clamp(340px,32vw,460px)]',
     {
         variants: {
             effect: {
@@ -181,9 +181,17 @@ export default function PlayerDetail() {
         ? musicMap.get(currentTrackId)
         : null;
     const coverImage = currentMusic ? getImage(currentMusic.album.cover) : '';
+    const dominantColor = useDominantColor(coverImage);
     const duration = currentMusic?.duration || 0;
     const queuePosition = selected !== null ? selected + 1 : null;
     const publishedYear = currentMusic?.album?.publishedYear?.trim() || '';
+    const ambientBackground = dominantColor
+        ? [
+            `radial-gradient(circle at 28% 42%, rgba(${dominantColor.r}, ${dominantColor.g}, ${dominantColor.b}, 0.28) 0%, rgba(${dominantColor.r}, ${dominantColor.g}, ${dominantColor.b}, 0) 42%)`,
+            `radial-gradient(circle at 76% 58%, rgba(${dominantColor.r}, ${dominantColor.g}, ${dominantColor.b}, 0.12) 0%, rgba(${dominantColor.r}, ${dominantColor.g}, ${dominantColor.b}, 0) 38%)`,
+            'linear-gradient(180deg, rgba(9, 9, 11, 0.68) 0%, rgba(9, 9, 11, 0.9) 70%, #09090b 100%)'
+        ].join(', ')
+        : 'var(--b-gradient-subpage-fullscreen)';
 
     // TODO: Fix type
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -261,8 +269,13 @@ export default function PlayerDetail() {
     }, [currentMusic]);
 
     return (
-        <div className="relative h-full min-h-full w-full overflow-hidden max-sm:overflow-y-auto max-sm:overflow-x-hidden">
-            <div className="relative z-[1] flex min-h-full flex-col px-4 pb-6 pt-4 max-lg:pt-0">
+        <div className="relative h-full min-h-full w-full overflow-hidden bg-[var(--b-color-background)] max-lg:overflow-y-auto max-lg:overflow-x-hidden">
+            <div
+                className="pointer-events-none absolute inset-0"
+                style={{ background: ambientBackground }}
+                aria-hidden="true"
+            />
+            <div className="relative z-[1] flex min-h-full flex-col px-4 pb-[calc(24px+env(safe-area-inset-bottom))] pt-4 max-lg:pt-0">
                 <Dialog.Root
                     open={Boolean(currentMusic && isAudioMenuOpen)}
                     onOpenChange={setIsAudioMenuOpen}>
@@ -404,8 +417,11 @@ export default function PlayerDetail() {
                 </Dialog.Root>
 
                 {currentMusic ? (
-                    <PageContainer width="compact" padding="none" className="m-auto flex flex-col items-center gap-6 max-sm:gap-5">
-                        <div className="flex w-full justify-center">
+                    <PageContainer
+                        width="wide"
+                        padding="none"
+                        className="my-auto grid w-full items-center justify-center gap-7 py-4 max-lg:flex max-lg:flex-col max-sm:gap-5 max-sm:py-2 lg:grid-cols-[minmax(340px,460px)_minmax(360px,480px)] lg:gap-[clamp(56px,7vw,112px)]">
+                        <div className="relative flex w-full justify-center lg:justify-start">
                             <div className={visualizerFrameClass({ effect: isVisualizerEffect })}>
                                 {playerEffectMode === 'disk' && (
                                     <MusicPlayerDiskStyle
@@ -426,152 +442,158 @@ export default function PlayerDetail() {
                             </div>
                         </div>
 
-                        <div className="flex w-full min-w-0 flex-col items-center gap-2 text-center">
-                            <Text
-                                as="span"
-                                variant="muted"
-                                size="xs"
-                                weight="medium"
-                                className="uppercase tracking-normal">
-                                Now playing
-                            </Text>
-                            <Text as="h1" size="2xl" weight="bold" className="w-full max-w-[min(100%,384px)] truncate leading-[1.08] tracking-normal max-sm:max-w-[min(100%,336px)]">
-                                {currentMusic.name}
-                            </Text>
-
-                            <Text
-                                as="p"
-                                variant="secondary"
-                                size="md"
-                                weight="medium"
-                                className="w-full max-w-[min(100%,352px)] truncate max-sm:max-w-[min(100%,320px)]">
-                                {currentMusic.artist.name}
-                            </Text>
-
-                            <div className="flex w-full min-w-0 max-w-[min(100%,352px)] flex-nowrap items-center justify-center gap-2.5 max-sm:max-w-[min(100%,320px)] [&>*]:min-w-0 [&>*]:truncate [&>:first-child]:flex-[0_1_auto] [&>:last-child]:shrink-0">
-                                <Text as="span" variant="tertiary" size="sm" weight="medium">
-                                    {currentMusic.album.name}
+                        <div className="flex w-full min-w-0 max-w-[480px] flex-col gap-6 max-lg:items-center max-sm:gap-5">
+                            <div className="flex w-full min-w-0 flex-col items-center gap-2 text-center lg:items-start lg:text-left">
+                                <Text
+                                    as="span"
+                                    variant="muted"
+                                    size="xs"
+                                    weight="medium"
+                                    className="uppercase tracking-[0.12em]">
+                                    Now playing
+                                </Text>
+                                <Text
+                                    as="h1"
+                                    size="2xl"
+                                    weight="bold"
+                                    className="w-full truncate leading-[1.06] tracking-[-0.025em] lg:text-[clamp(2.5rem,4vw,3.75rem)] lg:leading-[1.02]">
+                                    {currentMusic.name}
                                 </Text>
 
-                                {publishedYear && (
-                                    <Text as="span" variant="muted" size="sm">
-                                        {publishedYear}
+                                <Text
+                                    as="p"
+                                    variant="secondary"
+                                    size="md"
+                                    weight="medium"
+                                    className="w-full truncate lg:text-lg">
+                                    {currentMusic.artist.name}
+                                </Text>
+
+                                <div className="flex w-full min-w-0 flex-nowrap items-center justify-center gap-2.5 lg:justify-start [&>*]:min-w-0 [&>*]:truncate [&>:first-child]:flex-[0_1_auto] [&>:last-child]:shrink-0">
+                                    <Text as="span" variant="tertiary" size="sm" weight="medium">
+                                        {currentMusic.album.name}
                                     </Text>
-                                )}
-                            </div>
-                        </div>
 
-                        <div className="w-full pt-1">
-                            <div
-                                className="relative h-1.5 w-full cursor-pointer rounded-full bg-[var(--b-color-surface-input)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--b-color-focus)]"
-                                role="slider"
-                                tabIndex={duration > 0 ? 0 : -1}
-                                aria-label="Seek playback position"
-                                aria-valuenow={Math.round(currentTime)}
-                                aria-valuemin={0}
-                                aria-valuemax={Math.round(duration)}
-                                aria-valuetext={`${makePlayTime(currentTime)} of ${makePlayTime(duration)}`}
-                                onClick={handleClickProgress}
-                                onKeyDown={handleKeyDownProgress}
-                                onMouseMove={handleMoveProgress}
-                                onTouchMove={handleMoveProgress}>
+                                    {publishedYear && (
+                                        <Text as="span" variant="muted" size="sm">
+                                            {publishedYear}
+                                        </Text>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="w-full pt-1">
                                 <div
-                                    className="absolute left-0 top-0 h-full w-full origin-left rounded-full bg-[var(--b-gradient-primary)]"
-                                    style={{ transform: `scaleX(${progress / 100})` }}
-                                />
-                                <div
-                                    className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--b-color-text)] shadow-none"
-                                    style={{ left: `${progress}%` }}
-                                />
+                                    className="relative h-1.5 w-full cursor-pointer rounded-full bg-[var(--b-color-surface-input)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--b-color-focus)]"
+                                    role="slider"
+                                    tabIndex={duration > 0 ? 0 : -1}
+                                    aria-label="Seek playback position"
+                                    aria-valuenow={Math.round(currentTime)}
+                                    aria-valuemin={0}
+                                    aria-valuemax={Math.round(duration)}
+                                    aria-valuetext={`${makePlayTime(currentTime)} of ${makePlayTime(duration)}`}
+                                    onClick={handleClickProgress}
+                                    onKeyDown={handleKeyDownProgress}
+                                    onMouseMove={handleMoveProgress}
+                                    onTouchMove={handleMoveProgress}>
+                                    <div
+                                        className="absolute left-0 top-0 h-full w-full origin-left rounded-full bg-[var(--b-gradient-primary)]"
+                                        style={{ transform: `scaleX(${progress / 100})` }}
+                                    />
+                                    <div
+                                        className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--b-color-text)] shadow-none"
+                                        style={{ left: `${progress}%` }}
+                                    />
+                                </div>
+                                <div className="mt-3 flex justify-between gap-[var(--b-spacing-md)]">
+                                    <Text variant="tertiary" size="sm">
+                                        {makePlayTime(currentTime)}
+                                    </Text>
+                                    <Text variant="tertiary" size="sm">
+                                        {makePlayTime(duration)}
+                                    </Text>
+                                </div>
                             </div>
-                            <div className="mt-3 flex justify-between gap-[var(--b-spacing-md)]">
-                                <Text variant="tertiary" size="sm">
-                                    {makePlayTime(currentTime)}
-                                </Text>
-                                <Text variant="tertiary" size="sm">
-                                    {makePlayTime(duration)}
-                                </Text>
+
+                            <div className="grid w-full grid-cols-5 items-center gap-2.5 max-sm:gap-2">
+                                <IconButton
+                                    size="control"
+                                    tone="muted"
+                                    active={shuffle}
+                                    aria-label={shuffle ? 'Disable shuffle' : 'Enable shuffle'}
+                                    onClick={() => queueStore.toggleShuffle()}>
+                                    <Icon.Shuffle />
+                                </IconButton>
+
+                                <IconButton
+                                    size="control"
+                                    tone="muted"
+                                    aria-label="Previous track"
+                                    onClick={() => queueStore.prev()}>
+                                    <Icon.SkipBack />
+                                </IconButton>
+
+                                <IconButton
+                                    size="controlLg"
+                                    tone="gradient"
+                                    aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
+                                    onClick={() => isPlaying ? queueStore.pause() : queueStore.play()}>
+                                    {isPlaying ? <Icon.Pause /> : <Icon.Play />}
+                                </IconButton>
+
+                                <IconButton
+                                    size="control"
+                                    tone="muted"
+                                    aria-label="Next track"
+                                    onClick={() => queueStore.next()}>
+                                    <Icon.SkipForward />
+                                </IconButton>
+
+                                <IconButton
+                                    size="control"
+                                    tone="muted"
+                                    aria-label={`Repeat mode ${repeatMode}`}
+                                    onClick={() => queueStore.changeRepeatMode()}>
+                                    {repeatMode === 'all' && <Icon.Repeat />}
+                                    {repeatMode === 'one' && <Icon.Infinite />}
+                                    {repeatMode === 'none' && <Icon.RightLeft />}
+                                </IconButton>
                             </div>
-                        </div>
 
-                        <div className="grid w-full grid-cols-5 items-center gap-2.5 max-sm:gap-2">
-                            <IconButton
-                                size="control"
-                                tone="muted"
-                                active={shuffle}
-                                aria-label={shuffle ? 'Disable shuffle' : 'Enable shuffle'}
-                                onClick={() => queueStore.toggleShuffle()}>
-                                <Icon.Shuffle />
-                            </IconButton>
-
-                            <IconButton
-                                size="control"
-                                tone="muted"
-                                aria-label="Previous track"
-                                onClick={() => queueStore.prev()}>
-                                <Icon.SkipBack />
-                            </IconButton>
-
-                            <IconButton
-                                size="controlLg"
-                                tone="gradient"
-                                aria-label={isPlaying ? 'Pause playback' : 'Resume playback'}
-                                onClick={() => isPlaying ? queueStore.pause() : queueStore.play()}>
-                                {isPlaying ? <Icon.Pause /> : <Icon.Play />}
-                            </IconButton>
-
-                            <IconButton
-                                size="control"
-                                tone="muted"
-                                aria-label="Next track"
-                                onClick={() => queueStore.next()}>
-                                <Icon.SkipForward />
-                            </IconButton>
-
-                            <IconButton
-                                size="control"
-                                tone="muted"
-                                aria-label={`Repeat mode ${repeatMode}`}
-                                onClick={() => queueStore.changeRepeatMode()}>
-                                {repeatMode === 'all' && <Icon.Repeat />}
-                                {repeatMode === 'one' && <Icon.Infinite />}
-                                {repeatMode === 'none' && <Icon.RightLeft />}
-                            </IconButton>
-                        </div>
-
-                        <div className="flex w-full flex-wrap items-center justify-center gap-2.5 max-sm:gap-2">
-                            <IconTextButton
-                                size="sm"
-                                shape="pill"
-                                active={currentMusic.isLiked}
-                                filled={currentMusic.isLiked}
-                                icon={<Icon.Heart />}
-                                label={currentMusic.isLiked ? 'Liked' : 'Like'}
-                                aria-pressed={currentMusic.isLiked}
-                                onClick={() => MusicListener.like(currentMusic.id, !currentMusic.isLiked)}
-                            />
-                            <IconTextButton
-                                size="sm"
-                                shape="pill"
-                                icon={<Icon.Menu />}
-                                label="More"
-                                onClick={openCurrentMusicActions}
-                            />
-                            {queuePosition !== null && (
+                            <div className="flex w-full flex-wrap items-center justify-center gap-2.5 max-sm:gap-2 lg:justify-start">
                                 <IconTextButton
                                     size="sm"
                                     shape="pill"
-                                    icon={<Icon.ListMusic />}
-                                    label={(
-                                        <>
-                                            <span className="sm:hidden">Queue</span>
-                                            <span className="max-sm:hidden">Queue {queuePosition}/{queueLength}</span>
-                                        </>
-                                    )}
-                                    aria-label={`Open queue, ${queuePosition} of ${queueLength}`}
-                                    onClick={() => navigate('/queue')}
+                                    active={currentMusic.isLiked}
+                                    filled={currentMusic.isLiked}
+                                    icon={<Icon.Heart />}
+                                    label={currentMusic.isLiked ? 'Liked' : 'Like'}
+                                    aria-pressed={currentMusic.isLiked}
+                                    onClick={() => MusicListener.like(currentMusic.id, !currentMusic.isLiked)}
                                 />
-                            )}
+                                <IconTextButton
+                                    size="sm"
+                                    shape="pill"
+                                    icon={<Icon.Menu />}
+                                    label="More"
+                                    onClick={openCurrentMusicActions}
+                                />
+                                {queuePosition !== null && (
+                                    <IconTextButton
+                                        size="sm"
+                                        shape="pill"
+                                        icon={<Icon.ListMusic />}
+                                        label={(
+                                            <>
+                                                <span className="sm:hidden">Queue</span>
+                                                <span className="max-sm:hidden">Queue {queuePosition}/{queueLength}</span>
+                                            </>
+                                        )}
+                                        aria-label={`Open queue, ${queuePosition} of ${queueLength}`}
+                                        onClick={() => navigate('/queue')}
+                                    />
+                                )}
+                            </div>
                         </div>
                     </PageContainer>
                 ) : (
