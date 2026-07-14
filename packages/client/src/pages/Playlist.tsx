@@ -41,7 +41,7 @@ function PlaylistDndItem({
 
     return (
         <div
-            className={`relative grid h-full w-full grid-cols-[44px_minmax(0,1fr)] items-center gap-1 rounded-[var(--b-radius-xl)] border bg-[var(--b-color-surface-item)] p-1 transition-[border-color,background-color,box-shadow,opacity] hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] focus-within:border-[var(--b-color-focus)] focus-within:shadow-[0_0_0_3px_var(--b-color-focus-ring)] ${isDragOverlay ? 'border-[var(--b-color-focus)] shadow-[var(--b-shadow-queue-drag)]' : 'border-[var(--b-color-border-subtle)]'} ${isDragging && !isDragOverlay ? 'opacity-15' : ''}`}>
+            className={`relative grid h-full w-full grid-cols-[44px_minmax(0,1fr)] items-center gap-1 rounded-[var(--b-radius-xl)] border bg-[var(--b-color-surface-item)] p-1 transition-[border-color,background-color,box-shadow,opacity] hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] focus-within:border-[var(--b-color-focus)] focus-within:shadow-[0_0_0_3px_var(--b-color-focus-ring)] ${isDragOverlay ? 'border-transparent shadow-[var(--b-shadow-queue-drag)]' : 'border-[var(--b-color-border-subtle)]'} ${isDragging && !isDragOverlay ? 'opacity-15' : ''}`}>
             <IconButton
                 {...handleProps}
                 size="md"
