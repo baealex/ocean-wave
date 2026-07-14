@@ -44,7 +44,7 @@ export default function SearchField({
     return (
         <label
             className={cx(
-                'flex min-h-9 flex-1 basis-72 items-center gap-2 rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)]',
+                'flex min-h-10 flex-1 basis-72 items-center gap-2 rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)]',
                 'min-w-[min(100%,256px)] max-w-md bg-[var(--b-color-surface-subtle)] p-0.5 transition-[border-color,background-color,box-shadow] duration-150',
                 'focus-within:border-[var(--b-color-focus)] focus-within:shadow-[0_0_0_3px_var(--b-color-focus-ring)]',
                 'max-sm:w-full max-sm:max-w-none max-sm:basis-full'

@@ -6,7 +6,7 @@ import {
     ItemSortPanelContent,
     Loading,
     Button,
-    StickyHeader,
+    CollectionHeader,
     StickyHeaderActions,
     SearchField,
     FixedVirtualList,
@@ -46,10 +46,16 @@ export default function Album() {
             album.name.toLowerCase().includes(deferredQuery) ||
             album.artist.name.toLowerCase().includes(deferredQuery)
         ) ?? [];
+    const albumCount = albums?.length ?? 0;
+    const summary = !loaded
+        ? 'Loading albums'
+        : query.trim()
+            ? `${filteredAlbums.length.toLocaleString()} of ${albumCount.toLocaleString()} albums`
+            : `${albumCount.toLocaleString()} albums`;
 
     return (
         <>
-            <StickyHeader>
+            <CollectionHeader title="Albums" summary={summary}>
                 <SearchField
                     value={query}
                     placeholder="Search albums or artists"
@@ -69,7 +75,7 @@ export default function Album() {
                         <Icon.Sort />
                     </Button>
                 </StickyHeaderActions>
-            </StickyHeader>
+            </CollectionHeader>
             {!loaded && (
                 <Loading />
             )}

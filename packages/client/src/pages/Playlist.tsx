@@ -9,7 +9,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
     Loading,
     Button,
-    StickyHeader,
+    CollectionHeader,
     VerticalSortable,
     Flex,
     IconButton,
@@ -108,12 +108,15 @@ export default function Playlist() {
 
     return (
         <>
-            <StickyHeader>
-                <div />
-                <Button onClick={handleOpenCreateDialog}>
-                    Create
-                </Button>
-            </StickyHeader>
+            <CollectionHeader
+                title="Playlists"
+                summary={loaded ? `${playlists.length.toLocaleString()} playlists` : 'Loading playlists'}
+                actions={(
+                    <Button variant="primary" onClick={handleOpenCreateDialog}>
+                        Create
+                    </Button>
+                )}
+            />
             <VerticalSortable items={playlists.map((playlist) => playlist.id)} onDragEnd={handleDragEnd}>
                 {!loaded && (
                     <Loading />

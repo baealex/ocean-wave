@@ -65,6 +65,7 @@ export const PlayModeSection = () => {
                 title="When adding music to the queue"
                 description="Choose the playback behavior.">
                 <Select
+                    ariaLabel="Playback behavior"
                     selected={PLAY_MODES.find(({ value }) => value === playMode)}
                     options={PLAY_MODES}
                     onChange={(value) => queueStore.setPlayMode(value as typeof playMode)}
@@ -75,6 +76,7 @@ export const PlayModeSection = () => {
                 title="Queue placement"
                 description="Choose where new music is placed.">
                 <Select
+                    ariaLabel="Queue placement"
                     selected={INSERT_MODES.find(({ value }) => value === insertMode)}
                     options={INSERT_MODES}
                     onChange={(value) => queueStore.setInsertMode(value as typeof insertMode)}
@@ -85,6 +87,7 @@ export const PlayModeSection = () => {
                 title="Transition Effect"
                 description="Choose the track transition.">
                 <Select
+                    ariaLabel="Transition effect"
                     selected={MIX_MODES.find(({ value }) => value === mixMode)}
                     options={MIX_MODES}
                     onChange={(value) => queueStore.setMixMode(value as typeof mixMode)}

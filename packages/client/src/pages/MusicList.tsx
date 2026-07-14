@@ -4,11 +4,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
     Button,
+    CollectionHeader,
     FixedVirtualList,
-    StickyHeader,
     StickyHeaderActions,
     ItemSortPanelContent,
     Loading,
+    PanelContent,
     SearchField,
     StateMessage
 } from '~/components/shared';
@@ -87,9 +88,7 @@ export default function Music() {
 
         nextSearchParams.delete('py');
 
-        window.addEventListener('popstate', () => {
-            setSearchParams(nextSearchParams, { replace: true });
-        }, { once: true });
+        setSearchParams(nextSearchParams, { replace: true });
     };
 
     const handleTagFilterChange = (
@@ -112,10 +111,7 @@ export default function Music() {
 
         nextSearchParams.delete('py');
 
-        window.addEventListener('popstate', () => {
-            setSearchParams(nextSearchParams, { replace: true });
-        }, { once: true });
-        panel.close();
+        setSearchParams(nextSearchParams, { replace: true });
     };
 
     const availableMusics = (musics?.filter(music => !music.isHated)) ?? [];
@@ -126,10 +122,88 @@ export default function Music() {
         music.artist.name.toLowerCase().includes(deferredQuery) ||
         music.album.name.toLowerCase().includes(deferredQuery)
     );
+    const hasActiveFilters = Boolean(query.trim()) || isSmartFilterActive || isTagFilterActive;
+    const summary = !loaded
+        ? 'Loading library'
+        : hasActiveFilters
+            ? `${filteredMusics.length.toLocaleString()} of ${availableMusics.length.toLocaleString()} songs`
+            : `${availableMusics.length.toLocaleString()} songs`;
+
+    const openSmartFilter = () => panel.open({
+        title: 'Music Filter',
+        content: (
+            <SmartMusicFilterPanelContent
+                activeFilterId={smartFilterId}
+                onSelect={handleSmartFilterChange}
+            />
+        )
+    });
+
+    const openTagFilter = () => panel.open({
+        title: 'Tag Filter',
+        content: (
+            <MusicTagFilterPanelContent
+                selectedTagIds={tagFilterIds}
+                mode={tagFilterMode}
+                onApply={(selectedTagIds, mode) => {
+                    handleTagFilterChange(selectedTagIds, mode);
+                    panel.close();
+                }}
+            />
+        )
+    });
+
+    const openSort = () => panel.open({
+        title: 'Music Sort',
+        content: <ItemSortPanelContent items={musicStore.sortItems} />
+    });
+
+    const openMobileOptions = () => panel.open({
+        title: 'Library options',
+        content: (
+            <PanelContent
+                items={[
+                    {
+                        id: 'smart-filter',
+                        icon: <Icon.Filter />,
+                        text: 'Music filter',
+                        description: activeSmartFilter.label,
+                        active: isSmartFilterActive,
+                        onClick: openSmartFilter
+                    },
+                    {
+                        id: 'tag-filter',
+                        icon: <Icon.Tags />,
+                        text: 'Tag filter',
+                        description: getMusicTagFilterLabel(tagFilterIds.length),
+                        active: isTagFilterActive,
+                        onClick: openTagFilter
+                    },
+                    {
+                        id: 'sort',
+                        icon: <Icon.Sort />,
+                        text: 'Sort music',
+                        description: musicStore.sortItems.find(item => item.isActive)?.text,
+                        onClick: openSort
+                    }
+                ]}
+            />
+        )
+    });
 
     return (
         <>
-            <StickyHeader>
+            <CollectionHeader
+                title="Library"
+                summary={summary}
+                actions={(
+                    <Button
+                        variant="primary"
+                        disabled={filteredMusics.length === 0}
+                        onClick={() => void resetQueue(filteredMusics.map(music => music.id))}>
+                        <Icon.Play /> Play
+                    </Button>
+                )}>
                 <SearchField
                     value={query}
                     placeholder="Search music, artist, album"
@@ -138,56 +212,40 @@ export default function Music() {
                 />
                 <StickyHeaderActions>
                     <Button
-                        disabled={filteredMusics.length === 0}
-                        onClick={() => void resetQueue(filteredMusics.map(music => music.id))}>
-                        <Icon.Play /> Play
-                    </Button>
-                    <Button
+                        className="max-sm:hidden"
                         size="sm"
                         active={isSmartFilterActive}
                         aria-pressed={isSmartFilterActive}
                         aria-label="Filter music"
-                        onClick={() => panel.open({
-                            title: 'Music Filter',
-                            content: (
-                                <SmartMusicFilterPanelContent
-                                    activeFilterId={smartFilterId}
-                                    onSelect={handleSmartFilterChange}
-                                />
-                            )
-                        })}>
+                        onClick={openSmartFilter}>
                         <Icon.Filter /> {activeSmartFilter.shortLabel}
                     </Button>
                     <Button
+                        className="max-sm:hidden"
                         size="sm"
                         active={isTagFilterActive}
                         aria-pressed={isTagFilterActive}
                         aria-label="Filter music by tags"
-                        onClick={() => panel.open({
-                            title: 'Tag Filter',
-                            content: (
-                                <MusicTagFilterPanelContent
-                                    selectedTagIds={tagFilterIds}
-                                    mode={tagFilterMode}
-                                    onApply={handleTagFilterChange}
-                                />
-                            )
-                        })}>
+                        onClick={openTagFilter}>
                         <Icon.Tags /> {getMusicTagFilterLabel(tagFilterIds.length)}
                     </Button>
                     <Button
+                        className="max-sm:hidden"
                         size="sm"
                         aria-label="Sort music"
-                        onClick={() => panel.open({
-                            title: 'Music Sort',
-                            content: (
-                                <ItemSortPanelContent items={musicStore.sortItems} />
-                            )
-                        })}>
+                        onClick={openSort}>
                         <Icon.Sort />
                     </Button>
+                    <Button
+                        className="sm:hidden"
+                        size="sm"
+                        active={isSmartFilterActive || isTagFilterActive}
+                        aria-label="Open library filters and sorting"
+                        onClick={openMobileOptions}>
+                        <Icon.Filter /> Options
+                    </Button>
                 </StickyHeaderActions>
-            </StickyHeader>
+            </CollectionHeader>
             {!loaded && (
                 <Loading />
             )}

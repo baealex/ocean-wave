@@ -7,7 +7,7 @@ import {
     ItemSortPanelContent,
     Loading,
     Button,
-    StickyHeader,
+    CollectionHeader,
     StickyHeaderActions,
     SearchField,
     StateMessage
@@ -46,10 +46,16 @@ export default function ArtistList() {
         ?.filter(artist =>
             artist.name.toLowerCase().includes(deferredQuery)
         )) ?? [];
+    const artistCount = artists?.length ?? 0;
+    const summary = !loaded
+        ? 'Loading artists'
+        : query.trim()
+            ? `${filteredArtists.length.toLocaleString()} of ${artistCount.toLocaleString()} artists`
+            : `${artistCount.toLocaleString()} artists`;
 
     return (
         <>
-            <StickyHeader>
+            <CollectionHeader title="Artists" summary={summary}>
                 <SearchField
                     value={query}
                     placeholder="Search artists"
@@ -69,7 +75,7 @@ export default function ArtistList() {
                         <Icon.Sort />
                     </Button>
                 </StickyHeaderActions>
-            </StickyHeader>
+            </CollectionHeader>
             {!loaded && (
                 <Loading />
             )}

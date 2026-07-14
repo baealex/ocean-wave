@@ -28,7 +28,7 @@ const iconButtonVariants = cva(
                 neutral: 'hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
                 muted: 'text-[var(--b-color-text-secondary)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
                 strong: 'text-[var(--b-color-text)] hover:bg-[var(--b-color-control-strong-hover)] hover:text-[var(--b-color-static-white)]',
-                primary: 'bg-[var(--b-color-point)] text-[var(--b-color-background)] hover:bg-[var(--b-color-point-dark)] hover:text-[var(--b-color-background)]',
+                primary: 'bg-[var(--b-color-point)] text-[var(--b-color-background)] hover:bg-[var(--b-color-point-dark)] hover:text-[var(--b-color-static-white)]',
                 gradient: 'bg-[var(--b-gradient-primary)] text-[var(--b-color-background)] hover:text-[var(--b-color-background)]',
                 danger: 'hover:bg-[var(--b-color-badge-danger-background)] hover:text-[var(--b-color-badge-danger-text)]'
             },

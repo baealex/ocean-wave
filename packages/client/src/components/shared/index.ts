@@ -4,6 +4,7 @@ export { default as BottomPanel } from './BottomPanel';
 export { default as Badge } from './Badge';
 export { default as Button } from './Button';
 export { default as Card } from './Card';
+export { default as CollectionHeader } from './CollectionHeader';
 export { default as FixedVirtualList } from './FixedVirtualList/FixedVirtualList';
 export { default as Flex } from './Flex';
 export { default as Grid } from './Grid';
