@@ -15,6 +15,7 @@ export const musicType: string = gql`
         totalPlayedMs: Float!
         trackNumber: Int!
         filePath: String!
+        hasMetadataOverride: Boolean!
         isLiked: Boolean!
         isHated: Boolean!
         createdAt: String!
@@ -67,6 +68,17 @@ export const musicType: string = gql`
         tagMode: TagFilterMode
     }
 
+    input UpdateMusicMetadataInput {
+        id: ID!
+        title: String!
+        artist: String!
+        album: String!
+        albumArtist: String
+        publishedYear: String!
+        trackNumber: Int!
+        genres: [String!]!
+    }
+
     ${artistType}
 
     ${albumType}
@@ -84,6 +96,7 @@ export const musicMutation = gql`
     type Mutation {
         setMusicLiked(id: ID!, isLiked: Boolean!, originClientId: String): MusicLikedPayload!
         setMusicHated(id: ID!, isHated: Boolean!, originClientId: String): MusicHatedPayload!
+        updateMusicMetadata(input: UpdateMusicMetadataInput!, originClientId: String): Music!
         recordPlayback(input: RecordPlaybackInput!, originClientId: String): PlaybackRecordPayload
     }
 `;

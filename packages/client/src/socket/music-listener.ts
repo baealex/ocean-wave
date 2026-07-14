@@ -21,6 +21,7 @@ export const MUSIC_LIKE = 'music:like-updated';
 export const MUSIC_HATE = 'music:hate-updated';
 export const MUSIC_COUNT = 'music:play-count-updated';
 export const MUSIC_TAGS_UPDATED = 'music:tags-updated';
+export const MUSIC_UPDATED = 'music:updated';
 const PLAYBACK_RECORD_TIMEOUT_MS = 5_000;
 
 const getGraphQueryErrorMessage = (response: GraphQueryErrorResponse) => {
@@ -59,11 +60,16 @@ interface TagsUpdated extends OriginClientNotificationPayload {
     tags: Tag[];
 }
 
+interface MusicUpdated extends OriginClientNotificationPayload {
+    musicId: string;
+}
+
 interface MusicListenerEventHandler {
     onLike: (data: Like) => void;
     onHate: (data: Hate) => void;
     onCount: (data: Count) => void;
     onTagsUpdated?: (data: TagsUpdated) => void;
+    onUpdated?: (data: MusicUpdated) => void;
 }
 
 export class MusicListener implements Listener {
@@ -93,6 +99,9 @@ export class MusicListener implements Listener {
         socket.on(MUSIC_COUNT, this.socketHandler.onCount);
         if (this.socketHandler.onTagsUpdated) {
             socket.on(MUSIC_TAGS_UPDATED, this.socketHandler.onTagsUpdated);
+        }
+        if (this.socketHandler.onUpdated) {
+            socket.on(MUSIC_UPDATED, this.socketHandler.onUpdated);
         }
     }
 
@@ -179,6 +188,9 @@ export class MusicListener implements Listener {
         if (this.socketHandler.onTagsUpdated) {
             socket.off(MUSIC_TAGS_UPDATED, this.socketHandler.onTagsUpdated);
         }
+        if (this.socketHandler.onUpdated) {
+            socket.off(MUSIC_UPDATED, this.socketHandler.onUpdated);
+        }
         MusicListener.handlers.delete(this.handler);
 
         this.handler = null;
@@ -206,6 +218,13 @@ export class MusicListener implements Listener {
                 ? (data) => {
                     if (!isOwnRealtimeNotification(data)) {
                         handler.onTagsUpdated?.(data);
+                    }
+                }
+                : undefined,
+            onUpdated: handler.onUpdated
+                ? (data) => {
+                    if (!isOwnRealtimeNotification(data)) {
+                        handler.onUpdated?.(data);
                     }
                 }
                 : undefined

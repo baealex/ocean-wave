@@ -1,7 +1,7 @@
 import type { IResolvers } from '@graphql-tools/utils';
 
 import models, { type Album } from '~/models';
-import { getAlbumCoverPath } from '~/modules/album-cover-cache';
+import { getVersionedAlbumCoverPath } from '~/modules/album-cover-cache';
 import { gql } from '~/modules/graphql';
 import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
 import { artistType } from '../artist';
@@ -12,6 +12,7 @@ export const albumType: string = gql`
         id: ID!
         name: String!
         cover: String!
+        isCoverCustom: Boolean!
         artist: Artist!
         publishedYear: String!
         createdAt: String!
@@ -46,7 +47,7 @@ export const albumResolvers: IResolvers = {
     Album: {
         cover: (album: Album) => {
             return album.cover
-                ? getAlbumCoverPath(album.id)
+                ? getVersionedAlbumCoverPath(album.id, album.updatedAt)
                 : '';
         },
         artist: (album: Album) => models.artist.findUnique({ where: { id: album.artistId } }),

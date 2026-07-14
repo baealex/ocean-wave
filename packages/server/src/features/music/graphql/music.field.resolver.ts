@@ -5,6 +5,7 @@ import models, { type Music } from '~/models';
 type MusicFieldResolvers = NonNullable<IResolvers['Music']>;
 
 export const musicFieldResolvers: MusicFieldResolvers = {
+    hasMetadataOverride: (music: Music) => Boolean(music.metadataOverride),
     artist: (music: Music) => models.artist.findUnique({ where: { id: music.artistId } }),
     album: (music: Music) => models.album.findUnique({ where: { id: music.albumId } }),
     genres: (music: Music) => models.genre.findMany({ where: { Music: { some: { id: music.id } } } }),

@@ -18,7 +18,8 @@ vi.mock('~/socket/socket', () => ({
 import {
     recordPlayback,
     setMusicHated,
-    setMusicLiked
+    setMusicLiked,
+    updateMusicMetadata
 } from './music';
 
 interface GraphqlPayload {
@@ -120,5 +121,41 @@ describe('music API requests', () => {
         });
         expect(payload.query).toContain('recordPlayback(input: $input, originClientId: $originClientId)');
         expect(payload.query).not.toContain('session-1');
+    });
+
+    it('updates track metadata through a GraphQL input variable', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({
+            data: {
+                data: {
+                    updateMusicMetadata: {
+                        id: '7',
+                        name: 'Edited Track'
+                    }
+                }
+            }
+        });
+        const input = {
+            id: '7',
+            title: 'Edited Track',
+            artist: 'Edited Artist',
+            album: 'Edited Album',
+            albumArtist: 'Album Artist',
+            publishedYear: '2026',
+            trackNumber: 3,
+            genres: ['Ambient', 'Electronic']
+        };
+
+        await updateMusicMetadata(input);
+
+        const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
+
+        expect(payload.variables).toEqual({
+            input,
+            originClientId: 'client-1'
+        });
+        expect(payload.query).toContain(
+            'updateMusicMetadata(input: $input, originClientId: $originClientId)'
+        );
+        expect(payload.query).not.toContain('Edited Track');
     });
 });

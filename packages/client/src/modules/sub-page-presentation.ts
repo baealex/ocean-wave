@@ -11,6 +11,7 @@ const SUB_PAGE_PATTERNS = [
     /^\/album\/[^/]+$/,
     /^\/artist\/[^/]+$/,
     /^\/playlist\/[^/]+$/,
+    /^\/music\/[^/]+\/edit$/,
     /^\/player$/,
     /^\/queue$/
 ];

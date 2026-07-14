@@ -110,6 +110,9 @@ class MusicStore extends BaseStore<MusicStoreState> {
             },
             onTagsUpdated: ({ musicId, tags }) => {
                 this.updateMusicTags(musicId, tags);
+            },
+            onUpdated: () => {
+                void this.sync();
             }
         });
     }
@@ -127,13 +130,13 @@ class MusicStore extends BaseStore<MusicStoreState> {
     }
 
     async sync() {
-        getMusics().then(({ data }) => {
-            this.set({
-                loaded: true,
-                musics: data.allMusics,
-                musicMap: createMusicMap(data.allMusics),
-                sortedFrom: SORT_STATE.PLAY_COUNT_DESC
-            });
+        const { data } = await getMusics();
+
+        this.set({
+            loaded: true,
+            musics: data.allMusics,
+            musicMap: createMusicMap(data.allMusics),
+            sortedFrom: SORT_STATE.PLAY_COUNT_DESC
         });
     }
 

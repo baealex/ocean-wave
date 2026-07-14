@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import * as views from './views';
 import { requireAuthenticatedRequest } from './modules/auth';
 import type { AuthConfig } from './modules/auth-mode';
@@ -13,6 +13,15 @@ export const createApiRouter = (authConfig: AuthConfig) => {
             res.status(404).json({ message: 'Not Found' }).end();
         })
         .use(requireAuthenticatedRequest(authConfig))
+        .put(
+            '/music/:id/artwork',
+            express.raw({
+                type: ['image/jpeg', 'image/png', 'image/webp'],
+                limit: '10mb'
+            }),
+            useAsync(views.putMusicArtwork)
+        )
+        .delete('/music/:id/artwork', useAsync(views.deleteMusicArtwork))
         .get('/audio/:id', useAsync(views.audio))
         .get('/home', useAsync(views.home));
 };

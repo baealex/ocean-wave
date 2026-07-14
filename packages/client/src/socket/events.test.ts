@@ -8,7 +8,8 @@ import {
     MUSIC_COUNT,
     MUSIC_HATE,
     MUSIC_LIKE,
-    MUSIC_TAGS_UPDATED
+    MUSIC_TAGS_UPDATED,
+    MUSIC_UPDATED
 } from './music-listener';
 import {
     PLAYLIST_ADD_MUSIC,
@@ -34,6 +35,7 @@ describe('socket event names', () => {
             MUSIC_HATE,
             MUSIC_COUNT,
             MUSIC_TAGS_UPDATED,
+            MUSIC_UPDATED,
             PLAYLIST_CREATE,
             PLAYLIST_DELETE,
             PLAYLIST_UPDATE,
@@ -51,6 +53,7 @@ describe('socket event names', () => {
             MUSIC_HATE: 'music:hate-updated',
             MUSIC_COUNT: 'music:play-count-updated',
             MUSIC_TAGS_UPDATED: 'music:tags-updated',
+            MUSIC_UPDATED: 'music:updated',
             PLAYLIST_CREATE: 'playlist:created',
             PLAYLIST_DELETE: 'playlist:deleted',
             PLAYLIST_UPDATE: 'playlist:renamed',

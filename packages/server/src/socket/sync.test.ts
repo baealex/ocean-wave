@@ -372,6 +372,104 @@ describe('sync music identity', () => {
         expect(fs.existsSync(path.join(resolveCachePath(), 'resized', `${existingMusic.albumId}.jpg`))).toBe(true);
     });
 
+    it('keeps manually edited metadata during a force sync', async () => {
+        const contents = createTrackFixture({
+            title: 'File Track',
+            artist: 'File Artist',
+            album: 'File Album',
+            year: '2024',
+            trackNumber: 2,
+            fingerprint: 'manual-metadata-hash'
+        });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-manual-metadata-'));
+        const relativePath = 'library/manual-track.mp3';
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+
+        const filePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath,
+            contents
+        });
+        const music = await createExistingMusic({ filePath, contents });
+        await models.music.update({
+            where: { id: music.id },
+            data: {
+                metadataOverride: JSON.stringify({
+                    title: 'Manual Track',
+                    artist: 'Manual Artist',
+                    album: 'Manual Album',
+                    albumArtist: 'Manual Album Artist',
+                    year: '2026',
+                    trackNumber: 7,
+                    genres: ['Ambient']
+                })
+            }
+        });
+        walkMock.mockResolvedValue([filePath]);
+
+        await syncMusic({ emit: jest.fn() }, true);
+
+        const updated = await models.music.findUniqueOrThrow({
+            where: { id: music.id },
+            include: {
+                Artist: true,
+                Album: { include: { Artist: true } },
+                Genre: true
+            }
+        });
+        expect(updated).toMatchObject({
+            name: 'Manual Track',
+            trackNumber: 7,
+            Artist: { name: 'Manual Artist' },
+            Album: {
+                name: 'Manual Album',
+                publishedYear: '2026',
+                Artist: { name: 'Manual Album Artist' }
+            }
+        });
+        expect(updated.Genre.map((genre) => genre.name)).toEqual(['Ambient']);
+    });
+
+    it('does not overwrite custom album artwork during a force sync', async () => {
+        const contents = createTrackFixture({
+            fingerprint: 'manual-cover-hash',
+            picture: 'embedded-cover'
+        });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-manual-cover-'));
+        const relativePath = 'library/manual-cover.mp3';
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+
+        const filePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath,
+            contents
+        });
+        const music = await createExistingMusic({ filePath, contents });
+        const coverFileName = `${music.albumId}.jpg`;
+        const cachePath = resolveCachePath();
+        fs.mkdirSync(path.join(cachePath, 'resized'), { recursive: true });
+        fs.writeFileSync(path.join(cachePath, coverFileName), 'manual-cover');
+        fs.writeFileSync(path.join(cachePath, 'resized', coverFileName), 'manual-cover-resized');
+        await models.album.update({
+            where: { id: music.albumId },
+            data: {
+                cover: `/cache/resized/${coverFileName}`,
+                isCoverCustom: true
+            }
+        });
+        walkMock.mockResolvedValue([filePath]);
+
+        await syncMusic({ emit: jest.fn() }, true);
+
+        expect(fs.readFileSync(path.join(cachePath, coverFileName), 'utf8')).toBe('manual-cover');
+        expect(fs.readFileSync(path.join(cachePath, 'resized', coverFileName), 'utf8'))
+            .toBe('manual-cover-resized');
+        await expect(models.album.findUniqueOrThrow({ where: { id: music.albumId } }))
+            .resolves.toMatchObject({ isCoverCustom: true });
+    });
+
     it('marks unseen tracks as missing instead of deleting them', async () => {
         const contents = createTrackFixture({ fingerprint: 'missing-hash' });
         const existingMusic = await createExistingMusic({

@@ -10,6 +10,7 @@ import {
     Favorite,
     Home,
     MusicList,
+    MusicEdit,
     NotFound,
     Player,
     Playlist,
@@ -86,6 +87,17 @@ const router = createBrowserRouter([
             {
                 path: '/album/:id',
                 element: <AlbumDetail />
+            },
+            {
+                path: '/music/:id/edit',
+                element: <MusicEdit />,
+                handle: {
+                    pageFrame: {
+                        width: 'standard',
+                        padding: 'content',
+                        className: 'min-h-full'
+                    }
+                }
             },
             {
                 path: '/artist/:id',

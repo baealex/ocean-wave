@@ -38,10 +38,13 @@ export const cacheAsset: Controller = async (req, _res, next) => {
     const music = await models.music.findFirst({
         where: { albumId },
         orderBy: { id: 'asc' },
-        select: { filePath: true }
+        select: {
+            filePath: true,
+            Album: { select: { isCoverCustom: true } }
+        }
     });
 
-    if (!music) {
+    if (!music || music.Album.isCoverCustom) {
         next?.();
         return;
     }
