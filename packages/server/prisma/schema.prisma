@@ -85,6 +85,7 @@ model Music {
     MusicHate     MusicHate[]
     MusicTag      MusicTag[]
     PlaybackEvent PlaybackEvent[]
+    PlaybackQueueItem PlaybackQueueItem[]
     PlaybackSession PlaybackSession[]
     PlaylistMusic PlaylistMusic[]
 
@@ -206,8 +207,36 @@ model PlaybackSession {
     createdAt            DateTime @default(now())
     updatedAt            DateTime @updatedAt
     Music                Music?   @relation(fields: [currentMusicId], references: [id], onDelete: SetNull)
+    Queue                PlaybackQueue?
 
     @@index([currentMusicId])
+}
+
+model PlaybackQueue {
+    id           Int                 @id @default(autoincrement())
+    sessionId    Int                 @unique
+    currentIndex Int?
+    shuffle      Boolean             @default(false)
+    repeatMode   String              @default("none")
+    revision     Int                 @default(0)
+    createdAt    DateTime            @default(now())
+    updatedAt    DateTime            @updatedAt
+    Session      PlaybackSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+    Item         PlaybackQueueItem[]
+}
+
+model PlaybackQueueItem {
+    id          Int           @id @default(autoincrement())
+    queueId     Int
+    musicId     Int
+    order       Int
+    sourceOrder Int?
+    Queue       PlaybackQueue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+    Music       Music         @relation(fields: [musicId], references: [id], onDelete: Cascade)
+
+    @@unique([queueId, musicId])
+    @@unique([queueId, order])
+    @@index([musicId])
 }
 
 model MusicLike {

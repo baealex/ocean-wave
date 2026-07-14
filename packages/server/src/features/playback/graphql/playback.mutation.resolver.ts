@@ -9,6 +9,11 @@ import {
     reportPlaybackState,
     type ReportPlaybackStateInput
 } from '../services/playback-session';
+import {
+    isPlaybackQueueServiceError,
+    savePlaybackQueue,
+    type SavePlaybackQueueInput
+} from '../services/playback-queue';
 
 class PlaybackGraphQLError extends Error {
     extensions: { code: string };
@@ -21,6 +26,10 @@ class PlaybackGraphQLError extends Error {
 }
 
 const toGraphQLError = (error: unknown) => {
+    if (isPlaybackQueueServiceError(error)) {
+        return new PlaybackGraphQLError(error.message, error.code);
+    }
+
     if (isPlaybackSessionServiceError(error)) {
         return new PlaybackGraphQLError(error.message, error.code);
     }
@@ -69,8 +78,27 @@ export const createReportPlaybackStateMutationResolver = (
     };
 };
 
+export const createSavePlaybackQueueMutationResolver = (
+    save = savePlaybackQueue
+) => {
+    return async (_: unknown, { input }: { input: SavePlaybackQueueInput }) => {
+        try {
+            const result = await save(input);
+
+            return {
+                type: result.type,
+                queue: result.queue,
+                conflict: result.conflict
+            };
+        } catch (error) {
+            throw toGraphQLError(error);
+        }
+    };
+};
+
 type PlaybackMutationResolvers = NonNullable<IResolvers['Mutation']>;
 
 export const playbackMutationResolvers: PlaybackMutationResolvers = {
-    reportPlaybackState: createReportPlaybackStateMutationResolver()
+    reportPlaybackState: createReportPlaybackStateMutationResolver(),
+    savePlaybackQueue: createSavePlaybackQueueMutationResolver()
 };

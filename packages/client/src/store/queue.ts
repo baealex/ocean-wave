@@ -2,6 +2,8 @@ import { BaseStore } from './base-store';
 
 import { musicStore } from './music';
 import { playbackSessionStore } from './playback-session';
+import { playbackQueueStore } from './playback-queue';
+import type { PlaybackQueueSnapshot } from '~/api/playback-queue';
 
 import {
     type AudioChannel,
@@ -27,6 +29,7 @@ import { MusicListener } from '~/socket';
 import { shuffle } from '~/modules/shuffle';
 
 const PLAYBACK_CHECKPOINT_INTERVAL_MS = 10_000;
+const SERVER_QUEUE_SAVE_DELAY_MS = 1_000;
 
 interface QueueStoreState {
     selected: number | null;
@@ -69,6 +72,11 @@ class QueueStore extends BaseStore<QueueStoreState> {
     lastCheckpointClientSessionId: string | null = null;
     lastCheckpointPlayedMs = 0;
     private musicStoreUnsubscribe: (() => void) | null = null;
+    private playbackQueueStoreUnsubscribe: (() => void) | null = null;
+    private serverQueueSaveTimer: ReturnType<typeof setTimeout> | null = null;
+    private applyingQueueSnapshot = false;
+    private musicLoaded = false;
+    private appliedRestoreVersion = 0;
 
     constructor() {
         super();
@@ -180,8 +188,35 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
         this.audioChannel = new WebAudioChannel(audioChannelEventHandler);
 
+        this.playbackQueueStoreUnsubscribe = playbackQueueStore.subscribe((state, previousState) => {
+            if (state.error && state.error !== previousState.error) {
+                toast(state.error);
+            }
+
+            if (!this.musicLoaded || state.restoreVersion === this.appliedRestoreVersion) {
+                return;
+            }
+
+            this.appliedRestoreVersion = state.restoreVersion;
+
+            if (playbackQueueStore.hasPendingSave) {
+                return;
+            }
+
+            if (state.snapshot) {
+                void this.restoreServerQueue(state.snapshot);
+                return;
+            }
+
+            if (this.state.items.length > 0) {
+                this.saveServerQueue();
+            }
+        });
+
         this.musicStoreUnsubscribe = musicStore.subscribe(async ({ loaded }) => {
             if (loaded) {
+                this.musicLoaded = true;
+                this.applyingQueueSnapshot = true;
                 const queue = localStorage.getItem('queue');
                 if (queue) {
                     const persistedState = JSON.parse(queue) as Partial<QueueStoreState>;
@@ -221,6 +256,17 @@ class QueueStore extends BaseStore<QueueStoreState> {
                                 )
                             });
                         }
+                    }
+                }
+                this.applyingQueueSnapshot = false;
+
+                if (playbackQueueStore.state.initialized) {
+                    this.appliedRestoreVersion = playbackQueueStore.state.restoreVersion;
+
+                    if (playbackQueueStore.state.snapshot && !playbackQueueStore.hasPendingSave) {
+                        await this.restoreServerQueue(playbackQueueStore.state.snapshot);
+                    } else if (!playbackQueueStore.state.snapshot && this.state.items.length > 0) {
+                        this.saveServerQueue();
                     }
                 }
                 this.musicStoreUnsubscribe?.();
@@ -278,7 +324,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         let nextSourceItems = this.state.sourceItems;
 
         if (this.state.shuffle) {
-            nextSourceItems = [...this.state.items, id];
+            nextSourceItems = [...this.state.sourceItems, id];
         }
         if (this.state.insertMode === 'first') {
             nextItems = [id, ...this.state.items];
@@ -507,7 +553,15 @@ class QueueStore extends BaseStore<QueueStoreState> {
         this.audioChannel.download(getMusic(id)!);
     }
 
-    afterStateChange() {
+    afterStateChange(state: QueueStoreState, previousState: QueueStoreState) {
+        if (
+            this.musicLoaded
+            && !this.applyingQueueSnapshot
+            && this.hasServerQueueChange(state, previousState)
+        ) {
+            this.scheduleServerQueueSave();
+        }
+
         if (this.saveTimer) {
             return;
         }
@@ -526,8 +580,16 @@ class QueueStore extends BaseStore<QueueStoreState> {
             this.saveTimer = null;
         }
 
+        if (this.serverQueueSaveTimer) {
+            clearTimeout(this.serverQueueSaveTimer);
+            this.serverQueueSaveTimer = null;
+            this.saveServerQueue();
+        }
+
         this.musicStoreUnsubscribe?.();
         this.musicStoreUnsubscribe = null;
+        this.playbackQueueStoreUnsubscribe?.();
+        this.playbackQueueStoreUnsubscribe = null;
         window.removeEventListener('beforeunload', this.handleBeforeUnload);
         window.removeEventListener('pagehide', this.handlePageHide);
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
@@ -539,6 +601,92 @@ class QueueStore extends BaseStore<QueueStoreState> {
             ...this.state,
             isPlaying: false
         }));
+    }
+
+    private hasServerQueueChange(state: QueueStoreState, previousState: QueueStoreState) {
+        return state.items !== previousState.items
+            || state.sourceItems !== previousState.sourceItems
+            || state.selected !== previousState.selected
+            || state.shuffle !== previousState.shuffle
+            || state.repeatMode !== previousState.repeatMode;
+    }
+
+    private scheduleServerQueueSave() {
+        if (this.serverQueueSaveTimer) {
+            clearTimeout(this.serverQueueSaveTimer);
+        }
+
+        this.serverQueueSaveTimer = setTimeout(() => {
+            this.serverQueueSaveTimer = null;
+            this.saveServerQueue();
+        }, SERVER_QUEUE_SAVE_DELAY_MS);
+    }
+
+    private saveServerQueue() {
+        if (!this.musicLoaded || this.applyingQueueSnapshot) {
+            return;
+        }
+
+        playbackQueueStore.save({
+            musicIds: this.state.items,
+            sourceMusicIds: this.state.shuffle ? this.state.sourceItems : [],
+            currentIndex: this.state.selected,
+            shuffle: this.state.shuffle,
+            repeatMode: this.state.repeatMode
+        });
+    }
+
+    private async restoreServerQueue(snapshot: PlaybackQueueSnapshot) {
+        if (this.state.isPlaying) {
+            return;
+        }
+
+        this.applyingQueueSnapshot = true;
+
+        try {
+            const selectedMusicId = snapshot.currentIndex === null
+                ? null
+                : snapshot.musicIds[snapshot.currentIndex];
+            const resumeTime = selectedMusicId === this.state.currentTrackId
+                ? this.state.currentTime
+                : 0;
+            const restoredQueueState = restoreQueueState({
+                items: snapshot.musicIds,
+                sourceItems: snapshot.sourceMusicIds,
+                selected: snapshot.currentIndex,
+                currentTrackId: selectedMusicId,
+                currentTime: resumeTime
+            }, id => getMusic(id) !== undefined, id => getMusic(id)?.duration);
+            const progress = getProgress(
+                restoredQueueState.currentTime,
+                restoredQueueState.currentTrackId
+                    ? getMusic(restoredQueueState.currentTrackId)?.duration
+                    : undefined
+            );
+
+            await this.set({
+                ...restoredQueueState,
+                isPlaying: false,
+                shuffle: snapshot.shuffle,
+                repeatMode: snapshot.repeatMode,
+                progress
+            });
+
+            const music = restoredQueueState.currentTrackId
+                ? getMusic(restoredQueueState.currentTrackId)
+                : undefined;
+
+            if (music) {
+                document.title = `${music.name} - ${music.artist.name}`;
+                this.audioChannel.load(music);
+
+                if (restoredQueueState.currentTime > 0) {
+                    this.audioChannel.seek(restoredQueueState.currentTime);
+                }
+            }
+        } finally {
+            this.applyingQueueSnapshot = false;
+        }
     }
 
     private handleBeforeUnload = () => {
