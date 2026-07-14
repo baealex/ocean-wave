@@ -11,7 +11,6 @@ import {
     Button,
     CollectionHeader,
     VerticalSortable,
-    Flex,
     IconButton,
     StateMessage
 } from '~/components/shared';
@@ -36,7 +35,7 @@ function PlaylistDndItem({
     onLongPress: () => void;
 }) {
     const {
-        attributes, listeners, setNodeRef, transform, transition
+        attributes, isDragging, listeners, setNodeRef, transform, transition
     } = useSortable({ id: playlist.id });
     const style = {
         transform: CSS.Transform.toString(transform),
@@ -44,16 +43,16 @@ function PlaylistDndItem({
     };
 
     return (
-        <Flex
+        <div
             ref={setNodeRef}
-            direction="row"
-            align="center"
-            className="grid w-full grid-cols-[48px_minmax(0,1fr)] items-center gap-x-[var(--b-spacing-xs)] px-[var(--b-spacing-md)]"
-            style={style}
-            {...attributes}>
+            className={`relative grid w-full grid-cols-[44px_minmax(0,1fr)] items-center gap-1 rounded-[var(--b-radius-xl)] border bg-[var(--b-color-surface-item)] p-1 transition-[border-color,background-color,box-shadow] hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] focus-within:border-[var(--b-color-focus)] focus-within:shadow-[0_0_0_3px_var(--b-color-focus-ring)] ${isDragging ? 'z-[1] border-[var(--b-color-focus)] shadow-[var(--b-shadow-queue-drag)]' : 'border-[var(--b-color-border-subtle)]'}`}
+            style={style}>
             <IconButton
+                {...attributes}
+                size="md"
+                tone="muted"
                 aria-label={`Reorder ${playlist.name}`}
-                className="justify-self-center cursor-grab touch-none"
+                className="justify-self-center cursor-grab touch-none opacity-55 hover:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
                 {...listeners}>
                 <Menu />
             </IconButton>
@@ -61,11 +60,12 @@ function PlaylistDndItem({
                 <PlaylistItem
                     key={playlist.id}
                     {...playlist}
+                    layout="collection"
                     onClick={onClick}
                     onLongPress={onLongPress}
                 />
             </div>
-        </Flex>
+        </div>
     );
 }
 
@@ -117,38 +117,43 @@ export default function Playlist() {
                     </Button>
                 )}
             />
-            <VerticalSortable items={playlists.map((playlist) => playlist.id)} onDragEnd={handleDragEnd}>
-                {!loaded && (
-                    <Loading />
-                )}
-                {loaded && playlists.length === 0 && (
-                    <StateMessage
-                        className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-2xl)]"
-                        icon={<ListMusic />}
-                        heading="No playlists yet."
-                        description="Create a playlist to collect tracks for later."
-                        actions={(
-                            <Button onClick={handleOpenCreateDialog}>
-                                Create playlist
-                            </Button>
-                        )}
-                    />
-                )}
-                {loaded && playlists?.map((playlist) => (
-                    <PlaylistDndItem
-                        key={playlist.id}
-                        playlist={playlist}
-                        onClick={() => navigate(`/playlist/${playlist.id}`)}
-                        onLongPress={() => panel.open({
-                            content: (
-                                <PlaylistActionPanelContent
-                                    id={playlist.id}
-                                    onPlaylistClick={() => navigate(`/playlist/${playlist.id}`)}
-                                />
-                            )
-                        })}
-                    />
-                ))}
+            <VerticalSortable
+                items={playlists.map((playlist) => playlist.id)}
+                getItemLabel={(id) => playlists.find((playlist) => playlist.id === id)?.name ?? 'Playlist'}
+                onDragEnd={handleDragEnd}>
+                <div className="mx-auto flex w-full max-w-[920px] flex-col gap-3 px-4 py-4 sm:px-6 sm:pb-8">
+                    {!loaded && (
+                        <Loading />
+                    )}
+                    {loaded && playlists.length === 0 && (
+                        <StateMessage
+                            className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-2xl)]"
+                            icon={<ListMusic />}
+                            heading="No playlists yet."
+                            description="Create a playlist to collect tracks for later."
+                            actions={(
+                                <Button onClick={handleOpenCreateDialog}>
+                                    Create playlist
+                                </Button>
+                            )}
+                        />
+                    )}
+                    {loaded && playlists?.map((playlist) => (
+                        <PlaylistDndItem
+                            key={playlist.id}
+                            playlist={playlist}
+                            onClick={() => navigate(`/playlist/${playlist.id}`)}
+                            onLongPress={() => panel.open({
+                                content: (
+                                    <PlaylistActionPanelContent
+                                        id={playlist.id}
+                                        onPlaylistClick={() => navigate(`/playlist/${playlist.id}`)}
+                                    />
+                                )
+                            })}
+                        />
+                    ))}
+                </div>
             </VerticalSortable>
             <TextEntryDialog
                 open={isCreateDialogOpen}

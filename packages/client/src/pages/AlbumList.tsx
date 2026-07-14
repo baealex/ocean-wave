@@ -1,28 +1,26 @@
 import { useAppStore as useStore } from '~/store/base-store';
 import { useDeferredValue } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
 import {
     ItemSortPanelContent,
-    Loading,
     Button,
+    COLLECTION_CARD_HEIGHT_OFFSET,
+    CollectionGridSkeleton,
     CollectionHeader,
+    FixedVirtualGrid,
     StickyHeaderActions,
     SearchField,
-    FixedVirtualList,
     StateMessage
 } from '~/components/shared';
-import { AlbumListItem } from '~/components/album';
+import { AlbumCollectionCard } from '~/components/album';
 import * as Icon from '~/icon';
 
 import { panel } from '~/modules/panel';
 
 import { albumStore } from '~/store/album';
 
-const ALBUM_LIST_ROW_HEIGHT = 88;
-
 export default function Album() {
-    const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
 
     const [{ albums, loaded }] = useStore(albumStore);
@@ -77,14 +75,14 @@ export default function Album() {
                 </StickyHeaderActions>
             </CollectionHeader>
             {!loaded && (
-                <Loading />
+                <CollectionGridSkeleton label="Loading albums" />
             )}
             {loaded && (
-                <FixedVirtualList
+                <FixedVirtualGrid
                     items={filteredAlbums}
-                    rowHeight={ALBUM_LIST_ROW_HEIGHT}
-                    overscanPx={ALBUM_LIST_ROW_HEIGHT * 8}
+                    ariaLabel="Albums"
                     getKey={(album) => album.id}
+                    itemHeightOffset={COLLECTION_CARD_HEIGHT_OFFSET}
                     emptyState={(
                         <StateMessage
                             className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-2xl)]"
@@ -96,13 +94,13 @@ export default function Album() {
                         />
                     )}
                     renderItem={(album) => (
-                        <AlbumListItem
+                        <AlbumCollectionCard
+                            albumId={album.id}
                             albumName={album.name}
                             albumCover={album.cover}
                             artistName={album.artist.name}
                             publishedYear={album.publishedYear}
                             musicCount={album.musics?.length}
-                            onClick={() => navigate(`/album/${album.id}`)}
                         />
                     )}
                 />
