@@ -77,19 +77,6 @@ export function toTrack(serverUrl: string, music: PlayableMusic, sessionCookie?:
   };
 }
 
-const QUEUE_TRACK_LIMIT = 64;
-const QUEUE_TRACKS_BEFORE_SELECTED = 12;
-
-function getQueueWindow(musics: PlayableMusic[], selectedIndex: number) {
-  const start = Math.max(0, Math.min(selectedIndex - QUEUE_TRACKS_BEFORE_SELECTED, Math.max(0, musics.length - QUEUE_TRACK_LIMIT)));
-  const end = Math.min(musics.length, start + QUEUE_TRACK_LIMIT);
-
-  return {
-    queue: musics.slice(start, end),
-    selectedQueueIndex: selectedIndex - start,
-  };
-}
-
 export async function playLibraryFrom(
   serverUrl: string,
   musics: PlayableMusic[],
@@ -100,11 +87,9 @@ export async function playLibraryFrom(
   const selectedMusic = musics[selectedIndex];
   if (!selectedMusic) return;
 
-  const { queue, selectedQueueIndex } = getQueueWindow(musics, selectedIndex);
-
   await prepareTrackPlayer();
   await TrackPlayer.reset();
-  await TrackPlayer.add(queue.map(music => toTrack(serverUrl, music, sessionCookie)));
-  await TrackPlayer.skip(selectedQueueIndex);
+  await TrackPlayer.add(musics.map(music => toTrack(serverUrl, music, sessionCookie)));
+  await TrackPlayer.skip(selectedIndex);
   await TrackPlayer.play();
 }
