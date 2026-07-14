@@ -2,7 +2,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { useSortable } from '@dnd-kit/sortable';
 
 interface SortableItemRenderProps {
+    attributes: ReturnType<typeof useSortable>['attributes'];
     listeners: ReturnType<typeof useSortable>['listeners'];
+    setActivatorNodeRef: ReturnType<typeof useSortable>['setActivatorNodeRef'];
 }
 
 interface SortableItemProps {
@@ -15,6 +17,7 @@ const SortableItem = ({ id, className, render }: SortableItemProps) => {
     const {
         attributes,
         listeners,
+        setActivatorNodeRef,
         setNodeRef,
         transform,
         transition
@@ -23,13 +26,12 @@ const SortableItem = ({ id, className, render }: SortableItemProps) => {
     return (
         <div
             ref={setNodeRef}
-            {...attributes}
             className={className}
             style={{
                 transform: CSS.Translate.toString(transform),
                 transition
             }}>
-            {render({ listeners })}
+            {render({ attributes, listeners, setActivatorNodeRef })}
         </div>
     );
 };

@@ -187,7 +187,10 @@ export default function PlaylistDetail() {
             )}
             <div className="min-w-0 flex-1">
                 {playlistMusics.length > 0 ? (
-                    <VerticalSortable items={playlistMusics.map(({ id }) => id)} onDragEnd={handleDragEnd}>
+                    <VerticalSortable
+                        items={playlistMusics.map(({ id }) => id)}
+                        getItemLabel={(musicId) => musicMap.get(musicId)?.name ?? 'Track'}
+                        onDragEnd={handleDragEnd}>
                         {playlistMusics.map(({ id }) => {
                             const music = musicMap.get(id);
 
@@ -211,7 +214,7 @@ export default function PlaylistDetail() {
                                 <SortableItem
                                     id={music.id}
                                     key={music.id}
-                                    render={({ listeners }) => (
+                                    render={({ attributes, listeners, setActivatorNodeRef }) => (
                                         <div className={listRowClass({ layout: 'selection', surface: 'plain', selected: isSelected })}>
                                             {isSelectMode ? (
                                                 <SelectionCheckButton
@@ -223,6 +226,8 @@ export default function PlaylistDetail() {
                                                 />
                                             ) : (
                                                 <IconButton
+                                                    ref={setActivatorNodeRef}
+                                                    {...attributes}
                                                     aria-label={`Reorder ${music.name}`}
                                                     className="justify-self-center cursor-grab touch-none"
                                                     {...listeners}>

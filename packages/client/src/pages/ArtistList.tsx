@@ -1,18 +1,19 @@
 import { useAppStore as useStore } from '~/store/base-store';
 import { useDeferredValue } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
 import {
-    FixedVirtualList,
+    FixedVirtualGrid,
     ItemSortPanelContent,
-    Loading,
     Button,
+    COLLECTION_CARD_HEIGHT_OFFSET,
+    CollectionGridSkeleton,
     CollectionHeader,
     StickyHeaderActions,
     SearchField,
     StateMessage
 } from '~/components/shared';
-import { ArtistListItem } from '~/components/artist';
+import { ArtistCollectionCard } from '~/components/artist';
 
 import * as Icon from '~/icon';
 
@@ -20,10 +21,7 @@ import { panel } from '~/modules/panel';
 
 import { artistStore } from '~/store/artist';
 
-const ARTIST_LIST_ROW_HEIGHT = 96;
-
 export default function ArtistList() {
-    const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
 
     const [{ artists, loaded }] = useStore(artistStore);
@@ -77,14 +75,14 @@ export default function ArtistList() {
                 </StickyHeaderActions>
             </CollectionHeader>
             {!loaded && (
-                <Loading />
+                <CollectionGridSkeleton label="Loading artists" />
             )}
             {loaded && (
-                <FixedVirtualList
+                <FixedVirtualGrid
                     items={filteredArtists}
-                    rowHeight={ARTIST_LIST_ROW_HEIGHT}
-                    overscanPx={ARTIST_LIST_ROW_HEIGHT * 5}
+                    ariaLabel="Artists"
                     getKey={(artist) => artist.id}
+                    itemHeightOffset={COLLECTION_CARD_HEIGHT_OFFSET}
                     emptyState={(
                         <StateMessage
                             className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-2xl)]"
@@ -96,13 +94,12 @@ export default function ArtistList() {
                         />
                     )}
                     renderItem={(artist) => (
-                        <ArtistListItem
-                            key={artist.id}
+                        <ArtistCollectionCard
+                            artistId={artist.id}
                             artistName={artist.name}
                             artistCover={artist.latestAlbum?.cover || ''}
                             musicCount={artist.musicCount}
                             albumCount={artist.albumCount}
-                            onClick={() => navigate(`/artist/${artist.id}`)}
                         />
                     )}
                 />
