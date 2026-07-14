@@ -181,9 +181,11 @@ PlaybackQueueItem
 - queueId
 - musicId
 - order
+- sourceOrder (nullable; preserves the pre-shuffle order)
 ```
 
 The server owns the shared queue snapshot. The web client still owns immediate audio execution and keeps a local fallback copy.
+`sourceOrder` is populated only while shuffle is enabled so disabling shuffle can restore the user's original sequence after a server round trip.
 
 First-phase queue writes may replace the full ordered item list in one transaction. Every mutation includes `expectedRevision`:
 
@@ -214,6 +216,8 @@ During the queue phase:
 - A successful server queue read becomes the shared starting snapshot.
 - `localStorage` remains a fallback when the server is unavailable or has no queue yet.
 - A local fallback is not uploaded automatically over a newer server revision.
+- Web clients debounce only structural queue changes; playback position updates do not write the queue.
+- A server read repairs unavailable items and advances the queue revision once for the repaired snapshot.
 - An explicit user playback or queue action may claim the active session and submit a mutation using the last observed revision.
 - On conflict, preserve local playback, display or log the conflict, and refresh the shared snapshot. Automatic multi-way merge is out of scope.
 

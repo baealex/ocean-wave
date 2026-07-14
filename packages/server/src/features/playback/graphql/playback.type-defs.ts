@@ -7,6 +7,12 @@ export const playbackType = gql`
         stopped
     }
 
+    enum PlaybackQueueRepeatMode {
+        none
+        one
+        all
+    }
+
     type PlaybackSession {
         id: ID!
         state: PlaybackState!
@@ -30,6 +36,28 @@ export const playbackType = gql`
         conflict: PlaybackSessionConflict
     }
 
+    type PlaybackQueue {
+        id: ID!
+        musicIds: [ID!]!
+        sourceMusicIds: [ID!]!
+        currentIndex: Int
+        shuffle: Boolean!
+        repeatMode: PlaybackQueueRepeatMode!
+        revision: Int!
+        updatedAt: String!
+    }
+
+    type PlaybackQueueConflict {
+        reason: String!
+        queue: PlaybackQueue!
+    }
+
+    type PlaybackQueueSaveResult {
+        type: String!
+        queue: PlaybackQueue!
+        conflict: PlaybackQueueConflict
+    }
+
     input ReportPlaybackStateInput {
         deviceId: String!
         sequence: Int!
@@ -39,11 +67,21 @@ export const playbackType = gql`
         positionMs: Float!
         observedAt: String
     }
+
+    input SavePlaybackQueueInput {
+        musicIds: [ID!]!
+        sourceMusicIds: [ID!]!
+        currentIndex: Int
+        shuffle: Boolean!
+        repeatMode: PlaybackQueueRepeatMode!
+        expectedRevision: Int!
+    }
 `;
 
 export const playbackQuery = gql`
     type Query {
         playbackSession: PlaybackSession
+        playbackQueue: PlaybackQueue
     }
 `;
 
@@ -53,6 +91,7 @@ export const playbackMutation = gql`
             input: ReportPlaybackStateInput!
             originClientId: String
         ): PlaybackSessionReportResult!
+        savePlaybackQueue(input: SavePlaybackQueueInput!): PlaybackQueueSaveResult!
     }
 `;
 

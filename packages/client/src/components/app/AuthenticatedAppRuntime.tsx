@@ -8,6 +8,7 @@ import { albumStore } from '~/store/album';
 import { artistStore } from '~/store/artist';
 import { musicStore } from '~/store/music';
 import { playbackSessionStore } from '~/store/playback-session';
+import { playbackQueueStore } from '~/store/playback-queue';
 import {
     MusicListener,
     socket,
@@ -52,9 +53,11 @@ export default function AuthenticatedAppRuntime({
 
     useEffect(() => {
         playbackSessionStore.connect();
+        playbackQueueStore.connect();
 
         return () => {
             playbackSessionStore.disconnect();
+            playbackQueueStore.disconnect();
         };
     }, []);
 
