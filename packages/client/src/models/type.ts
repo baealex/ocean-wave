@@ -10,6 +10,7 @@ export interface Music {
     lastPlayedAt: string | null;
     totalPlayedMs: number;
     filePath: string;
+    hasMetadataOverride: boolean;
     isLiked: boolean;
     isHated: boolean;
     createdAt: number;
@@ -52,6 +53,7 @@ export interface Album {
     id: string;
     name: string;
     cover: string;
+    isCoverCustom: boolean;
     publishedYear: string;
     artist: {
         id: string;

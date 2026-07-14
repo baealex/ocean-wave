@@ -1,3 +1,8 @@
+import axios from 'axios';
+
+import type { Music } from '~/models/type';
+import { getOriginClientId } from '~/socket/socket';
+
 import { graphQuery } from './graphql';
 import {
     type OriginClientVariables,
@@ -39,6 +44,65 @@ export interface RecordPlaybackParams {
     startedAt: string;
     source?: string;
     clientSessionId?: string;
+}
+
+export interface UpdateMusicMetadataInput {
+    id: string;
+    title: string;
+    artist: string;
+    album: string;
+    albumArtist?: string | null;
+    publishedYear: string;
+    trackNumber: number;
+    genres: string[];
+}
+
+export interface AlbumArtworkResult {
+    albumId: string;
+    cover: string;
+    isCoverCustom: boolean;
+}
+
+export function updateMusicMetadata(input: UpdateMusicMetadataInput) {
+    return graphQuery<{
+        updateMusicMetadata: Pick<Music, 'id' | 'name'>;
+    }, { input: UpdateMusicMetadataInput } & OriginClientVariables>(
+        `mutation UpdateMusicMetadata($input: UpdateMusicMetadataInput!, $originClientId: String) {
+            updateMusicMetadata(input: $input, originClientId: $originClientId) {
+                id
+                name
+            }
+        }`,
+        withOriginClientId({ input })
+    );
+}
+
+const getArtworkHeaders = (contentType?: string) => {
+    const originClientId = getOriginClientId();
+
+    return {
+        ...(contentType ? { 'Content-Type': contentType } : {}),
+        ...(originClientId ? { 'X-Ocean-Origin-Client-Id': originClientId } : {})
+    };
+};
+
+export async function uploadMusicArtwork(id: string, file: File) {
+    const { data } = await axios.put<AlbumArtworkResult>(
+        `/api/music/${encodeURIComponent(id)}/artwork`,
+        file,
+        { headers: getArtworkHeaders(file.type) }
+    );
+
+    return data;
+}
+
+export async function restoreMusicArtwork(id: string) {
+    const { data } = await axios.delete<AlbumArtworkResult>(
+        `/api/music/${encodeURIComponent(id)}/artwork`,
+        { headers: getArtworkHeaders() }
+    );
+
+    return data;
 }
 
 export interface PlaybackRecordResult {

@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import type { Socket } from 'socket.io';
-import { parseBuffer } from '../modules/music-metadata';
 
 import { connectors } from './connectors';
 
@@ -15,6 +14,11 @@ import {
     resolveCachePath,
     resolveMusicPath
 } from '../modules/storage-paths';
+import {
+    applyMusicMetadataOverride,
+    parseTrackMetadata,
+    type ParsedTrackMetadata
+} from '../modules/track-metadata';
 import {
     TRACK_CONTENT_HASH_VERSION,
     createTrackContentHash,
@@ -45,22 +49,6 @@ const SUPPORTED_AUDIO_EXTENSIONS = new Set([
 
 export const SYNC_EVENT = 'sync-music';
 
-interface ParsedTrackMetadata {
-    title: string;
-    albumArtist: string | null;
-    artist: string;
-    album: string;
-    pictureData: Buffer | null;
-    genres: string[];
-    year: string;
-    trackNumber: number;
-    codec: string;
-    container: string;
-    bitrate: number;
-    duration: number;
-    sampleRate: number;
-}
-
 interface SyncResultEntry {
     musicId: number;
     musicName: string;
@@ -87,10 +75,6 @@ const emitSyncMessage = (socket: Pick<Socket, 'emit'>, message: string) => {
     socket.emit(SYNC_EVENT, message);
 };
 
-const toPictureBuffer = (data: Uint8Array | undefined): Buffer | null => {
-    return data ? Buffer.from(data) : null;
-};
-
 const isSupportedAudioFile = (filePath: string) => {
     return SUPPORTED_AUDIO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 };
@@ -103,43 +87,6 @@ const toTrackIdentityRecord = (music: Music): TrackIdentityRecord => {
         lastSeenAt: music.lastSeenAt,
         missingSinceAt: music.missingSinceAt,
         syncStatus: music.syncStatus as TrackSyncStatus
-    };
-};
-
-const parseTrackMetadata = async (filePath: string, data: Buffer): Promise<ParsedTrackMetadata> => {
-    const { format, common } = await parseBuffer(data);
-    const {
-        container = '',
-        codec = '',
-        bitrate = 0,
-        duration = 0,
-        sampleRate = 0
-    } = format;
-    const {
-        title = path.parse(filePath).name,
-        albumartist: albumArtist = null,
-        artist = 'unknown',
-        album = 'unknown',
-        picture,
-        genre = [],
-        year = (new Date()).getFullYear(),
-        track
-    } = common;
-
-    return {
-        title,
-        albumArtist,
-        artist,
-        album,
-        pictureData: toPictureBuffer(picture?.[0]?.data),
-        genres: genre,
-        year: year.toString(),
-        trackNumber: track?.no || 1,
-        codec,
-        container,
-        bitrate,
-        duration,
-        sampleRate
     };
 };
 
@@ -170,7 +117,12 @@ const findOrCreateAlbum = async ({
     });
 
     if (existingAlbum) {
-        return existingAlbum;
+        return existingAlbum.publishedYear === publishedYear
+            ? existingAlbum
+            : models.album.update({
+                where: { id: existingAlbum.id },
+                data: { publishedYear }
+            });
     }
 
     return models.album.create({
@@ -214,24 +166,30 @@ const upsertMusicFromMetadata = async ({
     cachePath: string;
     resizedPath: string;
 }) => {
-    const artist = await findOrCreateArtist(metadata.artist);
-    const albumArtist = metadata.albumArtist
-        ? await findOrCreateArtist(metadata.albumArtist)
+    const resolvedMetadata = applyMusicMetadataOverride(
+        metadata,
+        existingMusic?.metadataOverride
+    );
+    const artist = await findOrCreateArtist(resolvedMetadata.artist);
+    const albumArtist = resolvedMetadata.albumArtist
+        ? await findOrCreateArtist(resolvedMetadata.albumArtist)
         : null;
     const album = await findOrCreateAlbum({
-        name: metadata.album,
-        publishedYear: metadata.year,
+        name: resolvedMetadata.album,
+        publishedYear: resolvedMetadata.year,
         artistId: albumArtist ? albumArtist.id : artist.id
     });
-    const genres = await findOrCreateGenres(metadata.genres);
+    const genres = await findOrCreateGenres(resolvedMetadata.genres);
 
-    const coverPath = await syncAlbumCoverCache({
-        albumId: album.id,
-        currentCoverPath: album.cover,
-        pictureData: metadata.pictureData,
-        cachePath,
-        resizedPath
-    });
+    const coverPath = album.isCoverCustom
+        ? album.cover
+        : await syncAlbumCoverCache({
+            albumId: album.id,
+            currentCoverPath: album.cover,
+            pictureData: metadata.pictureData,
+            cachePath,
+            resizedPath
+        });
 
     if (album.cover !== coverPath) {
         await models.album.update({
@@ -248,9 +206,9 @@ const upsertMusicFromMetadata = async ({
                 container: metadata.container,
                 bitrate: metadata.bitrate,
                 sampleRate: metadata.sampleRate,
-                name: metadata.title,
+                name: resolvedMetadata.title,
                 duration: metadata.duration,
-                trackNumber: metadata.trackNumber,
+                trackNumber: resolvedMetadata.trackNumber,
                 filePath,
                 contentHash,
                 hashVersion: TRACK_CONTENT_HASH_VERSION,
@@ -270,9 +228,9 @@ const upsertMusicFromMetadata = async ({
             container: metadata.container,
             bitrate: metadata.bitrate,
             sampleRate: metadata.sampleRate,
-            name: metadata.title,
+            name: resolvedMetadata.title,
             duration: metadata.duration,
-            trackNumber: metadata.trackNumber,
+            trackNumber: resolvedMetadata.trackNumber,
             filePath,
             contentHash,
             hashVersion: TRACK_CONTENT_HASH_VERSION,
@@ -319,7 +277,7 @@ const repairAlbumCoverCacheIfNeeded = async ({
 }) => {
     const album = albumById.get(music.albumId);
 
-    if (!album || !album.cover || hasHealthyAlbumCoverCache({
+    if (!album || album.isCoverCustom || !album.cover || hasHealthyAlbumCoverCache({
         coverPath: album.cover,
         cachePath,
         resizedPath

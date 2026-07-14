@@ -18,6 +18,10 @@ export const getAlbumCoverPath = (albumId: number) => {
     return `${ALBUM_COVER_CACHE_PREFIX}${getAlbumCoverFileName(albumId)}`;
 };
 
+export const getVersionedAlbumCoverPath = (albumId: number, updatedAt: Date) => {
+    return `${getAlbumCoverPath(albumId)}?v=${updatedAt.getTime()}`;
+};
+
 export const parseAlbumIdFromCoverRequestPath = (requestPath: string) => {
     const match = requestPath.match(/^\/resized\/(\d+)\.jpg$/);
 
@@ -90,4 +94,49 @@ export const syncAlbumCoverCache = async ({
     }
 
     return getAlbumCoverPath(albumId);
+};
+
+export const saveCustomAlbumCover = async ({
+    albumId,
+    pictureData,
+    cachePath,
+    resizedPath
+}: {
+    albumId: number;
+    pictureData: Buffer;
+    cachePath: string;
+    resizedPath: string;
+}) => {
+    ensureDirectory(cachePath);
+    ensureDirectory(resizedPath);
+
+    const normalizedPicture = await sharp(pictureData, {
+        limitInputPixels: 40_000_000
+    })
+        .rotate()
+        .jpeg({ quality: 90 })
+        .toBuffer();
+    const fileName = getAlbumCoverFileName(albumId);
+
+    fs.writeFileSync(path.join(cachePath, fileName), normalizedPicture);
+    await sharp(normalizedPicture)
+        .resize(300, 300, { fit: 'cover' })
+        .toFile(path.join(resizedPath, fileName));
+
+    return getAlbumCoverPath(albumId);
+};
+
+export const removeAlbumCoverCache = ({
+    albumId,
+    cachePath,
+    resizedPath
+}: {
+    albumId: number;
+    cachePath: string;
+    resizedPath: string;
+}) => {
+    const fileName = getAlbumCoverFileName(albumId);
+
+    fs.rmSync(path.join(cachePath, fileName), { force: true });
+    fs.rmSync(path.join(resizedPath, fileName), { force: true });
 };

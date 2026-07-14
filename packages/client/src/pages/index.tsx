@@ -7,6 +7,7 @@ export { default as Equalizer } from './Equalizer';
 export { default as Favorite } from './Favorite';
 export { default as Home } from './Home';
 export { default as MusicList } from './MusicList';
+export { default as MusicEdit } from './MusicEdit';
 export { default as NotFound } from './NotFound';
 export { default as Player } from './Player';
 export { default as Playlist } from './Playlist';

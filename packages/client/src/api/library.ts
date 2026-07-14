@@ -14,6 +14,7 @@ export function getMusics() {
             'id',
             'name',
             'filePath',
+            'hasMetadataOverride',
             'codec',
             'duration',
             'playCount',
@@ -31,6 +32,7 @@ export function getMusics() {
                 'id',
                 'name',
                 'cover',
+                'isCoverCustom',
                 'publishedYear'
             ]),
             createQuery('tags', [
@@ -47,6 +49,42 @@ export function getMusics() {
                 'updatedAt'
             ])
         ])))
+    });
+}
+
+export function getMusic(id: string) {
+    return graphQLRequest<'music', Music, { id: string }>({
+        operationName: 'Music',
+        variables: { id },
+        query: wrapper('query Music($id: ID!)', createQuery<Music>('music(id: $id)', [
+            'id',
+            'name',
+            'filePath',
+            'codec',
+            'bitrate',
+            'sampleRate',
+            'duration',
+            'trackNumber',
+            'hasMetadataOverride',
+            createQuery<Artist>('artist', [
+                'id',
+                'name'
+            ]),
+            createQuery<Album>('album', [
+                'id',
+                'name',
+                'cover',
+                'isCoverCustom',
+                'publishedYear',
+                createQuery<Artist>('artist', [
+                    'id',
+                    'name'
+                ])
+            ]),
+            createQuery('genres', [
+                'name'
+            ])
+        ]))
     });
 }
 
@@ -99,6 +137,7 @@ export function getAlbums() {
             'id',
             'name',
             'cover',
+            'isCoverCustom',
             'publishedYear',
             'createdAt',
             createQuery<Artist>('artist', [
@@ -117,6 +156,7 @@ export function getAlbum(id: string) {
             'id',
             'name',
             'cover',
+            'isCoverCustom',
             'publishedYear',
             createQuery<Artist>('artist', [
                 'id',

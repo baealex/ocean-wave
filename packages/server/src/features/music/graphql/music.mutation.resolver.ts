@@ -4,10 +4,15 @@ import { connectors } from '~/socket/connectors';
 import {
     MUSIC_COUNT,
     MUSIC_HATE,
-    MUSIC_LIKE
+    MUSIC_LIKE,
+    MUSIC_UPDATED
 } from '~/socket/music';
 import { withOriginClientId } from '~/socket/origin-client';
 import { recordPlayback } from '../services/playback-records';
+import {
+    isMusicMetadataServiceError,
+    updateMusicMetadata
+} from '../services/metadata-editor';
 import {
     isMusicPreferenceServiceError,
     setMusicHated,
@@ -27,6 +32,10 @@ class MusicGraphQLError extends Error {
 }
 
 const toGraphQLError = (error: unknown) => {
+    if (isMusicMetadataServiceError(error)) {
+        return new MusicGraphQLError(error.message, error.code);
+    }
+
     if (isMusicPreferenceServiceError(error)) {
         return new MusicGraphQLError(error.message, error.code);
     }
@@ -101,10 +110,31 @@ export const createRecordPlaybackMutationResolver = (
     });
 };
 
+export const createUpdateMusicMetadataMutationResolver = (
+    updateMetadata = updateMusicMetadata
+) => {
+    return async (_: unknown, {
+        input,
+        originClientId
+    }: {
+        input: Parameters<typeof updateMusicMetadata>[0];
+        originClientId?: string | null;
+    }) => withMusicErrorHandling(async () => {
+        const result = await updateMetadata(input);
+
+        await notifySafely(() => connectors.notify(MUSIC_UPDATED, withOriginClientId({
+            musicId: result.id.toString()
+        }, originClientId)));
+
+        return result;
+    });
+};
+
 type MusicMutationResolvers = NonNullable<IResolvers['Mutation']>;
 
 export const musicMutationResolvers: MusicMutationResolvers = {
     setMusicLiked: createSetMusicLikedMutationResolver(),
     setMusicHated: createSetMusicHatedMutationResolver(),
+    updateMusicMetadata: createUpdateMusicMetadataMutationResolver(),
     recordPlayback: createRecordPlaybackMutationResolver()
 };

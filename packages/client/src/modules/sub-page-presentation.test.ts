@@ -12,6 +12,7 @@ describe('isSubPagePath', () => {
         expect(isSubPagePath('/album/1')).toBe(true);
         expect(isSubPagePath('/artist/1')).toBe(true);
         expect(isSubPagePath('/playlist/1')).toBe(true);
+        expect(isSubPagePath('/music/1/edit')).toBe(true);
         expect(isSubPagePath('/player')).toBe(true);
         expect(isSubPagePath('/queue')).toBe(true);
         expect(isSubPagePath('/album')).toBe(false);
@@ -25,6 +26,7 @@ describe('resolveSubPagePresentation', () => {
         expect(resolveSubPagePresentation('/album/1')).toBe('stacked');
         expect(resolveSubPagePresentation('/artist/1')).toBe('stacked');
         expect(resolveSubPagePresentation('/playlist/1')).toBe('stacked');
+        expect(resolveSubPagePresentation('/music/1/edit')).toBe('stacked');
     });
 
     it('does not treat equalizer as a sub page overlay', () => {

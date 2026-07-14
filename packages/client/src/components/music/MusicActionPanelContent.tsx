@@ -1,4 +1,5 @@
 import { useAppStore as useStore } from '~/store/base-store';
+import { useNavigate } from 'react-router-dom';
 
 import { Image, PanelContent } from '~/components/shared';
 import { PanelHeaderAction, panelContentClass } from '~/components/shared/PanelContent';
@@ -26,6 +27,7 @@ export default function MusicActionPanelContent({
     onArtistClick,
     onAlbumClick
 }: MusicActionPanelContentProps) {
+    const navigate = useNavigate();
     const [{ musicMap }] = useStore(musicStore);
 
     const music = musicMap.get(id);
@@ -122,6 +124,14 @@ export default function MusicActionPanelContent({
                             title: 'Music Tags',
                             content: <MusicTagPanelContent id={music.id} />
                         });
+                    }
+                },
+                {
+                    icon: <Icon.Pencil />,
+                    text: 'Edit track',
+                    onClick: () => {
+                        panel.close();
+                        setTimeout(() => navigate(`/music/${music.id}/edit`), 100);
                     }
                 },
                 {

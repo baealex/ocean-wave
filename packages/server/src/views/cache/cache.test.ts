@@ -150,4 +150,37 @@ describe('GET /cache/resized/:albumId.jpg', () => {
         expect(fs.existsSync(path.join(resolveCachePath(), `${album.id}.jpg`))).toBe(true);
         expect(fs.existsSync(path.join(resolveCachePath(), 'resized', `${album.id}.jpg`))).toBe(true);
     });
+
+    it('does not replace missing custom artwork with embedded artwork', async () => {
+        const artist = await models.artist.create({ data: { name: 'Custom Cover Artist' } });
+        const album = await models.album.create({
+            data: {
+                name: 'Custom Cover Album',
+                cover: '/cache/resized/999.jpg',
+                isCoverCustom: true,
+                publishedYear: '2026',
+                artistId: artist.id
+            }
+        });
+        await models.music.create({
+            data: {
+                name: 'Custom Cover Track',
+                artistId: artist.id,
+                albumId: album.id,
+                filePath: 'missing/custom-cover.mp3',
+                duration: 180,
+                codec: 'mp3',
+                container: 'mp3',
+                bitrate: 320,
+                sampleRate: 44_100,
+                trackNumber: 1
+            }
+        });
+
+        const response = await request(createApp(openAuthConfig))
+            .get(`/cache/resized/${album.id}.jpg`);
+
+        expect(response.status).toBe(404);
+        expect(parseBufferMock).not.toHaveBeenCalled();
+    });
 });
