@@ -127,8 +127,9 @@ export default function MusicEdit() {
 
     const initialValues = toEditorValues(music);
     const metadataChanged = JSON.stringify(values) !== JSON.stringify(initialValues);
+    const shouldWriteMetadata = metadataChanged || music.hasMetadataOverride;
     const artworkChanged = Boolean(artworkFile) || restoreArtwork;
-    const hasChanges = metadataChanged || artworkChanged;
+    const hasChanges = shouldWriteMetadata || artworkChanged;
     const artworkSource = restoreArtwork ? '' : music.album.cover;
 
     const updateValue = (key: keyof EditorValues, value: string) => {
@@ -171,7 +172,7 @@ export default function MusicEdit() {
         setIsSaving(true);
 
         try {
-            if (metadataChanged) {
+            if (shouldWriteMetadata) {
                 const response = await updateMusicMetadata({
                     id: music.id,
                     title: values.title,
@@ -219,10 +220,10 @@ export default function MusicEdit() {
                     <Text as="h1" size="2xl" weight="bold" className="leading-tight tracking-normal">
                         Edit track
                     </Text>
-                    {music.hasMetadataOverride && <Badge tone="accent">Manually edited</Badge>}
+                    {music.hasMetadataOverride && <Badge tone="accent">File update pending</Badge>}
                 </div>
                 <Text as="p" variant="tertiary" size="sm" className="max-w-[640px] leading-relaxed">
-                    These details are used throughout your library and stay in place when the music folder is scanned again.
+                    Metadata changes are written to the audio file so they survive rescans and move with your library.
                 </Text>
             </div>
 
@@ -309,6 +310,9 @@ export default function MusicEdit() {
                         <Field label="Release year">
                             <Input
                                 required
+                                inputMode="numeric"
+                                maxLength={4}
+                                pattern="\d{4}"
                                 value={values.publishedYear}
                                 disabled={isSaving}
                                 onChange={(event) => updateValue('publishedYear', event.target.value)}

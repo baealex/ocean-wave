@@ -2,9 +2,11 @@ import type { Prisma } from '@prisma/client';
 
 import models from '~/models';
 import {
-    serializeMusicMetadataOverride,
-    type MusicMetadataOverride
-} from '~/modules/track-metadata';
+    AudioMetadataWriteError,
+    writeTrackMetadataToFile
+} from '~/modules/audio-metadata-writer';
+import { resolveMusicFilePath } from '~/modules/storage-paths';
+import type { MusicMetadataOverride } from '~/modules/track-metadata';
 
 export interface UpdateMusicMetadataInput {
     id: string;
@@ -26,6 +28,41 @@ export class MusicMetadataServiceError extends Error {
         this.code = code;
     }
 }
+
+interface MusicMetadataDependencies {
+    writeTrackMetadata: typeof writeTrackMetadataToFile;
+}
+
+const defaultDependencies: MusicMetadataDependencies = {
+    writeTrackMetadata: writeTrackMetadataToFile
+};
+
+const musicMetadataUpdateLocks = new Map<number, Promise<void>>();
+
+const withMusicMetadataUpdateLock = async <T>(
+    musicId: number,
+    operation: () => Promise<T>
+) => {
+    const previousUpdate = musicMetadataUpdateLocks.get(musicId) ?? Promise.resolve();
+    let releaseUpdate!: () => void;
+    const updateGate = new Promise<void>((resolve) => {
+        releaseUpdate = resolve;
+    });
+    const currentUpdate = previousUpdate.then(() => updateGate);
+
+    musicMetadataUpdateLocks.set(musicId, currentUpdate);
+    await previousUpdate;
+
+    try {
+        return await operation();
+    } finally {
+        releaseUpdate();
+
+        if (musicMetadataUpdateLocks.get(musicId) === currentUpdate) {
+            musicMetadataUpdateLocks.delete(musicId);
+        }
+    }
+};
 
 export const isMusicMetadataServiceError = (
     error: unknown
@@ -70,6 +107,14 @@ const normalizeInput = (input: UpdateMusicMetadataInput): MusicMetadataOverride 
     }
 
     const albumArtist = input.albumArtist?.trim() || null;
+    const publishedYear = requireText(input.publishedYear, 'Release year', 4);
+
+    if (!/^\d{4}$/.test(publishedYear)) {
+        throw new MusicMetadataServiceError(
+            'Release year must use four digits.',
+            'INVALID_MUSIC_METADATA'
+        );
+    }
 
     if (albumArtist && albumArtist.length > 255) {
         throw new MusicMetadataServiceError(
@@ -83,7 +128,7 @@ const normalizeInput = (input: UpdateMusicMetadataInput): MusicMetadataOverride 
         artist: requireText(input.artist, 'Artist'),
         album: requireText(input.album, 'Album'),
         albumArtist,
-        year: requireText(input.publishedYear, 'Release year', 32),
+        year: publishedYear,
         trackNumber: input.trackNumber,
         genres
     };
@@ -97,7 +142,10 @@ const findOrCreateArtist = (transaction: Prisma.TransactionClient, name: string)
     });
 };
 
-export const updateMusicMetadata = async (input: UpdateMusicMetadataInput) => {
+export const updateMusicMetadata = async (
+    input: UpdateMusicMetadataInput,
+    dependencies = defaultDependencies
+) => {
     const musicId = Number(input.id);
 
     if (!Number.isInteger(musicId) || musicId < 1) {
@@ -106,54 +154,73 @@ export const updateMusicMetadata = async (input: UpdateMusicMetadataInput) => {
 
     const metadata = normalizeInput(input);
 
-    return models.$transaction(async (transaction) => {
-        const existingMusic = await transaction.music.findUnique({ where: { id: musicId } });
+    return withMusicMetadataUpdateLock(musicId, async () => {
+        const existingMusic = await models.music.findUnique({ where: { id: musicId } });
 
         if (!existingMusic) {
             throw new MusicMetadataServiceError('Music not found.', 'MUSIC_NOT_FOUND');
         }
 
-        const artist = await findOrCreateArtist(transaction, metadata.artist);
-        const albumArtist = metadata.albumArtist
-            ? await findOrCreateArtist(transaction, metadata.albumArtist)
-            : artist;
-        const existingAlbum = await transaction.album.findFirst({
-            where: {
-                name: metadata.album,
-                artistId: albumArtist.id
+        let writtenTrack: Awaited<ReturnType<typeof writeTrackMetadataToFile>>;
+
+        try {
+            writtenTrack = await dependencies.writeTrackMetadata(
+                resolveMusicFilePath(existingMusic.filePath),
+                metadata
+            );
+        } catch (error) {
+            if (error instanceof AudioMetadataWriteError) {
+                throw new MusicMetadataServiceError(error.message, error.code);
             }
-        });
-        const album = existingAlbum
-            ? await transaction.album.update({
-                where: { id: existingAlbum.id },
-                data: { publishedYear: metadata.year }
-            })
-            : await transaction.album.create({
-                data: {
+
+            throw error;
+        }
+
+        return models.$transaction(async (transaction) => {
+            const artist = await findOrCreateArtist(transaction, metadata.artist);
+            const albumArtist = metadata.albumArtist
+                ? await findOrCreateArtist(transaction, metadata.albumArtist)
+                : artist;
+            const existingAlbum = await transaction.album.findFirst({
+                where: {
                     name: metadata.album,
-                    cover: '',
-                    publishedYear: metadata.year,
                     artistId: albumArtist.id
                 }
             });
-        const genres = await Promise.all(metadata.genres.map((name) => {
-            return transaction.genre.upsert({
-                where: { name },
-                update: {},
-                create: { name }
-            });
-        }));
+            const album = existingAlbum
+                ? await transaction.album.update({
+                    where: { id: existingAlbum.id },
+                    data: { publishedYear: metadata.year }
+                })
+                : await transaction.album.create({
+                    data: {
+                        name: metadata.album,
+                        cover: '',
+                        publishedYear: metadata.year,
+                        artistId: albumArtist.id
+                    }
+                });
+            const genres = await Promise.all(metadata.genres.map((name) => {
+                return transaction.genre.upsert({
+                    where: { name },
+                    update: {},
+                    create: { name }
+                });
+            }));
 
-        return transaction.music.update({
-            where: { id: musicId },
-            data: {
-                name: metadata.title,
-                artistId: artist.id,
-                albumId: album.id,
-                trackNumber: metadata.trackNumber,
-                metadataOverride: serializeMusicMetadataOverride(metadata),
-                Genre: { set: genres.map((genre) => ({ id: genre.id })) }
-            }
+            return transaction.music.update({
+                where: { id: musicId },
+                data: {
+                    name: metadata.title,
+                    artistId: artist.id,
+                    albumId: album.id,
+                    trackNumber: metadata.trackNumber,
+                    metadataOverride: null,
+                    contentHash: writtenTrack.contentHash,
+                    hashVersion: writtenTrack.hashVersion,
+                    Genre: { set: genres.map((genre) => ({ id: genre.id })) }
+                }
+            });
         });
     });
 };
