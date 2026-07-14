@@ -9,11 +9,7 @@ const vendorModules = [
     'react-dom',
     'react-router-dom',
     'react-router',
-    '@tanstack/react-query',
-    '@dnd-kit/core',
-    '@dnd-kit/sortable',
-    '@dnd-kit/modifiers',
-    '@dnd-kit/utilities'
+    '@tanstack/react-query'
 ];
 const serverOrigin = process.env.OCEAN_WAVE_SERVER_ORIGIN ?? 'http://localhost:44100';
 

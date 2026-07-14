@@ -3,22 +3,18 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore as useStore } from '~/store/base-store';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import type { DragEndEvent } from '@dnd-kit/core';
-import { arrayMove } from '@dnd-kit/sortable';
-
 import {
     ActionBar,
     ActionBarButton,
     Button,
+    FixedVirtualSortableList,
     IconButton,
     ListSelectionToolbar,
     listRowClass,
     Loading,
     SelectionCheckButton,
-    SortableItem,
     StateMessage,
-    Text,
-    VerticalSortable
+    Text
 } from '~/components/shared';
 import { MusicActionPanelContent, MusicListItem } from '~/components/music';
 import { PlaylistPanelContent, PlaylistSummary } from '~/components/playlist';
@@ -43,6 +39,9 @@ import {
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
 import { TwoToneLayout, TwoTonePrimaryAction } from '~/components/layout';
+import { moveArrayItem } from '~/modules/fixed-virtual-sortable-list';
+
+const PLAYLIST_TRACK_ROW_HEIGHT = 80;
 
 export default function PlaylistDetail() {
     const navigate = useNavigate();
@@ -65,22 +64,29 @@ export default function PlaylistDetail() {
     const [isSelectMode, setIsSelectMode] = useState(false);
     const [selectedItems, setSelectedItems] = useState<string[]>([]);
 
-    const handleDragEnd = (event: DragEndEvent) => {
-        const { active, over } = event;
-
-        if (playlist && over && active.id !== over.id) {
-            const oldIndex = playlist.musics.findIndex(({ id }) => id === active.id);
-            const newIndex = playlist.musics.findIndex(({ id }) => id === over.id);
-            const newMusics = arrayMove(playlist.musics, oldIndex, newIndex);
-            PlaylistListener.changeMusicOrder(playlist.id, newMusics.map(({ id }) => id));
-
-            queryClient.setQueryData(playlistQueryKey, () => {
-                return {
-                    ...playlist,
-                    musics: newMusics
-                };
-            });
+    const handleReorder = (sourceIndex: number, targetIndex: number) => {
+        if (!playlist) {
+            return;
         }
+
+        const nextMusics = moveArrayItem(
+            playlist.musics ?? [],
+            sourceIndex,
+            targetIndex
+        );
+
+        if (nextMusics === playlist.musics) {
+            return;
+        }
+
+        PlaylistListener.changeMusicOrder(
+            playlist.id,
+            nextMusics.map(({ id }) => id)
+        );
+        queryClient.setQueryData(playlistQueryKey, () => ({
+            ...playlist,
+            musics: nextMusics
+        }));
     };
 
     useEffect(() => {
@@ -187,11 +193,15 @@ export default function PlaylistDetail() {
             )}
             <div className="min-w-0 flex-1">
                 {playlistMusics.length > 0 ? (
-                    <VerticalSortable
-                        items={playlistMusics.map(({ id }) => id)}
-                        getItemLabel={(musicId) => musicMap.get(musicId)?.name ?? 'Track'}
-                        onDragEnd={handleDragEnd}>
-                        {playlistMusics.map(({ id }) => {
+                    <FixedVirtualSortableList
+                        items={playlistMusics}
+                        ariaLabel={`${playlist.name} songs`}
+                        disabled={isSelectMode}
+                        itemHeight={PLAYLIST_TRACK_ROW_HEIGHT}
+                        getKey={({ id }) => id}
+                        getItemLabel={({ id }) => musicMap.get(id)?.name ?? 'Track'}
+                        onReorder={handleReorder}
+                        renderItem={({ id }, _index, sortable) => {
                             const music = musicMap.get(id);
 
                             if (!music) return null;
@@ -211,56 +221,48 @@ export default function PlaylistDetail() {
                             };
 
                             return (
-                                <SortableItem
-                                    id={music.id}
-                                    key={music.id}
-                                    render={({ attributes, listeners, setActivatorNodeRef }) => (
-                                        <div className={listRowClass({ layout: 'selection', surface: 'plain', selected: isSelected })}>
-                                            {isSelectMode ? (
-                                                <SelectionCheckButton
-                                                    selected={isSelected}
-                                                    className="justify-self-center"
-                                                    aria-label={isSelected ? `Unselect ${music.name}` : `Select ${music.name}`}
-                                                    aria-pressed={isSelected}
-                                                    onClick={onSelect}
-                                                />
-                                            ) : (
-                                                <IconButton
-                                                    ref={setActivatorNodeRef}
-                                                    {...attributes}
-                                                    aria-label={`Reorder ${music.name}`}
-                                                    className="justify-self-center cursor-grab touch-none"
-                                                    {...listeners}>
-                                                    <Icon.Menu />
-                                                </IconButton>
-                                            )}
-                                            <div className="min-w-0 flex-1">
-                                                <MusicListItem
-                                                    albumName={music.album.name}
-                                                    albumCover={music.album.cover}
-                                                    artistName={music.artist.name}
-                                                    musicName={music.name}
-                                                    musicCodec={music.codec}
-                                                    isLiked={music.isLiked}
-                                                    isHated={music.isHated}
-                                                    onClick={isSelectMode ? onSelect : onClick}
-                                                    onLongPress={() => panel.open({
-                                                        content: (
-                                                            <MusicActionPanelContent
-                                                                id={music.id}
-                                                                onAlbumClick={() => navigate(`/album/${music.album.id}`)}
-                                                                onArtistClick={() => navigate(`/artist/${music.artist.id}`)}
-                                                            />
-                                                        )
-                                                    })}
-                                                />
-                                            </div>
-                                        </div>
+                                <div className={`${listRowClass({ layout: 'selection', surface: 'plain', selected: isSelected })} h-full transition-opacity ${sortable.isDragging && !sortable.isDragOverlay ? 'opacity-15' : ''} ${sortable.isDragOverlay ? 'rounded-[var(--b-radius-lg)] border border-[var(--b-color-focus)] bg-[var(--b-color-background-layer-1)] shadow-[var(--b-shadow-queue-drag)]' : ''}`}>
+                                    {isSelectMode ? (
+                                        <SelectionCheckButton
+                                            selected={isSelected}
+                                            className="justify-self-center"
+                                            aria-label={isSelected ? `Unselect ${music.name}` : `Select ${music.name}`}
+                                            aria-pressed={isSelected}
+                                            onClick={onSelect}
+                                        />
+                                    ) : (
+                                        <IconButton
+                                            {...sortable.handleProps}
+                                            aria-label={`Reorder ${music.name}`}
+                                            className="justify-self-center cursor-grab touch-none active:cursor-grabbing">
+                                            <Icon.Menu />
+                                        </IconButton>
                                     )}
-                                />
+                                    <div className="min-w-0 flex-1">
+                                        <MusicListItem
+                                            albumName={music.album.name}
+                                            albumCover={music.album.cover}
+                                            artistName={music.artist.name}
+                                            musicName={music.name}
+                                            musicCodec={music.codec}
+                                            isLiked={music.isLiked}
+                                            isHated={music.isHated}
+                                            onClick={isSelectMode ? onSelect : onClick}
+                                            onLongPress={() => panel.open({
+                                                content: (
+                                                    <MusicActionPanelContent
+                                                        id={music.id}
+                                                        onAlbumClick={() => navigate(`/album/${music.album.id}`)}
+                                                        onArtistClick={() => navigate(`/artist/${music.artist.id}`)}
+                                                    />
+                                                )
+                                            })}
+                                        />
+                                    </div>
+                                </div>
                             );
-                        })}
-                    </VerticalSortable>
+                        }}
+                    />
                 ) : (
                     <StateMessage
                         className="px-[var(--b-spacing-lg)] py-[var(--b-spacing-2xl)]"

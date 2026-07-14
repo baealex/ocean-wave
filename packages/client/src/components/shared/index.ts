@@ -9,6 +9,11 @@ export { default as CollectionGridSkeleton } from './CollectionGridSkeleton';
 export { default as CollectionHeader } from './CollectionHeader';
 export { default as FixedVirtualList } from './FixedVirtualList/FixedVirtualList';
 export { default as FixedVirtualGrid } from './FixedVirtualGrid';
+export { default as FixedVirtualSortableList } from './FixedVirtualSortableList';
+export type {
+    FixedVirtualSortableHandleProps,
+    FixedVirtualSortableRenderProps
+} from './FixedVirtualSortableList';
 export { default as Flex } from './Flex';
 export { default as Grid } from './Grid';
 export { default as GridImage } from './GridImage';
@@ -37,7 +42,6 @@ export type { SegmentedControlOption } from './SegmentedControl';
 export { default as Select } from './Select';
 export { SettingSection, SettingItem, InfoBox } from './SettingSection';
 export { default as SiteHeader } from './SiteHeader';
-export { default as SortableItem } from './SortableItem';
 export { default as StickyHeader } from './StickyHeader';
 export { StickyHeaderActions } from './StickyHeader';
 export { default as StateMessage } from './StateMessage';
@@ -48,6 +52,5 @@ export { TagButton } from './Tag';
 export { default as Text } from './Text';
 export { default as Toggle } from './Toggle';
 export { default as SummaryTitle } from './SummaryTitle';
-export { default as VerticalSortable } from './VerticalSortable';
 export { default as ListSelectionToolbar } from './ListSelectionToolbar';
 export { SelectionCheckButton, SelectionCheckIndicator } from './ListSelectionToolbar';
