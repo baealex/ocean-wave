@@ -5,6 +5,7 @@ import {
     type PlaybackQueueSnapshot
 } from '~/api/playback-queue';
 import { socket } from '~/socket';
+import { isPlaybackCommandBarrierActive } from '~/modules/playback-command-barrier';
 
 import { BaseStore } from './base-store';
 
@@ -23,6 +24,10 @@ interface PlaybackQueueStoreState {
     loading: boolean;
     error: string | null;
 }
+
+export type PlaybackQueueRefreshResult =
+    | { type: 'success'; snapshot: PlaybackQueueSnapshot | null }
+    | { type: 'error' | 'superseded' };
 
 export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
     private connected = false;
@@ -45,6 +50,11 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
         return this.pending !== null || this.sending;
     }
 
+    quiesceForPlaybackCommandRecovery() {
+        this.pending = null;
+        return !this.sending;
+    }
+
     connect() {
         if (this.connected) {
             return;
@@ -61,16 +71,17 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
         }
 
         this.connected = false;
+        this.refreshSequence += 1;
         socket.off('connect', this.handleSocketConnect);
     }
 
-    async refresh() {
+    async refresh(requestTimeoutMs?: number): Promise<PlaybackQueueRefreshResult> {
         const refreshSequence = ++this.refreshSequence;
         this.set({ loading: true });
-        const response = await fetchPlaybackQueue();
+        const response = await fetchPlaybackQueue(requestTimeoutMs);
 
         if (refreshSequence !== this.refreshSequence) {
-            return;
+            return { type: 'superseded' };
         }
 
         if (response.type === 'error') {
@@ -79,7 +90,7 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
                 loading: false,
                 error: response.errors[0]?.message ?? 'Unable to read the server queue.'
             });
-            return;
+            return { type: 'error' };
         }
 
         this.set((state) => ({
@@ -90,9 +101,14 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
             error: null
         }));
         void this.flushPending();
+        return { type: 'success', snapshot: this.state.snapshot };
     }
 
     save(snapshot: LocalPlaybackQueueSnapshot) {
+        if (isPlaybackCommandBarrierActive()) {
+            return;
+        }
+
         this.pending = snapshot;
 
         if (this.state.initialized) {
@@ -101,7 +117,12 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
     }
 
     private async flushPending() {
-        if (this.sending || !this.pending || !this.state.initialized) {
+        if (
+            isPlaybackCommandBarrierActive()
+            || this.sending
+            || !this.pending
+            || !this.state.initialized
+        ) {
             return;
         }
 

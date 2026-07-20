@@ -45,6 +45,7 @@ export interface GraphQueryRequest<TVariables extends object = Record<string, un
     query: string;
     variables?: TVariables;
     operationName?: string;
+    requestTimeoutMs?: number;
 }
 
 type GraphQuerySuccessResponse<TData extends object> = TData & {
@@ -126,12 +127,22 @@ export async function graphQuery<TData extends object, TVariables extends object
             operationName
         }
         : queryOrRequest;
+    const {
+        requestTimeoutMs,
+        ...payload
+    } = request;
 
     try {
-        const { data } = await axios.post<{
+        const post = () => axios.post<{
             data?: TData;
             errors?: GraphQLErrorPayload[];
-        }>('/graphql', request);
+        }>('/graphql', payload);
+        const { data } = await (requestTimeoutMs === undefined
+            ? post()
+            : axios.post<{
+                data?: TData;
+                errors?: GraphQLErrorPayload[];
+              }>('/graphql', payload, { timeout: requestTimeoutMs }));
 
         if (data.errors && data.errors.length > 0) {
             return toGraphQLError(data.errors);

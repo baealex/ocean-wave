@@ -63,6 +63,10 @@ vi.mock('~/socket/socket', () => ({
 }));
 
 import type { PlaybackSessionSnapshot } from '~/api/playback-session';
+import {
+    beginPlaybackCommandBarrier,
+    endPlaybackCommandBarrier
+} from '~/modules/playback-command-barrier';
 import { PlaybackSessionStore } from './playback-session';
 
 const createRegistration = (endpointId = 'web-tab-local', generation = 1) => ({
@@ -131,6 +135,28 @@ describe('PlaybackSessionStore', () => {
         expect(mocks.socketOff).toHaveBeenCalledWith('connect', expect.any(Function));
     });
 
+    it('reports a bounded recovery read failure without reusing it as success', async () => {
+        const snapshot = createSnapshot({ revision: 3 });
+        mocks.fetchPlaybackSession.mockResolvedValueOnce({
+            type: 'success',
+            playbackSession: snapshot
+        });
+        const store = new PlaybackSessionStore();
+        await expect(store.refresh()).resolves.toEqual({
+            type: 'success',
+            snapshot
+        });
+        mocks.fetchPlaybackSession.mockResolvedValueOnce({
+            type: 'error',
+            category: 'network',
+            errors: [{ code: 'ECONNABORTED', message: 'timed out' }]
+        });
+
+        await expect(store.refresh(5_000)).resolves.toEqual({ type: 'error' });
+        expect(mocks.fetchPlaybackSession).toHaveBeenLastCalledWith(5_000);
+        expect(store.state.snapshot).toEqual(snapshot);
+    });
+
     it('reports a user claim only with acknowledged registration authority', async () => {
         const accepted = createSnapshot({
             activeDeviceId: 'web-tab-local',
@@ -173,6 +199,64 @@ describe('PlaybackSessionStore', () => {
         }, { checkpoint: true });
         expect(mocks.reportPlaybackState).toHaveBeenCalledOnce();
         store.disconnect();
+    });
+
+    it('suppresses ordinary reports while a remote command barrier is active', () => {
+        const store = new PlaybackSessionStore();
+        store.connect();
+        beginPlaybackCommandBarrier('command-test');
+
+        try {
+            store.report({
+                state: 'playing',
+                currentMusicId: '42',
+                positionMs: 1_500
+            }, { claimActive: true });
+            expect(mocks.reportPlaybackState).not.toHaveBeenCalled();
+            expect(mocks.sequence).toBe(0);
+        } finally {
+            endPlaybackCommandBarrier('command-test');
+            store.disconnect();
+        }
+    });
+
+    it('quiesces buffered reports and does not retry them through the command barrier', async () => {
+        let resolveReport: ((value: unknown) => void) | undefined;
+        mocks.reportPlaybackState.mockReturnValue(new Promise((resolve) => {
+            resolveReport = resolve;
+        }));
+        const store = new PlaybackSessionStore();
+        store.connect();
+        store.report({
+            state: 'playing',
+            currentMusicId: '42',
+            positionMs: 1_500
+        }, { claimActive: true });
+        store.report({
+            state: 'paused',
+            currentMusicId: '42',
+            positionMs: 1_800
+        });
+        await vi.waitFor(() => expect(mocks.reportPlaybackState).toHaveBeenCalledOnce());
+
+        beginPlaybackCommandBarrier('session-recovery-test');
+        try {
+            expect(store.quiesceForPlaybackCommandRecovery()).toBe(false);
+            resolveReport?.({
+                type: 'error',
+                category: 'network',
+                errors: [{ code: 'NETWORK_ERROR', message: 'Offline' }]
+            });
+            await vi.waitFor(() => expect(store.state.error).toBe('Offline'));
+
+            expect(mocks.reportPlaybackState).toHaveBeenCalledOnce();
+            expect(store.hasPendingReport).toBe(true);
+            expect(store.quiesceForPlaybackCommandRecovery()).toBe(true);
+            expect(store.hasPendingReport).toBe(false);
+        } finally {
+            endPlaybackCommandBarrier('session-recovery-test');
+            store.disconnect();
+        }
     });
 
     it('keeps a buffered challenger claim sticky across a newer checkpoint', async () => {
@@ -360,6 +444,8 @@ describe('PlaybackSessionStore', () => {
             state: 'paused',
             positionMs: 2_600
         }));
+        await vi.waitFor(() => expect(store.state.snapshot).toEqual(rotatedSnapshot));
+        expect(store.hasPendingReport).toBe(true);
 
         resolveOld?.({
             type: 'success',
@@ -373,6 +459,7 @@ describe('PlaybackSessionStore', () => {
             }
         });
         await vi.waitFor(() => expect(store.state.snapshot).toEqual(rotatedSnapshot));
+        await vi.waitFor(() => expect(store.hasPendingReport).toBe(false));
         store.disconnect();
     });
 

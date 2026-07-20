@@ -10,8 +10,11 @@ import { musicStore } from '~/store/music';
 import { playbackDevicesStore } from '~/store/playback-devices';
 import { playbackSessionStore } from '~/store/playback-session';
 import { playbackQueueStore } from '~/store/playback-queue';
+import { queueStore } from '~/store/queue';
 import {
     MusicListener,
+    playbackCommandController,
+    playbackCommandTarget,
     socket,
     TagListener
 } from '~/socket';
@@ -56,8 +59,18 @@ export default function AuthenticatedAppRuntime({
         playbackDevicesStore.connect();
         playbackSessionStore.connect();
         playbackQueueStore.connect();
+        playbackCommandController.connect();
+        playbackCommandTarget.connect({
+            prepare: dispatch => queueStore.preparePlaybackCommand(dispatch),
+            execute: dispatch => queueStore.executePlaybackCommand(dispatch),
+            recover: (fence, beginReconciliation) => (
+                queueStore.recoverPlaybackCommand(fence, beginReconciliation)
+            )
+        });
 
         return () => {
+            playbackCommandTarget.disconnect();
+            playbackCommandController.disconnect();
             playbackDevicesStore.disconnect();
             playbackSessionStore.disconnect();
             playbackQueueStore.disconnect();
