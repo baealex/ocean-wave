@@ -2,7 +2,7 @@ import axios from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 
 import { graphQLRequest } from './graphql';
-import { getArtist } from './library';
+import { getArtist, getMusics } from './library';
 
 interface GraphqlPayload {
     operationName?: string;
@@ -45,5 +45,22 @@ describe('GraphQL API requests', () => {
                 variables: { id: '1' }
             }
         }));
+    });
+
+    it('requests the playback signals needed for library rediscovery', async () => {
+        const request = vi.spyOn(axios, 'request').mockResolvedValue({
+            data: { data: { allMusics: [] } }
+        });
+
+        await getMusics();
+
+        const payload = request.mock.calls[0]?.[0]?.data as GraphqlPayload;
+
+        expect(payload.query).toContain('lastPlayedAt');
+        expect(payload.query).toContain('totalPlayedMs');
+        expect(payload.query).toContain('skipCount');
+        expect(payload.query).toContain('lastSkippedAt');
+        expect(payload.query).toContain('completionCount');
+        expect(payload.query).toContain('lastCompletedAt');
     });
 });

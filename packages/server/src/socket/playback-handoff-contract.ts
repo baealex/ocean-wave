@@ -53,6 +53,18 @@ export interface PlaybackHandoffSnapshot {
     queue: PlaybackHandoffQueueSnapshot;
 }
 
+export interface PlaybackHandoffHistoryTransfer {
+    clientSessionId: string;
+    branchId: string;
+    parentBranchId: string | null;
+    branchBasePlayedMs: number;
+    trackId: string;
+    startedAt: string;
+    accumulatedPlayedMs: number;
+    hadSeek: boolean;
+    updatedAt: string;
+}
+
 export interface PlaybackHandoffRequest {
     protocolVersion: 1;
     commandEpoch: string;
@@ -123,6 +135,7 @@ export type PlaybackHandoffReleaseAck =
         status: 'released';
         endpointSequence: number;
         positionMs: number;
+        playbackHistory: PlaybackHandoffHistoryTransfer | null;
       }
     | {
         protocolVersion: 1;
@@ -146,6 +159,7 @@ export interface PlaybackHandoffActivationDispatch {
     claimSessionRevision: number;
     activateBy: string;
     snapshot: PlaybackHandoffSnapshot;
+    playbackHistory: PlaybackHandoffHistoryTransfer | null;
 }
 
 export type PlaybackHandoffActivationAck =

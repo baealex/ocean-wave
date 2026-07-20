@@ -9,6 +9,7 @@ import {
     commitPlaybackCommandResult,
     resolvePlaybackCommand
 } from './playback-command';
+import { resolvePlaybackHandoff } from './playback-handoff';
 
 const createMusic = async (name: string, duration = 180) => {
     const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -61,6 +62,15 @@ describe('playback command service', () => {
                 positionMs: 12_000,
                 positionUpdatedAt: new Date('2026-07-20T00:00:00.000Z'),
                 startedAt: new Date('2026-07-20T00:00:00.000Z'),
+                historyMusicId: firstMusicId,
+                historySessionId: 'command-history-1',
+                historyBranchId: 'command-history-1',
+                historyParentBranchId: null,
+                historyBranchBasePlayedMs: 0,
+                historyStartedAt: new Date('2026-07-20T00:00:00.000Z'),
+                historyPlayedMs: 12_000,
+                historyHadSeek: false,
+                historyUpdatedAt: new Date('2026-07-20T00:00:12.000Z'),
                 revision: 3,
                 Queue: {
                     create: {
@@ -198,8 +208,33 @@ describe('playback command service', () => {
             currentMusicId: secondMusicId,
             activeDeviceId: 'target-tab',
             activeDeviceSequence: 5,
+            historyMusicId: null,
+            historySessionId: null,
+            historyBranchId: null,
+            historyParentBranchId: null,
+            historyBranchBasePlayedMs: 0,
+            historyStartedAt: null,
+            historyPlayedMs: 0,
+            historyHadSeek: false,
+            historyUpdatedAt: null,
             revision: 4,
             Queue: expect.objectContaining({ currentIndex: 1, revision: 3 })
+        }));
+        await expect(resolvePlaybackHandoff({
+            protocolVersion: 1,
+            commandEpoch: 'epoch-1',
+            handoffId: 'forced-after-command-track-change',
+            sourceEndpointId: 'target-tab',
+            targetEndpointId: 'next-tab',
+            expectedSessionRevision: 4,
+            expectedQueueRevision: 3,
+            targetClaimSequence: 1,
+            force: true
+        })).resolves.toEqual(expect.objectContaining({
+            playbackHistory: null,
+            snapshot: expect.objectContaining({
+                currentMusicId: secondMusicId.toString()
+            })
         }));
     });
 

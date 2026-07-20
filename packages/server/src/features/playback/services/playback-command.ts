@@ -527,6 +527,8 @@ export const commitPlaybackCommandResult = async (
             }
 
             const resultingState = result.resultingState;
+            const trackChanged = resolved.dispatchSource.currentMusicId
+                !== resultingState.currentMusicId;
             const continuesCurrentPlay = resolved.dispatchSource.state === 'playing'
                 && resultingState.state === 'playing'
                 && resolved.dispatchSource.currentMusicId === resultingState.currentMusicId;
@@ -552,6 +554,17 @@ export const commitPlaybackCommandResult = async (
                     positionMs: Math.round(resultingState.positionMs),
                     positionUpdatedAt: now,
                     startedAt,
+                    ...(trackChanged ? {
+                        historyMusicId: null,
+                        historySessionId: null,
+                        historyBranchId: null,
+                        historyParentBranchId: null,
+                        historyBranchBasePlayedMs: 0,
+                        historyStartedAt: null,
+                        historyPlayedMs: 0,
+                        historyHadSeek: false,
+                        historyUpdatedAt: null
+                    } : {}),
                     activeDeviceSequence: result.endpointSequence,
                     revision: { increment: 1 }
                 }

@@ -134,7 +134,10 @@ vi.mock('~/socket', () => ({
 }));
 
 vi.mock('~/modules/playback-checkpoint-store', () => ({
+    clearPlaybackResumeCheckpoint: vi.fn(),
     deletePlaybackCheckpoint: vi.fn().mockResolvedValue(undefined),
+    readPlaybackResumeCheckpoint: vi.fn().mockReturnValue(null),
+    savePlaybackResumeCheckpoint: vi.fn(),
     savePlaybackCheckpoint: vi.fn().mockResolvedValue(undefined)
 }));
 
@@ -146,6 +149,11 @@ import {
     endPlaybackCommandBarrier,
     endPlaybackControllerCommandBarrier
 } from '~/modules/playback-command-barrier';
+import {
+    readPlaybackResumeCheckpoint,
+    savePlaybackCheckpoint
+} from '~/modules/playback-checkpoint-store';
+import { MusicListener } from '~/socket';
 import type { PlaybackCommandDispatch } from '~/socket/playback-command-contract';
 import type {
     PlaybackHandoffActivationDispatch,
@@ -244,6 +252,10 @@ describe('queue playback command adapter', () => {
 
     beforeEach(async () => {
         vi.clearAllMocks();
+        queueStore.playbackSessionTracker.reset();
+        queueStore.lastCheckpointClientSessionId = null;
+        queueStore.lastCheckpointBranchId = null;
+        queueStore.lastCheckpointPlayedMs = 0;
         beginPlaybackCommandBarrier('queue-adapter-test');
         mocks.endpointId = 'target-tab';
         mocks.sessionQuiesce.mockReturnValue(true);
@@ -502,7 +514,8 @@ describe('queue playback command adapter', () => {
         expect(queueStore.state.isPlaying).toBe(false);
         expect(mocks.sessionBufferDisconnectPause).toHaveBeenCalledWith({
             currentMusicId: '1',
-            positionMs: 12_250
+            positionMs: 12_250,
+            playbackHistory: null
         }, null);
     });
 
@@ -515,12 +528,284 @@ describe('queue playback command adapter', () => {
         expect(mocks.sessionReport).toHaveBeenCalledWith({
             state: 'paused',
             currentMusicId: '1',
-            positionMs: 20_000
+            positionMs: 20_000,
+            playbackHistory: null
         }, {
             claimActive: false,
             checkpoint: true
         });
         expect(queueStore.state.isPlaying).toBe(false);
+    });
+
+    it('excludes buffering gaps from accumulated listening time', () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+
+        try {
+            mocks.audioEventHandler?.onPlay?.();
+            vi.setSystemTime(10_000);
+            mocks.audioEventHandler?.onWaiting?.();
+            vi.setSystemTime(70_000);
+
+            expect(queueStore.playbackSessionTracker.getAccumulatedPlayedMs())
+                .toBe(10_000);
+
+            mocks.audioEventHandler?.onPlaying?.();
+            vi.setSystemTime(75_000);
+
+            expect(queueStore.playbackSessionTracker.getAccumulatedPlayedMs())
+                .toBe(15_000);
+            expect(mocks.sessionReport).toHaveBeenCalledWith(
+                expect.objectContaining({ state: 'paused' }),
+                expect.any(Object)
+            );
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('preserves unload lineage without publishing a later stopped reset', () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const unloadable = queueStore as unknown as {
+            handleBeforeUnload: () => void;
+            handlePageHide: (event: PageTransitionEvent) => void;
+            handleVisibilityChange: () => void;
+            pageUnloading: boolean;
+        };
+
+        try {
+            queueStore.playbackSessionTracker.play({
+                id: '1',
+                durationMs: 60_000
+            });
+            vi.setSystemTime(39_000);
+            unloadable.handleBeforeUnload();
+            mocks.audioEventHandler?.onStop?.();
+            mocks.audioEventHandler?.onPlaying?.();
+            mocks.audioEventHandler?.onWaiting?.();
+            mocks.audioEventHandler?.onTimeUpdate(40, vi.fn());
+            mocks.audioEventHandler?.onEnded();
+            queueStore.silencePlaybackForSocketDisconnect();
+            unloadable.handlePageHide({ persisted: false } as PageTransitionEvent);
+            (document as unknown as { hidden: boolean }).hidden = true;
+            unloadable.handleVisibilityChange();
+
+            expect(mocks.audio.pause).toHaveBeenCalledOnce();
+            expect(mocks.audio.stop).not.toHaveBeenCalled();
+            expect(mocks.sessionReport).toHaveBeenCalledTimes(1);
+            expect(mocks.sessionReport).toHaveBeenCalledWith({
+                state: 'paused',
+                currentMusicId: '1',
+                positionMs: 1_000,
+                playbackHistory: expect.objectContaining({
+                    clientSessionId: expect.any(String),
+                    branchId: expect.any(String),
+                    parentBranchId: null,
+                    branchBasePlayedMs: 0,
+                    accumulatedPlayedMs: 39_000
+                })
+            }, {
+                claimActive: false,
+                checkpoint: false
+            });
+            expect(mocks.sessionReport).not.toHaveBeenCalledWith(
+                expect.objectContaining({ state: 'stopped' }),
+                expect.anything()
+            );
+        } finally {
+            unloadable.pageUnloading = false;
+            (document as unknown as { hidden: boolean }).hidden = false;
+            vi.useRealTimers();
+        }
+    });
+
+    it('excludes a persisted pagehide interval and re-enables playback callbacks', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const lifecycle = queueStore as unknown as {
+            handlePageHide: (event: PageTransitionEvent) => void;
+            handlePageShow: (event: PageTransitionEvent) => void;
+            pageUnloading: boolean;
+        };
+        const persistedPage = { persisted: true } as PageTransitionEvent;
+
+        try {
+            queueStore.playbackSessionTracker.play({
+                id: '1',
+                durationMs: 60_000
+            });
+            await queueStore.set({ isPlaying: true });
+            vi.setSystemTime(10_000);
+
+            lifecycle.handlePageHide(persistedPage);
+
+            expect(lifecycle.pageUnloading).toBe(true);
+            expect(queueStore.state.isPlaying).toBe(false);
+            expect(mocks.audio.pause).toHaveBeenCalledOnce();
+            expect(queueStore.playbackSessionTracker.getAccumulatedPlayedMs())
+                .toBe(10_000);
+
+            vi.setSystemTime(70_000);
+            lifecycle.handlePageShow(persistedPage);
+
+            expect(lifecycle.pageUnloading).toBe(false);
+            expect(queueStore.state.isPlaying).toBe(false);
+            expect(queueStore.playbackSessionTracker.getAccumulatedPlayedMs())
+                .toBe(10_000);
+
+            mocks.audioEventHandler?.onPlay?.();
+            vi.setSystemTime(75_000);
+
+            expect(queueStore.state.isPlaying).toBe(true);
+            expect(queueStore.playbackSessionTracker.getAccumulatedPlayedMs())
+                .toBe(15_000);
+        } finally {
+            lifecycle.pageUnloading = false;
+            queueStore.playbackSessionTracker.reset();
+            vi.useRealTimers();
+        }
+    });
+
+    it('restores unload lineage after a persisted page is shown again', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+        const lifecycle = queueStore as unknown as {
+            handleBeforeUnload: () => void;
+            handlePageHide: (event: PageTransitionEvent) => void;
+            handlePageShow: (event: PageTransitionEvent) => void;
+            pageUnloading: boolean;
+        };
+        const persistedPage = { persisted: true } as PageTransitionEvent;
+
+        try {
+            queueStore.playbackSessionTracker.play({
+                id: '1',
+                durationMs: 60_000
+            });
+            await queueStore.set({ isPlaying: true });
+            vi.setSystemTime(39_000);
+
+            lifecycle.handleBeforeUnload();
+            lifecycle.handlePageHide(persistedPage);
+
+            const checkpointCalls = vi.mocked(savePlaybackCheckpoint).mock.calls;
+            const terminalCheckpoint = checkpointCalls[
+                checkpointCalls.length - 1
+            ]?.[0];
+            expect(terminalCheckpoint).toEqual(expect.objectContaining({
+                accumulatedPlayedMs: 39_000,
+                endReason: 'unload'
+            }));
+            vi.mocked(readPlaybackResumeCheckpoint)
+                .mockReturnValue(terminalCheckpoint ?? null);
+
+            vi.setSystemTime(70_000);
+            lifecycle.handlePageShow(persistedPage);
+
+            expect(lifecycle.pageUnloading).toBe(false);
+            expect(queueStore.state.isPlaying).toBe(false);
+            expect(queueStore.playbackSessionTracker.getAccumulatedPlayedMs())
+                .toBe(39_000);
+
+            mocks.audioEventHandler?.onPlay?.();
+            vi.setSystemTime(75_000);
+
+            expect(queueStore.state.isPlaying).toBe(true);
+            expect(queueStore.playbackSessionTracker.getAccumulatedPlayedMs())
+                .toBe(44_000);
+        } finally {
+            vi.mocked(readPlaybackResumeCheckpoint).mockReturnValue(null);
+            lifecycle.pageUnloading = false;
+            queueStore.playbackSessionTracker.reset();
+            vi.useRealTimers();
+        }
+    });
+
+    it('adds the audible crossfade tail before committing natural completion', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        vi.useFakeTimers();
+        vi.setSystemTime(0);
+
+        try {
+            queueStore.playbackSessionTracker.play({
+                id: '1',
+                durationMs: 180_000
+            });
+            vi.setSystemTime(160_000);
+            mocks.audioEventHandler?.onCrossfadeStart?.();
+            mocks.audioEventHandler?.onEnded();
+            vi.setSystemTime(180_000);
+            mocks.audioEventHandler?.onCrossfadeEnd?.(20_000);
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(MusicListener.count).toHaveBeenCalledWith(expect.objectContaining({
+                id: '1',
+                playedMs: 180_000,
+                completionRate: 1,
+                endReason: 'ended',
+                source: 'queue-mix-ended'
+            }));
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('does not apply the outgoing time update to the incoming mix track', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        await queueStore.set({ mixMode: 'mix' });
+
+        mocks.audioEventHandler?.onTimeUpdate(50, (_fadeTime, onMix) => {
+            onMix();
+            mocks.audioEventHandler?.onCrossfadeStart?.();
+            mocks.audioEventHandler?.onEnded();
+            return true;
+        });
+
+        expect(queueStore.state.currentTrackId).toBe('2');
+        expect(queueStore.state.currentTime).toBe(0);
+        expect(mocks.sessionReport).not.toHaveBeenCalledWith(
+            expect.objectContaining({
+                currentMusicId: '2',
+                positionMs: 50_000
+            }),
+            expect.anything()
+        );
+        mocks.audioEventHandler?.onCrossfadeEnd?.(0);
+    });
+
+    it('does not replace a live tracker with an older resume checkpoint', async () => {
+        queueStore.playbackSessionTracker.play({
+            id: '1',
+            durationMs: 60_000
+        }, 1_000);
+        queueStore.playbackSessionTracker.pause(21_000);
+        vi.mocked(readPlaybackResumeCheckpoint).mockReturnValueOnce({
+            clientSessionId: 'older-session',
+            trackId: '1',
+            startedAt: new Date(1_000).toISOString(),
+            accumulatedPlayedMs: 10_000,
+            hadSeek: false,
+            lastResumedAt: new Date(1_000).toISOString(),
+            active: false,
+            updatedAt: new Date(11_000).toISOString(),
+            source: 'queue-checkpoint'
+        });
+
+        await (queueStore as unknown as {
+            restoreServerQueue: (
+                snapshot: typeof mocks.queueState.snapshot,
+                force: boolean
+            ) => Promise<void>;
+        }).restoreServerQueue(mocks.queueState.snapshot, true);
+
+        expect(queueStore.playbackSessionTracker.getAccumulatedPlayedMs())
+            .toBe(20_000);
     });
 
     it('rejects an incoming target command while this tab controls another player', () => {
@@ -755,6 +1040,8 @@ describe('queue playback command adapter', () => {
         endPlaybackCommandBarrier('queue-adapter-test');
         const controllerBarrier = Symbol('handoff-target-test');
         beginPlaybackControllerCommandBarrier(controllerBarrier);
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.parse('2026-07-20T00:00:20.000Z'));
         mocks.endpointId = 'target-tab';
         mocks.sessionState.snapshot = {
             ...mocks.sessionState.snapshot,
@@ -786,8 +1073,22 @@ describe('queue playback command adapter', () => {
                     ...handoffSnapshot,
                     sessionRevision: 4,
                     positionMs: 12_500
+                },
+                playbackHistory: {
+                    clientSessionId: 'shared-playback-1',
+                    branchId: 'target-branch-1',
+                    parentBranchId: 'shared-playback-1',
+                    branchBasePlayedMs: 12_000,
+                    trackId: '1',
+                    startedAt: '2026-07-20T00:00:00.000Z',
+                    accumulatedPlayedMs: 20_000,
+                    hadSeek: true,
+                    updatedAt: '2026-07-20T00:00:20.000Z'
                 }
             };
+            queueStore.lastCheckpointClientSessionId = 'shared-playback-1';
+            queueStore.lastCheckpointBranchId = 'source-branch-1';
+            queueStore.lastCheckpointPlayedMs = 39_000;
             await expect(queueStore.activatePlaybackHandoff(activation)).resolves.toEqual(
                 expect.objectContaining({
                     status: 'completed',
@@ -796,12 +1097,56 @@ describe('queue playback command adapter', () => {
             );
             expect(mocks.audio.commitMutedPlayback).toHaveBeenCalledOnce();
             expect(queueStore.state.isPlaying).toBe(true);
+            expect(queueStore.lastCheckpointClientSessionId).toBe('shared-playback-1');
+            expect(queueStore.lastCheckpointBranchId).toBe('target-branch-1');
+            expect(queueStore.lastCheckpointPlayedMs).toBe(20_000);
 
             queueStore.finishPlaybackHandoffTarget(true);
             expect(mocks.audio.commitMutedPlayback).toHaveBeenCalledOnce();
+            expect(queueStore.playbackSessionTracker.createCheckpoint(
+                'handoff-test'
+            )).toEqual(expect.objectContaining({
+                clientSessionId: 'shared-playback-1',
+                trackId: '1',
+                hadSeek: true
+            }));
+            queueStore.playbackSessionTracker.pause(
+                Date.parse('2026-07-20T00:00:20.000Z')
+            );
+            vi.mocked(savePlaybackCheckpoint).mockClear();
+            const persistCheckpoint = (queueStore as unknown as {
+                persistPlaybackCheckpoint: (
+                    source: string,
+                    force: boolean,
+                    now: number
+                ) => { persisted: Promise<void> };
+            }).persistPlaybackCheckpoint.bind(queueStore);
+            queueStore.playbackSessionTracker.creditListenedMs(9_999);
+            await persistCheckpoint(
+                'handoff-checkpoint-test',
+                false,
+                Date.parse('2026-07-20T00:00:20.000Z')
+            ).persisted;
+            expect(savePlaybackCheckpoint).not.toHaveBeenCalled();
+
+            queueStore.playbackSessionTracker.creditListenedMs(1);
+            await persistCheckpoint(
+                'handoff-checkpoint-test',
+                false,
+                Date.parse('2026-07-20T00:00:20.000Z')
+            ).persisted;
+            expect(savePlaybackCheckpoint).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    clientSessionId: 'shared-playback-1',
+                    branchId: 'target-branch-1',
+                    accumulatedPlayedMs: 30_000
+                })
+            );
+            queueStore.playbackSessionTracker.reset();
         } finally {
             queueStore.finishPlaybackHandoffTarget(false);
             endPlaybackControllerCommandBarrier(controllerBarrier);
+            vi.useRealTimers();
         }
     });
 
@@ -839,7 +1184,8 @@ describe('queue playback command adapter', () => {
                 snapshot: {
                     ...handoffSnapshot,
                     sessionRevision: 4
-                }
+                },
+                playbackHistory: null
             })).resolves.toEqual({
                 status: 'rejected',
                 error: {
@@ -881,7 +1227,8 @@ describe('queue playback command adapter', () => {
             expect(queueStore.state.isPlaying).toBe(false);
             expect(mocks.sessionBufferDisconnectPause).toHaveBeenCalledWith({
                 currentMusicId: '1',
-                positionMs: 12_000
+                positionMs: 12_000,
+                playbackHistory: null
             }, 'target-tab');
 
             await expect(queueStore.activatePlaybackHandoff({
@@ -897,7 +1244,8 @@ describe('queue playback command adapter', () => {
                 snapshot: {
                     ...handoffSnapshot,
                     sessionRevision: 4
-                }
+                },
+                playbackHistory: null
             })).resolves.toEqual(expect.objectContaining({
                 status: 'rejected',
                 error: expect.objectContaining({ code: 'TARGET_STATE_MISMATCH' })
@@ -1060,7 +1408,8 @@ describe('queue playback command adapter', () => {
         expect(mocks.audio.pause).toHaveBeenCalledTimes(2);
         expect(mocks.sessionBufferDisconnectPause).toHaveBeenCalledWith({
             currentMusicId: '1',
-            positionMs: 12_000
+            positionMs: 12_000,
+            playbackHistory: null
         }, null);
 
         const restore: PlaybackHandoffSourceSettleDispatch = {
@@ -1086,6 +1435,69 @@ describe('queue playback command adapter', () => {
         expect(mocks.audio.seek).toHaveBeenLastCalledWith(12.5);
         expect(mocks.audio.playWithResult).toHaveBeenCalledOnce();
         expect(queueStore.state.isPlaying).toBe(true);
+    });
+
+    it('transfers and commits one cumulative history identity on successful handoff', async () => {
+        mocks.endpointId = 'source-tab';
+        mocks.sessionState.snapshot = {
+            ...mocks.sessionState.snapshot,
+            state: 'playing',
+            activeDeviceId: 'source-tab',
+            currentMusicId: '1',
+            revision: 3
+        };
+        await queueStore.set({ isPlaying: true, currentTime: 12 });
+        queueStore.playbackSessionTracker.play({
+            id: '1',
+            durationMs: 60_000
+        }, 1_000);
+        queueStore.playbackSessionTracker.tick(13_000);
+        queueStore.playbackSessionTracker.pause(13_000);
+        queueStore.playbackSessionTracker.markSeek();
+
+        const release = await queueStore.releasePlaybackHandoff(handoffRelease);
+
+        expect(release).toEqual(expect.objectContaining({
+            status: 'released',
+            playbackHistory: expect.objectContaining({
+                clientSessionId: expect.any(String),
+                trackId: '1',
+                startedAt: new Date(1_000).toISOString(),
+                accumulatedPlayedMs: 12_000,
+                hadSeek: true
+            })
+        }));
+        if (release.status !== 'released' || !release.playbackHistory) {
+            throw new Error('Expected the source history transfer.');
+        }
+
+        await expect(queueStore.settlePlaybackHandoffSource({
+            protocolVersion: 1,
+            commandEpoch: 'epoch-1',
+            handoffId: 'handoff-1',
+            handoffSequence: 1,
+            sourceEndpointId: 'source-tab',
+            sourceRegistrationGeneration: 2,
+            action: 'complete',
+            sessionRevision: 4,
+            queueRevision: 2,
+            snapshot: {
+                ...handoffSnapshot,
+                sessionRevision: 4
+            },
+            reason: null
+        })).resolves.toEqual(expect.objectContaining({ status: 'settled' }));
+
+        await vi.waitFor(() => {
+            expect(MusicListener.count).toHaveBeenCalledWith(expect.objectContaining({
+                clientSessionId: release.playbackHistory?.clientSessionId,
+                id: '1',
+                playedMs: 12_000,
+                endReason: 'handoff',
+                hadSeek: true,
+                source: 'queue-handoff'
+            }));
+        });
     });
 
     it('refuses to recover a released source without its endpoint registration', async () => {
@@ -1184,6 +1596,83 @@ describe('queue playback command adapter', () => {
         } finally {
             queueStore.finishPlaybackHandoffTarget(false);
             endPlaybackControllerCommandBarrier(controllerBarrier);
+        }
+    });
+
+    it('continues a user skip when playback history delivery fails', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        vi.mocked(MusicListener.count).mockRejectedValueOnce(
+            new Error('History is unavailable.')
+        );
+        queueStore.playbackSessionTracker.play({
+            id: '1',
+            durationMs: 60_000
+        }, 1_000);
+        queueStore.playbackSessionTracker.tick(11_000);
+        queueStore.playbackSessionTracker.pause(11_000);
+        mocks.audio.pause.mockClear();
+        mocks.audio.stop.mockClear();
+        mocks.audio.play.mockClear();
+
+        queueStore.next();
+
+        await vi.waitFor(() => {
+            expect(MusicListener.count).toHaveBeenCalledWith(expect.objectContaining({
+                id: '1',
+                playedMs: 10_000,
+                endReason: 'skipped',
+                source: 'queue-track-change'
+            }));
+        });
+        expect(savePlaybackCheckpoint).toHaveBeenCalledWith(expect.objectContaining({
+            trackId: '1',
+            accumulatedPlayedMs: 10_000,
+            endReason: 'skipped',
+            source: 'queue-track-change',
+            active: false
+        }));
+        expect(mocks.audio.pause).not.toHaveBeenCalled();
+        expect(mocks.audio.stop).not.toHaveBeenCalled();
+        expect(mocks.audio.load).toHaveBeenCalledWith(
+            expect.objectContaining({ id: '2' })
+        );
+        expect(mocks.audio.play).toHaveBeenCalled();
+        expect(queueStore.state.currentTrackId).toBe('2');
+    });
+
+    it('persists and delivers an immediate explicit skip', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        vi.useFakeTimers();
+        vi.setSystemTime(1_000);
+
+        try {
+            queueStore.playbackSessionTracker.play({
+                id: '1',
+                durationMs: 60_000
+            });
+
+            queueStore.next();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(MusicListener.count).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    id: '1',
+                    playedMs: 0,
+                    endReason: 'skipped',
+                    source: 'queue-track-change'
+                })
+            );
+            expect(savePlaybackCheckpoint).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    trackId: '1',
+                    accumulatedPlayedMs: 0,
+                    endReason: 'skipped',
+                    active: false
+                })
+            );
+        } finally {
+            vi.useRealTimers();
         }
     });
 });

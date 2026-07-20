@@ -20,6 +20,7 @@ import {
     type PlaybackHandoffActivationAck,
     type PlaybackHandoffActivationDispatch,
     type PlaybackHandoffError,
+    type PlaybackHandoffHistoryTransfer,
     type PlaybackHandoffErrorCode,
     type PlaybackHandoffReleaseAck,
     type PlaybackHandoffReleaseDispatch,
@@ -57,7 +58,12 @@ export interface PlaybackHandoffSourceAdapter {
         dispatch: PlaybackHandoffReleaseDispatch
     ) => PlaybackHandoffError | null;
     release: (dispatch: PlaybackHandoffReleaseDispatch) => Promise<
-        | { status: 'released'; endpointSequence: number; positionMs: number }
+        | {
+            status: 'released';
+            endpointSequence: number;
+            positionMs: number;
+            playbackHistory: PlaybackHandoffHistoryTransfer | null;
+        }
         | { status: 'rejected'; error: PlaybackHandoffError }
     >;
     settle: (dispatch: PlaybackHandoffSourceSettleDispatch) => Promise<
@@ -149,6 +155,61 @@ const isReleaseDispatch = (
         && Boolean(candidate.snapshot);
 };
 
+const isPlaybackHistoryTransfer = (
+    value: unknown,
+    expectedTrackId: string
+) => {
+    if (value === null || value === undefined) {
+        return true;
+    }
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+
+    const candidate = value as Partial<PlaybackHandoffHistoryTransfer>;
+    const startedAt = typeof candidate.startedAt === 'string'
+        ? new Date(candidate.startedAt)
+        : null;
+    const updatedAt = typeof candidate.updatedAt === 'string'
+        ? new Date(candidate.updatedAt)
+        : null;
+    return typeof candidate.clientSessionId === 'string'
+        && candidate.clientSessionId.length > 0
+        && candidate.clientSessionId.length <= 128
+        && typeof candidate.branchId === 'string'
+        && candidate.branchId.length > 0
+        && candidate.branchId.length <= 128
+        && (
+            candidate.parentBranchId === null
+            || (
+                typeof candidate.parentBranchId === 'string'
+                && candidate.parentBranchId.length > 0
+                && candidate.parentBranchId.length <= 128
+                && candidate.parentBranchId !== candidate.branchId
+                && candidate.parentBranchId === candidate.clientSessionId
+            )
+        )
+        && Number.isSafeInteger(candidate.branchBasePlayedMs)
+        && Number(candidate.branchBasePlayedMs) >= 0
+        && (
+            candidate.parentBranchId !== null
+            || Number(candidate.branchBasePlayedMs) === 0
+        )
+        && (
+            candidate.parentBranchId !== null
+            || candidate.branchId === candidate.clientSessionId
+        )
+        && candidate.trackId === expectedTrackId
+        && Boolean(startedAt && !Number.isNaN(startedAt.getTime()))
+        && Boolean(updatedAt && !Number.isNaN(updatedAt.getTime()))
+        && Boolean(startedAt && updatedAt && startedAt <= updatedAt)
+        && Number.isSafeInteger(candidate.accumulatedPlayedMs)
+        && Number(candidate.accumulatedPlayedMs) >= 0
+        && Number(candidate.accumulatedPlayedMs)
+            >= Number(candidate.branchBasePlayedMs)
+        && typeof candidate.hadSeek === 'boolean';
+};
+
 const isActivationDispatch = (
     value: unknown
 ): value is PlaybackHandoffActivationDispatch => {
@@ -168,7 +229,11 @@ const isActivationDispatch = (
         && Number(candidate.targetRegistrationGeneration) > 0
         && Number.isSafeInteger(candidate.claimSessionRevision)
         && Number(candidate.claimSessionRevision) >= 0
-        && Boolean(candidate.snapshot);
+        && Boolean(candidate.snapshot)
+        && isPlaybackHistoryTransfer(
+            candidate.playbackHistory,
+            candidate.snapshot?.currentMusicId ?? ''
+        );
 };
 
 const isTargetAbortDispatch = (
@@ -572,7 +637,8 @@ export class PlaybackHandoffSourceTarget {
                     sourceRegistrationGeneration: dispatch.sourceRegistrationGeneration,
                     status: 'released',
                     endpointSequence: result.endpointSequence,
-                    positionMs: result.positionMs
+                    positionMs: result.positionMs,
+                    playbackHistory: result.playbackHistory
                 }
                 : this.releaseRejectedAck(dispatch, result.error);
             active.releaseAck = releaseAck;

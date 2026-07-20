@@ -90,7 +90,13 @@ describe('music API requests', () => {
                         playCount: 1,
                         lastPlayedAt: '2026-04-10T10:00:15.000Z',
                         totalPlayedMs: 35_000,
+                        skipCount: 0,
+                        lastSkippedAt: null,
+                        completionCount: 1,
+                        lastCompletedAt: '2026-04-10T10:00:15.000Z',
                         countedAsPlay: true,
+                        completionRate: 1,
+                        outcome: 'complete',
                         deduped: false
                     }
                 }
@@ -102,8 +108,14 @@ describe('music API requests', () => {
             playedMs: 35_000,
             completionRate: 0.5,
             startedAt: '2026-04-10T10:00:00.000Z',
+            endedAt: '2026-04-10T10:00:35.000Z',
+            endReason: 'ended',
+            hadSeek: false,
             source: 'queue-track-change',
-            clientSessionId: 'session-1'
+            clientSessionId: 'session-1',
+            branchId: 'target-branch-1',
+            parentBranchId: 'session-1',
+            branchBasePlayedMs: 20_000
         });
 
         const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
@@ -114,8 +126,14 @@ describe('music API requests', () => {
                 playedMs: 35_000,
                 completionRate: 0.5,
                 startedAt: '2026-04-10T10:00:00.000Z',
+                endedAt: '2026-04-10T10:00:35.000Z',
+                endReason: 'ended',
+                hadSeek: false,
                 source: 'queue-track-change',
-                clientSessionId: 'session-1'
+                clientSessionId: 'session-1',
+                branchId: 'target-branch-1',
+                parentBranchId: 'session-1',
+                branchBasePlayedMs: 20_000
             },
             originClientId: 'client-1'
         });

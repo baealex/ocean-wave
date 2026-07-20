@@ -70,7 +70,17 @@ describe('playback session API', () => {
             state: 'playing' as const,
             currentMusicId: '42',
             positionMs: 12_000,
-            observedAt: '2026-07-14T00:00:00.000Z'
+            observedAt: '2026-07-14T00:00:00.000Z',
+            playbackHistory: {
+                clientSessionId: 'logical-listen-1',
+                branchId: 'logical-listen-1',
+                parentBranchId: null,
+                branchBasePlayedMs: 0,
+                startedAt: '2026-07-14T00:00:00.000Z',
+                accumulatedPlayedMs: 12_000,
+                hadSeek: false,
+                updatedAt: '2026-07-14T00:00:12.000Z'
+            }
         };
 
         await reportPlaybackState(input);

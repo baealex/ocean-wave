@@ -76,6 +76,145 @@ describe('playback session service', () => {
         });
     });
 
+    it('persists current history lineage and clears it when playback stops', async () => {
+        const music = await createMusic();
+        const playbackHistory = {
+            clientSessionId: 'logical-listen-1',
+            branchId: 'logical-listen-1',
+            parentBranchId: null,
+            branchBasePlayedMs: 0,
+            startedAt: '2026-07-14T00:00:00.000Z',
+            accumulatedPlayedMs: 12_000,
+            hadSeek: true,
+            updatedAt: '2026-07-14T00:00:12.000Z'
+        };
+
+        await reportPlaybackState({
+            deviceId: 'web-tab-1',
+            sequence: 1,
+            expectedRevision: 0,
+            claimActive: true,
+            state: 'playing',
+            currentMusicId: music.id.toString(),
+            positionMs: 12_000,
+            playbackHistory
+        });
+
+        await expect(models.playbackSession.findUniqueOrThrow({
+            where: { scopeKey: 'local' }
+        })).resolves.toMatchObject({
+            historyMusicId: music.id,
+            historySessionId: playbackHistory.clientSessionId,
+            historyBranchId: playbackHistory.branchId,
+            historyParentBranchId: null,
+            historyBranchBasePlayedMs: 0,
+            historyStartedAt: new Date(playbackHistory.startedAt),
+            historyPlayedMs: playbackHistory.accumulatedPlayedMs,
+            historyHadSeek: true,
+            historyUpdatedAt: new Date(playbackHistory.updatedAt)
+        });
+
+        await reportPlaybackState({
+            deviceId: 'web-tab-1',
+            sequence: 2,
+            expectedRevision: 1,
+            claimActive: false,
+            state: 'playing',
+            currentMusicId: music.id.toString(),
+            positionMs: 13_000,
+            playbackHistory: {
+                ...playbackHistory,
+                accumulatedPlayedMs: 8_000,
+                hadSeek: false,
+                updatedAt: '2026-07-14T00:00:08.000Z'
+            }
+        });
+
+        await expect(models.playbackSession.findUniqueOrThrow({
+            where: { scopeKey: 'local' }
+        })).resolves.toMatchObject({
+            historyMusicId: music.id,
+            historySessionId: playbackHistory.clientSessionId,
+            historyBranchId: playbackHistory.branchId,
+            historyPlayedMs: playbackHistory.accumulatedPlayedMs,
+            historyHadSeek: true,
+            historyUpdatedAt: new Date(playbackHistory.updatedAt)
+        });
+
+        await reportPlaybackState({
+            deviceId: 'web-tab-1',
+            sequence: 3,
+            expectedRevision: 2,
+            claimActive: false,
+            state: 'stopped',
+            currentMusicId: music.id.toString(),
+            positionMs: 12_000
+        });
+
+        await expect(models.playbackSession.findUniqueOrThrow({
+            where: { scopeKey: 'local' }
+        })).resolves.toMatchObject({
+            historyMusicId: null,
+            historySessionId: null,
+            historyBranchId: null,
+            historyParentBranchId: null,
+            historyBranchBasePlayedMs: 0,
+            historyStartedAt: null,
+            historyPlayedMs: 0,
+            historyHadSeek: false,
+            historyUpdatedAt: null
+        });
+    });
+
+    it('rejects malformed history identity instead of dropping deduplication', async () => {
+        const music = await createMusic();
+
+        await expect(reportPlaybackState({
+            deviceId: 'web-tab-1',
+            sequence: 1,
+            expectedRevision: 0,
+            claimActive: true,
+            state: 'playing',
+            currentMusicId: music.id.toString(),
+            positionMs: 0,
+            playbackHistory: {
+                clientSessionId: '   ',
+                startedAt: '2026-07-14T00:00:00.000Z',
+                accumulatedPlayedMs: 0,
+                hadSeek: false,
+                updatedAt: '2026-07-14T00:00:00.000Z'
+            }
+        })).rejects.toEqual(expect.objectContaining({
+            code: 'INVALID_PLAYBACK_HISTORY'
+        } satisfies Partial<PlaybackSessionServiceError>));
+    });
+
+    it('rejects playback history with a noncanonical branch parent', async () => {
+        const music = await createMusic();
+
+        await expect(reportPlaybackState({
+            deviceId: 'web-tab-1',
+            sequence: 1,
+            expectedRevision: 0,
+            claimActive: true,
+            state: 'playing',
+            currentMusicId: music.id.toString(),
+            positionMs: 30_000,
+            playbackHistory: {
+                clientSessionId: 'canonical-session',
+                branchId: 'target-branch',
+                parentBranchId: 'missing-parent',
+                branchBasePlayedMs: 20_000,
+                startedAt: '2026-07-14T00:00:00.000Z',
+                accumulatedPlayedMs: 30_000,
+                hadSeek: false,
+                updatedAt: '2026-07-14T00:00:30.000Z'
+            }
+        })).rejects.toEqual(expect.objectContaining({
+            code: 'INVALID_PLAYBACK_HISTORY'
+        } satisfies Partial<PlaybackSessionServiceError>));
+    });
+
     it('dedupes an accepted sequence and rejects an older active-device report', async () => {
         const music = await createMusic();
         const firstInput = {

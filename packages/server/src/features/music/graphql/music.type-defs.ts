@@ -13,6 +13,10 @@ export const musicType: string = gql`
         playCount: Int!
         lastPlayedAt: String
         totalPlayedMs: Float!
+        skipCount: Int!
+        lastSkippedAt: String
+        completionCount: Int!
+        lastCompletedAt: String
         trackNumber: Int!
         filePath: String!
         hasMetadataOverride: Boolean!
@@ -45,8 +49,31 @@ export const musicType: string = gql`
         playCount: Int!
         lastPlayedAt: String
         totalPlayedMs: Float!
+        skipCount: Int!
+        lastSkippedAt: String
+        completionCount: Int!
+        lastCompletedAt: String
         countedAsPlay: Boolean!
+        completionRate: Float!
+        outcome: PlaybackOutcome!
         deduped: Boolean!
+    }
+
+    enum PlaybackOutcome {
+        listen
+        skip
+        complete
+        legacy
+    }
+
+    enum PlaybackEndReason {
+        ended
+        skipped
+        stopped
+        handoff
+        unload
+        recovery
+        legacy
     }
 
     input RecordPlaybackInput {
@@ -54,8 +81,14 @@ export const musicType: string = gql`
         playedMs: Float!
         completionRate: Float
         startedAt: String
+        endedAt: String
+        endReason: PlaybackEndReason
+        hadSeek: Boolean
         source: String
         clientSessionId: String
+        branchId: String
+        parentBranchId: String
+        branchBasePlayedMs: Float
     }
 
     enum TagFilterMode {

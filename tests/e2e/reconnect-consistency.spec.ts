@@ -243,6 +243,11 @@ test('keeps playback and queue authority consistent through offline reconnect', 
             await fetchRegistry(pageB),
             ENDPOINT_A
         )).toBe(false);
+        // A trailing report can settle while offline status propagates.
+        const disconnectBoundarySession = await fetchSession(pageB);
+        expect(disconnectBoundarySession).not.toBeNull();
+        expect(disconnectBoundarySession!.revision)
+            .toBeGreaterThanOrEqual(beforeDisconnectSession!.revision);
 
         await trackButton(pageA, 'Reconnect Track Two').click();
         await pageA.getByRole('button', { name: 'Open queue' }).click();
@@ -330,7 +335,8 @@ test('keeps playback and queue authority consistent through offline reconnect', 
         )).toBe(true);
         await expect.poll(() => reconnectReports.some(report => (
             report.input.deviceId === ENDPOINT_A
-            && report.input.expectedRevision === beforeDisconnectSession!.revision
+            && report.input.expectedRevision >= beforeDisconnectSession!.revision
+            && report.input.expectedRevision <= disconnectBoundarySession!.revision
             && report.input.claimActive === false
             && report.input.state === 'paused'
             && report.input.currentMusicId === '1'

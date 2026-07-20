@@ -3,6 +3,7 @@ import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
 import {
     normalizePlaybackHandoffState,
     type PlaybackHandoffErrorCode,
+    type PlaybackHandoffHistoryTransfer,
     type PlaybackHandoffRequest,
     type PlaybackHandoffSnapshot,
     type PlaybackHandoffSourceState
@@ -22,6 +23,7 @@ export interface ResolvedPlaybackHandoff {
     sourceState: PlaybackHandoffSourceState;
     sourceStartedAt: Date | null;
     durationMs: number;
+    playbackHistory: PlaybackHandoffHistoryTransfer | null;
     snapshot: PlaybackHandoffSnapshot;
 }
 
@@ -90,6 +92,93 @@ const toEffectivePositionMs = (input: {
         input.durationMs
     );
 };
+
+const toPlaybackHistoryTransfer = (session: {
+    currentMusicId: number | null;
+    historyMusicId: number | null;
+    historySessionId: string | null;
+    historyBranchId: string | null;
+    historyParentBranchId: string | null;
+    historyBranchBasePlayedMs: number;
+    historyStartedAt: Date | null;
+    historyPlayedMs: number;
+    historyHadSeek: boolean;
+    historyUpdatedAt: Date | null;
+}): PlaybackHandoffHistoryTransfer | null => {
+    if (
+        !session.currentMusicId
+        || session.historyMusicId !== session.currentMusicId
+        || !session.historySessionId
+        || !session.historyStartedAt
+        || !session.historyUpdatedAt
+        || session.historyStartedAt > session.historyUpdatedAt
+        || !Number.isSafeInteger(session.historyPlayedMs)
+        || session.historyPlayedMs < 0
+        || !Number.isSafeInteger(session.historyBranchBasePlayedMs)
+        || session.historyBranchBasePlayedMs < 0
+        || (
+            session.historyParentBranchId === null
+            && session.historyBranchBasePlayedMs !== 0
+        )
+        || session.historyPlayedMs < session.historyBranchBasePlayedMs
+    ) {
+        return null;
+    }
+
+    const branchId = session.historyBranchId ?? session.historySessionId;
+    if (
+        !branchId
+        || branchId.length > 128
+        || session.historyParentBranchId === branchId
+        || (
+            session.historyParentBranchId !== null
+            && session.historyParentBranchId !== session.historySessionId
+        )
+        || (
+            session.historyParentBranchId === null
+            && branchId !== session.historySessionId
+        )
+    ) {
+        return null;
+    }
+
+    return {
+        clientSessionId: session.historySessionId,
+        branchId,
+        parentBranchId: session.historyParentBranchId,
+        branchBasePlayedMs: session.historyBranchBasePlayedMs,
+        trackId: session.currentMusicId.toString(),
+        startedAt: session.historyStartedAt.toISOString(),
+        accumulatedPlayedMs: session.historyPlayedMs,
+        hadSeek: session.historyHadSeek,
+        updatedAt: session.historyUpdatedAt.toISOString()
+    };
+};
+
+const playbackHistoryUpdateData = (
+    history: PlaybackHandoffHistoryTransfer | null,
+    currentMusicId: number
+) => history ? {
+        historyMusicId: currentMusicId,
+        historySessionId: history.clientSessionId,
+        historyBranchId: history.branchId,
+        historyParentBranchId: history.parentBranchId,
+        historyBranchBasePlayedMs: history.branchBasePlayedMs,
+        historyStartedAt: new Date(history.startedAt),
+        historyPlayedMs: history.accumulatedPlayedMs,
+        historyHadSeek: history.hadSeek,
+        historyUpdatedAt: new Date(history.updatedAt)
+    } : {
+        historyMusicId: null,
+        historySessionId: null,
+        historyBranchId: null,
+        historyParentBranchId: null,
+        historyBranchBasePlayedMs: 0,
+        historyStartedAt: null,
+        historyPlayedMs: 0,
+        historyHadSeek: false,
+        historyUpdatedAt: null
+    };
 
 const currentRevisions = async () => {
     const current = await models.playbackSession.findUnique({
@@ -341,6 +430,7 @@ export const resolvePlaybackHandoff = async (
         sourceState: session.state as PlaybackHandoffSourceState,
         sourceStartedAt: session.startedAt,
         durationMs,
+        playbackHistory: toPlaybackHistoryTransfer(session),
         snapshot
     };
 };
@@ -348,7 +438,8 @@ export const resolvePlaybackHandoff = async (
 export const claimPlaybackHandoff = async (
     resolved: ResolvedPlaybackHandoff,
     releasedPositionMs: number,
-    now = new Date()
+    now = new Date(),
+    targetPlaybackHistory = resolved.playbackHistory
 ): Promise<ClaimedPlaybackHandoff> => {
     const positionMs = assertPosition(
         releasedPositionMs,
@@ -375,6 +466,10 @@ export const claimPlaybackHandoff = async (
                     positionMs,
                     positionUpdatedAt: now,
                     startedAt: resolved.sourceStartedAt,
+                    ...playbackHistoryUpdateData(
+                        targetPlaybackHistory,
+                        Number(resolved.snapshot.currentMusicId)
+                    ),
                     revision: { increment: 1 }
                 }
             });
@@ -528,6 +623,10 @@ export const rollbackPlaybackHandoff = async (
                     activeDeviceSequence: sourceReleaseSequence,
                     positionMs: claimed.snapshot.positionMs,
                     positionUpdatedAt: now,
+                    ...playbackHistoryUpdateData(
+                        resolved.playbackHistory,
+                        Number(resolved.snapshot.currentMusicId)
+                    ),
                     revision: { increment: 1 }
                 }
             });

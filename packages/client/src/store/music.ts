@@ -6,6 +6,7 @@ import type {
 } from '~/models/type';
 
 import * as sort from '~/modules/sort';
+import { mergePlaybackHistoryAggregates } from '~/modules/playback-history';
 
 import { getMusics } from '~/api/library';
 import { MusicListener } from '~/socket';
@@ -82,15 +83,32 @@ class MusicStore extends BaseStore<MusicStoreState> {
                     };
                 });
             },
-            onCount: ({ id, playCount, lastPlayedAt, totalPlayedMs }) => {
+            onCount: ({
+                id,
+                playCount,
+                lastPlayedAt,
+                totalPlayedMs,
+                skipCount,
+                lastSkippedAt,
+                completionCount,
+                lastCompletedAt
+            }) => {
                 this.set((prevState) => {
                     let nextMusics = prevState.musics.map((music) => {
                         if (music.id === id) {
-                            return {
-                                ...music,
+                            const aggregates = mergePlaybackHistoryAggregates(music, {
                                 playCount,
                                 lastPlayedAt,
-                                totalPlayedMs
+                                totalPlayedMs,
+                                skipCount,
+                                lastSkippedAt,
+                                completionCount,
+                                lastCompletedAt
+                            });
+
+                            return {
+                                ...music,
+                                ...aggregates
                             };
                         }
                         return music;
@@ -132,11 +150,21 @@ class MusicStore extends BaseStore<MusicStoreState> {
     async sync() {
         const { data } = await getMusics();
 
-        this.set({
-            loaded: true,
-            musics: data.allMusics,
-            musicMap: createMusicMap(data.allMusics),
-            sortedFrom: SORT_STATE.PLAY_COUNT_DESC
+        this.set((prevState) => {
+            const musics = data.allMusics.map((music) => {
+                const current = prevState.musicMap.get(music.id);
+                return current ? {
+                    ...music,
+                    ...mergePlaybackHistoryAggregates(current, music)
+                } : music;
+            });
+
+            return {
+                loaded: true,
+                musics,
+                musicMap: createMusicMap(musics),
+                sortedFrom: SORT_STATE.PLAY_COUNT_DESC
+            };
         });
     }
 
