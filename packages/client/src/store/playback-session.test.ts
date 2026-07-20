@@ -67,6 +67,7 @@ import {
     beginPlaybackCommandBarrier,
     endPlaybackCommandBarrier
 } from '~/modules/playback-command-barrier';
+import { PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS } from '~/modules/playback-controller';
 import { PlaybackSessionStore } from './playback-session';
 
 const createRegistration = (endpointId = 'web-tab-local', generation = 1) => ({
@@ -119,6 +120,9 @@ describe('PlaybackSessionStore', () => {
 
         store.connect();
         await vi.waitFor(() => expect(store.state.loading).toBe(false));
+        expect(mocks.fetchPlaybackSession).toHaveBeenCalledWith(
+            PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS
+        );
 
         const handler = mocks.listenerConnect.mock.calls[0]?.[0] as {
             onStateUpdated: (snapshot: PlaybackSessionSnapshot) => void;

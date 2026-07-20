@@ -1,17 +1,18 @@
 import {
     fetchPlaybackSession,
-    reportPlaybackState,
     type PlaybackSessionSnapshot,
     type ReportPlaybackStateInput,
+    reportPlaybackState,
     type SharedPlaybackState
 } from '~/api/playback-session';
-import { nextPlaybackEndpointSequence } from '~/modules/playback-device';
 import { isPlaybackCommandBarrierActive } from '~/modules/playback-command-barrier';
+import { PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS } from '~/modules/playback-controller';
+import { nextPlaybackEndpointSequence } from '~/modules/playback-device';
 import { isNewerPlaybackSnapshot } from '~/modules/shared-playback';
 import { PlaybackListener } from '~/socket';
 import {
-    playbackEndpointRegistration,
-    type PlaybackEndpointRegistrationState
+    type PlaybackEndpointRegistrationState,
+    playbackEndpointRegistration
 } from '~/socket/playback-endpoint';
 import { socket } from '~/socket/socket';
 
@@ -154,7 +155,9 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
         this.set({ endpointId: null });
     }
 
-    async refresh(requestTimeoutMs?: number): Promise<PlaybackSessionRefreshResult> {
+    async refresh(
+        requestTimeoutMs = PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS
+    ): Promise<PlaybackSessionRefreshResult> {
         const refreshSequence = ++this.refreshSequence;
         this.set({ loading: true });
         const response = await fetchPlaybackSession(requestTimeoutMs);

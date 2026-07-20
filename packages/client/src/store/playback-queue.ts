@@ -1,11 +1,12 @@
 import {
     fetchPlaybackQueue,
-    savePlaybackQueue,
     type PlaybackQueueRepeatMode,
-    type PlaybackQueueSnapshot
+    type PlaybackQueueSnapshot,
+    savePlaybackQueue
 } from '~/api/playback-queue';
-import { socket } from '~/socket';
 import { isPlaybackCommandBarrierActive } from '~/modules/playback-command-barrier';
+import { PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS } from '~/modules/playback-controller';
+import { socket } from '~/socket';
 
 import { BaseStore } from './base-store';
 
@@ -75,7 +76,9 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
         socket.off('connect', this.handleSocketConnect);
     }
 
-    async refresh(requestTimeoutMs?: number): Promise<PlaybackQueueRefreshResult> {
+    async refresh(
+        requestTimeoutMs = PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS
+    ): Promise<PlaybackQueueRefreshResult> {
         const refreshSequence = ++this.refreshSequence;
         this.set({ loading: true });
         const response = await fetchPlaybackQueue(requestTimeoutMs);

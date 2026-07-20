@@ -30,9 +30,10 @@ import {
     beginPlaybackCommandBarrier,
     endPlaybackCommandBarrier
 } from '~/modules/playback-command-barrier';
+import { PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS } from '~/modules/playback-controller';
 import {
-    PlaybackQueueStore,
-    type LocalPlaybackQueueSnapshot
+    type LocalPlaybackQueueSnapshot,
+    PlaybackQueueStore
 } from './playback-queue';
 
 const createSnapshot = (
@@ -75,6 +76,9 @@ describe('PlaybackQueueStore', () => {
 
         store.connect();
         await vi.waitFor(() => expect(store.state.loading).toBe(false));
+        expect(mocks.fetchPlaybackQueue).toHaveBeenCalledWith(
+            PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS
+        );
 
         expect(store.state).toMatchObject({
             snapshot,

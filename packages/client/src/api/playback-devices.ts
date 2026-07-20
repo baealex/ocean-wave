@@ -55,11 +55,12 @@ const PLAYBACK_DEVICE_FIELDS = `
     }
 `;
 
-export const fetchPlaybackDeviceRegistry = () => {
+export const fetchPlaybackDeviceRegistry = (requestTimeoutMs?: number) => {
     return graphQuery<{
         playbackDeviceRegistry: PlaybackDeviceRegistrySnapshot;
     }>({
         operationName: 'PlaybackDeviceRegistry',
+        requestTimeoutMs,
         query: `query PlaybackDeviceRegistry {
             playbackDeviceRegistry {
                 commandEpoch

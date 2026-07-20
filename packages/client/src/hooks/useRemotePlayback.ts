@@ -1,69 +1,89 @@
 import { useEffect, useState } from 'react';
 
-import type { SharedPlaybackState } from '~/api/playback-session';
+import type { PlaybackQueueSnapshot } from '~/api/playback-queue';
+import type {
+    PlaybackSessionSnapshot,
+    SharedPlaybackState
+} from '~/api/playback-session';
 import type { Music } from '~/models/type';
 import { resolveSharedPlaybackPositionMs } from '~/modules/shared-playback';
 import { useAppStore as useStore } from '~/store/base-store';
 import { musicStore } from '~/store/music';
+import { playbackQueueStore } from '~/store/playback-queue';
 import { playbackSessionStore } from '~/store/playback-session';
+import { resolveRemotePlaybackOwnership } from './useRemotePlaybackOwnership';
 
 export interface RemotePlaybackSummary {
-    music: Music;
+    music: Music | null;
     positionMs: number;
     progress: number;
-    state: Exclude<SharedPlaybackState, 'stopped'>;
+    state: SharedPlaybackState;
+    targetEndpointId: string;
 }
+
+export const resolveRemotePlaybackMusicId = (
+    session: PlaybackSessionSnapshot | null,
+    queue: PlaybackQueueSnapshot | null
+) => {
+    if (!session) {
+        return null;
+    }
+
+    if (session.state !== 'stopped') {
+        return session.currentMusicId;
+    }
+
+    const queueIndex = queue?.currentIndex;
+    const queueMusicId = queueIndex === null || queueIndex === undefined
+        ? null
+        : queue?.musicIds[queueIndex] ?? null;
+    return queueMusicId ?? session.currentMusicId;
+};
 
 export default function useRemotePlayback(): RemotePlaybackSummary | null {
     const [{ snapshot, receivedAtMs, endpointId }] = useStore(playbackSessionStore);
+    const [{ snapshot: queueSnapshot }] = useStore(playbackQueueStore);
     const [{ musicMap }] = useStore(musicStore);
     const [nowMs, setNowMs] = useState(Date.now());
-    const isRemotePlayback = Boolean(
-        snapshot
-        && endpointId
-        && snapshot.state !== 'stopped'
-        && snapshot.activeDeviceId
-        && snapshot.activeDeviceId !== endpointId
-        && snapshot.currentMusicId
-    );
+    const remoteMusicId = resolveRemotePlaybackMusicId(snapshot, queueSnapshot);
+    const ownership = resolveRemotePlaybackOwnership(snapshot, endpointId);
 
     useEffect(() => {
-        if (!isRemotePlayback || snapshot?.state !== 'playing') {
+        if (!ownership || snapshot?.state !== 'playing') {
             return;
         }
 
         const timer = setInterval(() => setNowMs(Date.now()), 1_000);
         return () => clearInterval(timer);
-    }, [isRemotePlayback, snapshot?.revision, snapshot?.state]);
+    }, [ownership?.targetEndpointId, snapshot?.revision, snapshot?.state]);
 
     if (
-        !isRemotePlayback
+        !ownership
         || !snapshot
-        || snapshot.state === 'stopped'
-        || !snapshot.currentMusicId
     ) {
         return null;
     }
 
-    const music = musicMap.get(snapshot.currentMusicId);
+    const music = remoteMusicId
+        ? musicMap.get(remoteMusicId) ?? null
+        : null;
 
-    if (!music) {
-        return null;
-    }
-
-    const positionMs = resolveSharedPlaybackPositionMs({
-        snapshot,
-        receivedAtMs,
-        nowMs,
-        durationMs: music.duration * 1000
-    });
+    const positionMs = snapshot.state === 'stopped'
+        ? 0
+        : resolveSharedPlaybackPositionMs({
+            snapshot,
+            receivedAtMs,
+            nowMs,
+            durationMs: music ? music.duration * 1000 : undefined
+        });
 
     return {
         music,
         positionMs,
-        progress: music.duration > 0
+        progress: music && music.duration > 0
             ? Math.min(positionMs / (music.duration * 1000) * 100, 100)
             : 0,
-        state: snapshot.state
+        state: snapshot.state,
+        targetEndpointId: ownership.targetEndpointId
     };
 }

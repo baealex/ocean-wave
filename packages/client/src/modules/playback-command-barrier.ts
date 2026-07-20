@@ -2,8 +2,13 @@ type PlaybackCommandBarrierPhase = 'executing' | 'recovering';
 
 let activeCommandKey: string | null = null;
 let activePhase: PlaybackCommandBarrierPhase | null = null;
+const activeControllerCommandBarriers = new Set<symbol>();
 
 export const beginPlaybackCommandBarrier = (commandKey: string) => {
+    if (activeControllerCommandBarriers.size > 0) {
+        return false;
+    }
+
     if (activeCommandKey && activeCommandKey !== commandKey) {
         return false;
     }
@@ -33,6 +38,32 @@ export const isPlaybackCommandBarrierActive = () => activeCommandKey !== null;
 
 export const isPlaybackCommandExecutionBarrierActive = () => (
     activePhase === 'executing'
+);
+
+export const beginPlaybackControllerCommandBarrier = (barrier: symbol) => {
+    if (activeControllerCommandBarriers.has(barrier)) {
+        return true;
+    }
+
+    if (activeCommandKey) {
+        return false;
+    }
+
+    activeControllerCommandBarriers.add(barrier);
+    return true;
+};
+
+export const endPlaybackControllerCommandBarrier = (barrier: symbol) => {
+    activeControllerCommandBarriers.delete(barrier);
+};
+
+export const isPlaybackControllerCommandBarrierActive = () => (
+    activeControllerCommandBarriers.size > 0
+);
+
+export const isLocalPlaybackMutationBarrierActive = () => (
+    isPlaybackCommandExecutionBarrierActive()
+    || isPlaybackControllerCommandBarrierActive()
 );
 
 export const getPlaybackCommandBarrierKey = () => activeCommandKey;

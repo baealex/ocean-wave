@@ -1,9 +1,8 @@
+import classNames from 'classnames';
 import type {
     ButtonHTMLAttributes,
     CSSProperties
 } from 'react';
-
-import classNames from 'classnames';
 
 import {
     Badge,
@@ -17,7 +16,10 @@ import {
 import * as Icon from '~/icon';
 
 import type { Music } from '~/models/type';
-
+import {
+    REMOTE_PLAYBACK_OWNERSHIP_MESSAGE,
+    REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
+} from '~/modules/playback-ownership';
 import type { QueueTone } from './QueueDndItem';
 
 const cx = classNames;
@@ -29,6 +31,7 @@ interface QueueItemProps {
     tone: QueueTone;
     isSelectMode: boolean;
     isSelected: boolean;
+    playbackDisabled?: boolean;
     onSelect: () => void;
     onClick: () => void;
     onOpenActions: () => void;
@@ -44,6 +47,7 @@ export default function QueueItem({
     tone,
     isSelectMode,
     isSelected,
+    playbackDisabled = false,
     onSelect,
     onClick,
     onOpenActions,
@@ -86,7 +90,20 @@ export default function QueueItem({
 
             <button
                 type="button"
-                className={listRowButtonContentClass({ layout: 'queue' })}
+                className={cx(
+                    listRowButtonContentClass({ layout: 'queue' }),
+                    playbackDisabled && 'cursor-not-allowed opacity-60'
+                )}
+                disabled={!isSelectMode && playbackDisabled}
+                aria-label={!isSelectMode && playbackDisabled
+                    ? `${music.name} cannot start here while another device owns playback`
+                    : undefined}
+                aria-describedby={!isSelectMode && playbackDisabled
+                    ? REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
+                    : undefined}
+                title={!isSelectMode && playbackDisabled
+                    ? REMOTE_PLAYBACK_OWNERSHIP_MESSAGE
+                    : undefined}
                 onClick={isSelectMode ? onSelect : onClick}
                 onContextMenu={(e) => {
                     e.preventDefault();

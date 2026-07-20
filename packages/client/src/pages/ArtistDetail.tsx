@@ -1,25 +1,31 @@
-import { useAppStore as useStore } from '~/store/base-store';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-
+import { getArtist } from '~/api/library';
+import { queryKeys } from '~/api/query-keys';
 import { AlbumListItem } from '~/components/album';
 import { ArtistSummary } from '~/components/artist';
 import { TwoToneLayout, TwoTonePrimaryAction } from '~/components/layout';
-import { MusicActionPanelContent, MusicListItem } from '~/components/music';
+import {
+    MusicActionPanelContent,
+    MusicListItem,
+    RemotePlaybackOwnershipNotice
+} from '~/components/music';
 import { Button, Loading, StateMessage, Text } from '~/components/shared';
+import { useRemotePlaybackOwnership, useResetQueue } from '~/hooks';
 import { Play } from '~/icon';
-
-import { getArtist } from '~/api/library';
-import { queryKeys } from '~/api/query-keys';
-
+import { panel } from '~/modules/panel';
+import {
+    REMOTE_PLAYBACK_OWNERSHIP_MESSAGE,
+    REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
+} from '~/modules/playback-ownership';
+import { useAppStore as useStore } from '~/store/base-store';
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
-import { panel } from '~/modules/panel';
-import { useResetQueue } from '~/hooks';
 
 export default function ArtistDetail() {
     const navigate = useNavigate();
     const resetQueue = useResetQueue();
+    const remotePlaybackOwnership = useRemotePlaybackOwnership();
 
     const { id } = useParams<{ id: string }>();
 
@@ -69,12 +75,23 @@ export default function ArtistDetail() {
             )}
             primaryAction={(
                 <TwoTonePrimaryAction
-                    aria-label={`Play ${artist.name}`}
-                    disabled={artist.musics.length === 0}
+                    aria-label={remotePlaybackOwnership
+                        ? `Play ${artist.name} unavailable while another device owns playback`
+                        : `Play ${artist.name}`}
+                    aria-describedby={remotePlaybackOwnership
+                        ? REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
+                        : undefined}
+                    title={remotePlaybackOwnership
+                        ? REMOTE_PLAYBACK_OWNERSHIP_MESSAGE
+                        : undefined}
+                    disabled={artist.musics.length === 0 || Boolean(remotePlaybackOwnership)}
                     onClick={() => void resetQueue(artist.musics.map(music => music.id))}>
                     <Play />
                 </TwoTonePrimaryAction>
             )}>
+            {remotePlaybackOwnership && (
+                <RemotePlaybackOwnershipNotice className="mx-[var(--b-spacing-lg)] mb-[var(--b-spacing-lg)]" />
+            )}
             <div className="mb-[var(--b-spacing-2xl)] last:mb-0">
                 <div className="mb-[var(--b-spacing-sm)] flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
                     <div className="flex items-center gap-[var(--b-spacing-sm)]">

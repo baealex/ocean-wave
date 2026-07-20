@@ -5,36 +5,36 @@ import type {
     KeyboardEvent as ReactKeyboardEvent,
     PointerEvent as ReactPointerEvent
 } from 'react';
-import { useAppStore as useStore } from '~/store/base-store';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ActionBar, ActionBarButton, Button, IconButton, ListSelectionToolbar, PageContainer, StateMessage, Text } from '~/components/shared';
-import { MusicActionPanelContent } from '~/components/music';
-import { PlaylistPanelContent } from '~/components/playlist';
-import * as Icon from '~/icon';
-
-import { panel } from '~/modules/panel';
-import { toast } from '~/modules/toast';
 import {
+    MusicActionPanelContent,
+    RemotePlaybackOwnershipNotice
+} from '~/components/music';
+import { PlaylistPanelContent } from '~/components/playlist';
+import { ActionBar, ActionBarButton, Button, IconButton, ListSelectionToolbar, PageContainer, StateMessage, Text } from '~/components/shared';
+import { useBack, useRemotePlaybackOwnership, useStoreValue } from '~/hooks';
+import * as Icon from '~/icon';
+import type { Music } from '~/models/type';
+import { panel } from '~/modules/panel';
+import {
+    buildQueueVirtualLayout,
+    findQueueDropSlot,
+    findQueueTrackRow,
+    getQueueDropIndicatorTop,
+    getQueueTrackRows,
+    getVisibleQueueVirtualRows,
     QUEUE_TRACK_CARD_HEIGHT,
     QUEUE_TRACK_ROW_GAP,
     QUEUE_VIRTUAL_OVERSCAN_PX,
-    buildQueueVirtualLayout,
-    findQueueDropSlot,
-    getQueueDropIndicatorTop,
-    getQueueTrackRows,
-    findQueueTrackRow,
-    getVisibleQueueVirtualRows,
     resolveQueueDropIndex
 } from '~/modules/queue-virtual-rows';
-
-import type { Music } from '~/models/type';
+import { toast } from '~/modules/toast';
 
 import { PlaylistListener } from '~/socket';
-
+import { useAppStore as useStore } from '~/store/base-store';
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
-import { useBack, useStoreValue } from '~/hooks';
 import type { QueueTone } from './Queue/QueueDndItem';
 import QueueItem from './Queue/QueueItem';
 
@@ -83,6 +83,7 @@ const queueVirtualItemClass = cva(
 export default function Queue() {
     const back = useBack();
     const navigate = useNavigate();
+    const remotePlaybackOwnership = useRemotePlaybackOwnership();
 
     const [items] = useStoreValue(queueStore, 'items');
     const [selected] = useStoreValue(queueStore, 'selected');
@@ -467,9 +468,12 @@ export default function Queue() {
             isSelectMode,
             className: options?.className,
             isSelected: selectedItems.includes(id),
+            playbackDisabled: Boolean(remotePlaybackOwnership),
             onSelect: () => toggleSelectedItem(id),
             onClick: () => {
-                queueStore.select(index);
+                if (!remotePlaybackOwnership) {
+                    queueStore.select(index);
+                }
             },
             onOpenActions: () => openMusicActions(music),
             onReorderKeyDown: moveQueueItemByKeyboard(id, index),
@@ -583,6 +587,7 @@ export default function Queue() {
             </div>
 
             <PageContainer width="narrow" padding="focus" className="flex min-h-0 flex-col gap-4">
+                {remotePlaybackOwnership && <RemotePlaybackOwnershipNotice />}
                 {items.length > 0 ? (
                     <>
                         <div className="pb-2" ref={listRef}>

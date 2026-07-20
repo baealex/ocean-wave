@@ -56,7 +56,11 @@ import type {
     PlaybackDeviceRegistrySnapshot,
     PlaybackDeviceSnapshot
 } from '~/api/playback-devices';
-import { PlaybackDevicesStore } from './playback-devices';
+import { PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS } from '~/modules/playback-controller';
+import {
+    PlaybackDevicesStore,
+    resolveActivePlaybackTarget
+} from './playback-devices';
 
 const createDevice = (
     overrides: Partial<PlaybackDeviceSnapshot> = {}
@@ -86,6 +90,43 @@ const createRegistry = (
     serverTime: '2026-07-20T00:00:00.000Z',
     devices: [createDevice()],
     ...overrides
+});
+
+describe('resolveActivePlaybackTarget', () => {
+    it('returns the device and endpoint selected by the registry', () => {
+        const inactive = createDevice({
+            id: 'browser-inactive',
+            active: false,
+            endpoints: [{
+                ...createDevice().endpoints[0]!,
+                id: 'tab-inactive',
+                active: false
+            }]
+        });
+        const active = createDevice({
+            id: 'browser-active',
+            name: 'Living Room Browser',
+            endpoints: [{
+                ...createDevice().endpoints[0]!,
+                id: 'tab-active'
+            }]
+        });
+
+        expect(resolveActivePlaybackTarget(createRegistry({
+            activeEndpointId: 'tab-active',
+            devices: [inactive, active]
+        }))).toEqual({
+            device: active,
+            endpoint: active.endpoints[0]
+        });
+    });
+
+    it('returns null when the registry has no resolvable active endpoint', () => {
+        expect(resolveActivePlaybackTarget(null)).toBeNull();
+        expect(resolveActivePlaybackTarget(createRegistry({
+            activeEndpointId: 'missing-tab'
+        }))).toBeNull();
+    });
 });
 
 describe('PlaybackDevicesStore', () => {
@@ -119,6 +160,9 @@ describe('PlaybackDevicesStore', () => {
 
         store.connect();
         await vi.waitFor(() => expect(store.state.registry).toEqual(first));
+        expect(mocks.fetchRegistry).toHaveBeenCalledWith(
+            PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS
+        );
 
         expect(store.currentDeviceId).toBe('browser-local');
         expect(mocks.registrationConnect).toHaveBeenCalledOnce();
@@ -361,12 +405,15 @@ describe('PlaybackDevicesStore', () => {
         const store = new PlaybackDevicesStore();
 
         const firstRefresh = store.refresh();
-        await store.refresh();
+        await expect(store.refresh()).resolves.toEqual({
+            type: 'success',
+            registry: newest
+        });
         resolveFirst?.({
             type: 'success',
             playbackDeviceRegistry: createRegistry({ commandEpoch: 'epoch-old' })
         });
-        await firstRefresh;
+        await expect(firstRefresh).resolves.toEqual({ type: 'superseded' });
 
         expect(store.state.registry).toEqual(newest);
         expect(store.state.loading).toBe(false);
@@ -385,15 +432,17 @@ describe('PlaybackDevicesStore', () => {
         });
         const store = new PlaybackDevicesStore();
 
-        await store.refresh();
+        await expect(store.refresh()).resolves.toEqual({ type: 'error' });
         expect(store.state).toMatchObject({
             loading: false,
-            error: 'Registry is unavailable.'
+            error: 'Registry is unavailable.',
+            errorRetryable: true
         });
         await expect(store.rename('browser-local', '')).resolves.toBe(false);
         expect(store.state).toMatchObject({
             renamingDeviceId: null,
-            error: 'Name is invalid.'
+            error: 'Name is invalid.',
+            errorRetryable: false
         });
     });
 
@@ -409,7 +458,19 @@ describe('PlaybackDevicesStore', () => {
         mocks.registrationError = 'Playback endpoint capacity is full.';
         mocks.registrationSubscriber?.(null);
 
-        expect(store.state.error).toBe('Playback endpoint capacity is full.');
+        expect(store.state).toMatchObject({
+            error: 'Playback endpoint capacity is full.',
+            errorRetryable: false
+        });
+
+        await expect(store.refresh()).resolves.toEqual({
+            type: 'success',
+            registry: createRegistry()
+        });
+        expect(store.state).toMatchObject({
+            error: 'Playback endpoint capacity is full.',
+            errorRetryable: false
+        });
         store.disconnect();
     });
 });

@@ -1,8 +1,19 @@
-import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAppStore as useStore } from '~/store/base-store';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-
+import { getPlaylist } from '~/api/library';
+import { queryKeys } from '~/api/query-keys';
+import { TwoToneLayout, TwoTonePrimaryAction } from '~/components/layout';
+import {
+    MusicActionPanelContent,
+    MusicListItem,
+    RemotePlaybackOwnershipNotice
+} from '~/components/music';
+import {
+    PlaylistPanelContent,
+    PlaylistSelectionQueueAction,
+    PlaylistSummary
+} from '~/components/playlist';
 import {
     ActionBar,
     ActionBarButton,
@@ -10,22 +21,21 @@ import {
     FixedVirtualSortableList,
     IconButton,
     ListSelectionToolbar,
-    listRowClass,
     Loading,
+    listRowClass,
     SelectionCheckButton,
     StateMessage,
     Text
 } from '~/components/shared';
-import { MusicActionPanelContent, MusicListItem } from '~/components/music';
-import { PlaylistPanelContent, PlaylistSummary } from '~/components/playlist';
+import { useRemotePlaybackOwnership, useResetQueue } from '~/hooks';
 import * as Icon from '~/icon';
 import { Play } from '~/icon';
-
+import { moveArrayItem } from '~/modules/fixed-virtual-sortable-list';
 import { panel } from '~/modules/panel';
-import { useResetQueue } from '~/hooks';
-
-import { getPlaylist } from '~/api/library';
-import { queryKeys } from '~/api/query-keys';
+import {
+    REMOTE_PLAYBACK_OWNERSHIP_MESSAGE,
+    REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
+} from '~/modules/playback-ownership';
 import { toast } from '~/modules/toast';
 import {
     PLAYLIST_ADD_MUSIC,
@@ -35,17 +45,16 @@ import {
     PlaylistListener,
     socket
 } from '~/socket';
-
+import { useAppStore as useStore } from '~/store/base-store';
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
-import { TwoToneLayout, TwoTonePrimaryAction } from '~/components/layout';
-import { moveArrayItem } from '~/modules/fixed-virtual-sortable-list';
 
 const PLAYLIST_TRACK_ROW_HEIGHT = 80;
 
 export default function PlaylistDetail() {
     const navigate = useNavigate();
     const resetQueue = useResetQueue();
+    const remotePlaybackOwnership = useRemotePlaybackOwnership();
 
     const { id } = useParams<{ id: string }>();
 
@@ -148,12 +157,23 @@ export default function PlaylistDetail() {
             )}
             primaryAction={(
                 <TwoTonePrimaryAction
-                    aria-label={`Play ${playlist.name}`}
-                    disabled={playlistMusics.length === 0}
+                    aria-label={remotePlaybackOwnership
+                        ? `Play ${playlist.name} unavailable while another device owns playback`
+                        : `Play ${playlist.name}`}
+                    aria-describedby={remotePlaybackOwnership
+                        ? REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
+                        : undefined}
+                    title={remotePlaybackOwnership
+                        ? REMOTE_PLAYBACK_OWNERSHIP_MESSAGE
+                        : undefined}
+                    disabled={playlistMusics.length === 0 || Boolean(remotePlaybackOwnership)}
                     onClick={() => void resetQueue(playlistMusics.map(({ id }) => id))}>
                     <Play />
                 </TwoTonePrimaryAction>
             )}>
+            {remotePlaybackOwnership && (
+                <RemotePlaybackOwnershipNotice className="mx-[var(--b-spacing-lg)] mb-[var(--b-spacing-lg)]" />
+            )}
             <div className="mb-[var(--b-spacing-sm)] flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)] max-sm:flex-col max-sm:items-start">
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <Text
@@ -274,15 +294,12 @@ export default function PlaylistDetail() {
             </div>
             {isSelectMode && selectedItems.length > 0 && (
                 <ActionBar>
-                    <ActionBarButton
-                        variant="primary"
+                    <PlaylistSelectionQueueAction
                         onClick={() => {
                             selectedItems.forEach(id => queueStore.add(id));
                             setIsSelectMode(false);
-                        }}>
-                        <Icon.Play />
-                        <span>Play</span>
-                    </ActionBarButton>
+                        }}
+                    />
                     <ActionBarButton
                         onClick={() => panel.open({
                             title: 'Move to playlist',
