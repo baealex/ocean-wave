@@ -2,10 +2,17 @@ import type { Music } from '~/models/type';
 
 export interface AudioChannelEventHandler {
     onPlay?: () => void;
+    onPlaying?: () => void;
+    onWaiting?: () => void;
     onPause?: () => void;
     onStop?: () => void;
     onEnded: () => void;
-    onTimeUpdate: (time: number, mix: (fadeTime: number, onMix: () => void) => void) => void;
+    onCrossfadeStart?: () => void;
+    onCrossfadeEnd?: (listenedMs: number) => void;
+    onTimeUpdate: (
+        time: number,
+        mix: (fadeTime: number, onMix: () => void) => boolean
+    ) => void;
     onSkipToNext?: () => void;
     onSkipToPrevious?: () => void;
 }

@@ -42,8 +42,14 @@ export interface RecordPlaybackParams {
     playedMs: number;
     completionRate?: number;
     startedAt: string;
+    endedAt: string;
+    endReason: 'ended' | 'skipped' | 'stopped' | 'handoff' | 'unload' | 'recovery';
+    hadSeek: boolean;
     source?: string;
     clientSessionId?: string;
+    branchId?: string;
+    parentBranchId?: string | null;
+    branchBasePlayedMs?: number;
 }
 
 export interface UpdateMusicMetadataInput {
@@ -110,7 +116,13 @@ export interface PlaybackRecordResult {
     playCount: number;
     lastPlayedAt: string | null;
     totalPlayedMs: number;
+    skipCount: number;
+    lastSkippedAt: string | null;
+    completionCount: number;
+    lastCompletedAt: string | null;
     countedAsPlay: boolean;
+    completionRate: number;
+    outcome: 'listen' | 'skip' | 'complete' | 'legacy';
     deduped: boolean;
 }
 
@@ -124,7 +136,13 @@ export function recordPlayback(input: RecordPlaybackParams) {
                 playCount
                 lastPlayedAt
                 totalPlayedMs
+                skipCount
+                lastSkippedAt
+                completionCount
+                lastCompletedAt
                 countedAsPlay
+                completionRate
+                outcome
                 deduped
             }
         }`,

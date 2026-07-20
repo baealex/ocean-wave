@@ -5,7 +5,10 @@ import {
     WebAudioChannel
 } from '~/modules/audio-channel';
 import {
+    clearPlaybackResumeCheckpoint,
     deletePlaybackCheckpoint,
+    readPlaybackResumeCheckpoint,
+    savePlaybackResumeCheckpoint,
     savePlaybackCheckpoint
 } from '~/modules/playback-checkpoint-store';
 import {
@@ -16,7 +19,11 @@ import {
 } from '~/modules/playback-command-barrier';
 import { nextPlaybackEndpointSequence } from '~/modules/playback-device';
 import { isRemotePlaybackOwnershipActive } from '~/modules/playback-ownership';
-import { PlaybackSessionTracker } from '~/modules/playback-session';
+import {
+    type PlaybackSessionCheckpoint,
+    type PlaybackSessionEndReason,
+    PlaybackSessionTracker
+} from '~/modules/playback-session';
 import { getNextSelectedIndexAfterRemovingCurrent } from '~/modules/queue-selection';
 import {
     deriveQueueState,
@@ -119,7 +126,9 @@ class QueueStore extends BaseStore<QueueStoreState> {
     saveTimer: ReturnType<typeof setTimeout> | null = null;
     audioChannel: AudioChannel;
     playbackSessionTracker: PlaybackSessionTracker;
+    private crossfadePlaybackSessionTracker: PlaybackSessionTracker | null = null;
     lastCheckpointClientSessionId: string | null = null;
+    lastCheckpointBranchId: string | null = null;
     lastCheckpointPlayedMs = 0;
     private musicStoreUnsubscribe: (() => void) | null = null;
     private playbackQueueStoreUnsubscribe: (() => void) | null = null;
@@ -133,12 +142,16 @@ class QueueStore extends BaseStore<QueueStoreState> {
         | 'source-released'
         | null = null;
     private handoffAudioGeneration = 0;
+    private handoffPlaybackSessionId: string | null = null;
+    private audioBuffering = false;
+    private pageUnloading = false;
 
     constructor() {
         super();
         this.saveTimer = null;
         this.playbackSessionTracker = new PlaybackSessionTracker();
         this.lastCheckpointClientSessionId = null;
+        this.lastCheckpointBranchId = null;
         this.lastCheckpointPlayedMs = 0;
         this.state = {
             selected: null,
@@ -158,7 +171,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
         const audioChannelEventHandler: AudioChannelEventHandler = {
             onPlay: () => {
-                if (this.handoffAudioMode) {
+                if (this.handoffAudioMode || this.pageUnloading) {
                     return;
                 }
 
@@ -172,70 +185,129 @@ class QueueStore extends BaseStore<QueueStoreState> {
                     return;
                 }
 
+                this.audioBuffering = false;
+
                 const currentMusic = getMusic(this.state.currentTrackId);
 
                 if (currentMusic) {
-                    this.playbackSessionTracker.play({
-                        id: currentMusic.id,
-                        durationMs: convertToMillisecond(currentMusic.duration)
-                    });
+                    this.startPlaybackTracker(currentMusic.id);
                 }
 
                 this.set({ isPlaying: true });
                 this.reportSharedPlaybackState('playing', true);
             },
-            onPause: () => {
-                if (this.handoffAudioMode) {
+            onPlaying: () => {
+                if (
+                    this.handoffAudioMode
+                    || this.pageUnloading
+                    || isLocalAudioClaimBlocked()
+                ) {
+                    return;
+                }
+                this.audioBuffering = false;
+                if (this.state.currentTrackId) {
+                    this.startPlaybackTracker(this.state.currentTrackId);
+                    this.reportSharedPlaybackState('playing');
+                }
+            },
+            onWaiting: () => {
+                if (
+                    this.handoffAudioMode
+                    || this.pageUnloading
+                    || isLocalAudioClaimBlocked()
+                ) {
                     return;
                 }
 
                 const now = Date.now();
+                this.audioBuffering = true;
+                this.playbackSessionTracker.pause(now);
+                void this.persistPlaybackCheckpoint(
+                    'queue-buffering',
+                    true,
+                    now
+                ).persisted;
+                this.reportSharedPlaybackState('paused');
+            },
+            onPause: () => {
+                if (this.handoffAudioMode || this.pageUnloading) {
+                    return;
+                }
+
+                const now = Date.now();
+                this.audioBuffering = false;
                 this.playbackSessionTracker.pause(now);
                 void this.persistPlaybackCheckpoint('queue-pause', true, now).persisted;
                 this.set({ isPlaying: false });
                 this.reportSharedPlaybackState('paused');
             },
             onStop: () => {
-                if (this.handoffAudioMode) {
+                if (this.handoffAudioMode || this.pageUnloading) {
                     return;
                 }
 
                 const now = Date.now();
+                this.audioBuffering = false;
                 this.playbackSessionTracker.pause(now);
                 void this.persistPlaybackCheckpoint('queue-stop', true, now).persisted;
                 this.set({ isPlaying: false });
                 this.reportSharedPlaybackState('stopped');
             },
             onEnded: () => {
-                if (this.handoffAudioMode) return;
+                if (this.handoffAudioMode || this.pageUnloading) return;
                 if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
                 if (this.state.selected === null) return;
 
                 if (this.state.repeatMode === 'one') {
-                    this.commitPlaybackEvent('queue-repeat-one');
+                    this.commitPlaybackEvent('queue-repeat-one', 'ended');
                     this.select(this.state.selected);
                     return;
                 }
                 if (this.state.repeatMode === 'all') {
-                    this.commitPlaybackEvent('queue-track-change');
+                    this.commitPlaybackEvent('queue-track-change', 'ended');
                     this.select((this.state.selected + 1) % this.state.items.length);
                     this.audioChannel.play();
                     return;
                 }
                 if (this.state.repeatMode === 'none') {
                     if (this.state.selected + 1 < this.state.items.length) {
-                        this.commitPlaybackEvent('queue-track-change');
+                        this.commitPlaybackEvent('queue-track-change', 'ended');
                         this.select(this.state.selected + 1);
                         this.audioChannel.play();
                     } else {
-                        this.commitPlaybackEvent('queue-ended');
+                        this.commitPlaybackEvent('queue-ended', 'ended');
                         this.audioChannel.stop();
                         this.set({ isPlaying: false });
                     }
                 }
             },
+            onCrossfadeStart: () => {
+                const now = Date.now();
+                this.playbackSessionTracker.pause(now);
+                void this.persistPlaybackCheckpoint(
+                    'queue-mix-start',
+                    true,
+                    now
+                ).persisted;
+                this.crossfadePlaybackSessionTracker = this.playbackSessionTracker;
+                this.playbackSessionTracker = new PlaybackSessionTracker();
+            },
+            onCrossfadeEnd: (listenedMs) => {
+                const tracker = this.crossfadePlaybackSessionTracker;
+                this.crossfadePlaybackSessionTracker = null;
+                if (!tracker) {
+                    return;
+                }
+
+                tracker.creditListenedMs(listenedMs);
+                this.commitPlaybackTrackerEvent(
+                    tracker,
+                    'queue-mix-ended',
+                    'ended'
+                );
+            },
             onTimeUpdate: (time, mix) => {
-                if (this.handoffAudioMode) {
+                if (this.handoffAudioMode || this.pageUnloading) {
                     return;
                 }
 
@@ -248,8 +320,15 @@ class QueueStore extends BaseStore<QueueStoreState> {
                     : undefined;
                 const progress = Number((time / (music?.duration || 1) * 100).toFixed(2));
 
-                if (this.state.mixMode === 'mix') {
-                    mix(20, () => undefined);
+                const hasMixTarget = this.state.selected !== null && (
+                    this.state.repeatMode !== 'none'
+                    || this.state.selected + 1 < this.state.items.length
+                );
+                if (this.state.mixMode === 'mix' && hasMixTarget) {
+                    const mixStarted = mix(20, () => undefined);
+                    if (mixStarted) {
+                        return;
+                    }
                 }
 
                 const now = Date.now();
@@ -261,7 +340,9 @@ class QueueStore extends BaseStore<QueueStoreState> {
                     progress
                 });
                 this.reportSharedPlaybackState(
-                    this.state.isPlaying ? 'playing' : 'paused',
+                    this.state.isPlaying && !this.audioBuffering
+                        ? 'playing'
+                        : 'paused',
                     false,
                     time,
                     true
@@ -362,6 +443,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                         this.saveServerQueue();
                     }
                 }
+                this.restorePlaybackSessionTracker();
                 this.musicStoreUnsubscribe?.();
                 this.musicStoreUnsubscribe = null;
             }
@@ -369,19 +451,65 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
         window.addEventListener('beforeunload', this.handleBeforeUnload);
         window.addEventListener('pagehide', this.handlePageHide);
+        window.addEventListener('pageshow', this.handlePageShow);
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
     }
 
-    commitPlaybackEvent(source: string) {
+    commitPlaybackEvent(
+        source: string,
+        endReason: PlaybackSessionEndReason,
+        preserveResume = false
+    ) {
+        this.commitPlaybackTrackerEvent(
+            this.playbackSessionTracker,
+            source,
+            endReason,
+            preserveResume
+        );
+    }
+
+    private commitPlaybackTrackerEvent(
+        tracker: PlaybackSessionTracker,
+        source: string,
+        endReason: PlaybackSessionEndReason,
+        preserveResume = false
+    ) {
         const now = Date.now();
-        const { checkpoint, persisted } = this.persistPlaybackCheckpoint(source, true, now);
-        const payload = this.playbackSessionTracker.commit(now);
+        const checkpoint = tracker.createCheckpoint(
+            source,
+            now,
+            endReason === 'skipped'
+        );
+        const payload = tracker.commit(endReason, now);
 
         if (!payload || !checkpoint) {
             return;
         }
 
-        void this.flushCommittedPlaybackEvent(payload.clientSessionId, persisted, {
+        const terminalCheckpoint = {
+            ...checkpoint,
+            accumulatedPlayedMs: payload.playedMs,
+            active: false,
+            updatedAt: new Date(Math.max(
+                new Date(payload.startedAt).getTime(),
+                new Date(payload.endedAt).getTime()
+            )).toISOString(),
+            endedAt: payload.endedAt,
+            endReason: payload.endReason,
+            source
+        };
+
+        if (preserveResume) {
+            savePlaybackResumeCheckpoint(terminalCheckpoint);
+        }
+
+        if (!preserveResume) {
+            clearPlaybackResumeCheckpoint(payload.clientSessionId);
+        }
+
+        const persisted = savePlaybackCheckpoint(terminalCheckpoint);
+
+        void this.flushCommittedPlaybackEvent(terminalCheckpoint, persisted, {
             ...payload,
             source
         });
@@ -389,7 +517,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
     async reset(ids: string[]) {
         if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
-        this.commitPlaybackEvent('queue-reset');
+        this.commitPlaybackEvent('queue-reset', 'stopped');
         this.reportSharedPlaybackState('stopped');
 
         await this.set({
@@ -470,7 +598,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         const prevSelectedItem = this.state.currentTrackId;
 
         if (prevSelectedItem && ids.includes(prevSelectedItem)) {
-            this.commitPlaybackEvent('queue-remove');
+            this.commitPlaybackEvent('queue-remove', 'skipped');
         }
 
         if (newItems.length === 0) {
@@ -510,7 +638,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     select(index: number, play = true) {
         if (isLocalPlaybackMutationBarrierActive()) return;
         if (play && remotePlaybackOwnsAudio()) return;
-        this.commitPlaybackEvent('queue-track-change');
+        this.commitPlaybackEvent('queue-track-change', 'skipped');
 
         const nextQueueState = createQueueState(this.state.items, index);
 
@@ -559,12 +687,13 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
     stop() {
         if (isLocalPlaybackMutationBarrierActive()) return;
-        this.commitPlaybackEvent('queue-stop');
+        this.commitPlaybackEvent('queue-stop', 'stopped');
         this.audioChannel.stop();
     }
 
     seek(time: number) {
         if (isLocalPlaybackMutationBarrierActive()) return;
+        this.playbackSessionTracker.markSeek();
         this.audioChannel.seek(time);
         this.reportSharedPlaybackState(
             this.state.isPlaying ? 'playing' : 'paused',
@@ -679,7 +808,12 @@ class QueueStore extends BaseStore<QueueStoreState> {
     async releasePlaybackHandoff(
         dispatch: PlaybackHandoffReleaseDispatch
     ): Promise<
-        | { status: 'released'; endpointSequence: number; positionMs: number }
+        | {
+            status: 'released';
+            endpointSequence: number;
+            positionMs: number;
+            playbackHistory: PlaybackHandoffActivationDispatch['playbackHistory'];
+        }
         | { status: 'rejected'; error: PlaybackHandoffError }
     > {
         if (this.handoffAudioMode) {
@@ -698,7 +832,12 @@ class QueueStore extends BaseStore<QueueStoreState> {
         const positionMs = this.currentAudioPositionMs(dispatch.snapshot.positionMs);
         const now = Date.now();
         this.playbackSessionTracker.pause(now);
-        void this.persistPlaybackCheckpoint('queue-handoff-release', true, now).persisted;
+        const { checkpoint, persisted } = this.persistPlaybackCheckpoint(
+            'queue-handoff-release',
+            true,
+            now
+        );
+        void persisted;
         if (this.state.isPlaying) {
             this.audioChannel.pause();
         }
@@ -714,7 +853,18 @@ class QueueStore extends BaseStore<QueueStoreState> {
         return {
             status: 'released',
             endpointSequence: nextPlaybackEndpointSequence(),
-            positionMs
+            positionMs,
+            playbackHistory: checkpoint ? {
+                clientSessionId: checkpoint.clientSessionId,
+                branchId: checkpoint.branchId ?? checkpoint.clientSessionId,
+                parentBranchId: checkpoint.parentBranchId ?? null,
+                branchBasePlayedMs: checkpoint.branchBasePlayedMs ?? 0,
+                trackId: checkpoint.trackId,
+                startedAt: checkpoint.startedAt,
+                accumulatedPlayedMs: checkpoint.accumulatedPlayedMs,
+                hadSeek: checkpoint.hadSeek === true,
+                updatedAt: checkpoint.updatedAt
+            } : null
         };
     }
 
@@ -738,6 +888,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         if (dispatch.action === 'complete') {
             const positionMs = this.currentAudioPositionMs(dispatch.snapshot.positionMs);
             this.audioChannel.pause();
+            this.commitPlaybackEvent('queue-handoff', 'handoff');
             this.handoffAudioMode = null;
             this.set({ isPlaying: false });
             return {
@@ -786,6 +937,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                     };
                 }
                 this.set({ isPlaying: true });
+                this.audioBuffering = false;
                 this.startPlaybackTracker(dispatch.snapshot.currentMusicId);
             } else {
                 this.set({ isPlaying: false });
@@ -849,6 +1001,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         ) {
             this.audioChannel.pause();
             this.set({ isPlaying: false });
+            this.commitPlaybackEvent('queue-handoff-recovery', 'handoff');
             this.handoffAudioMode = null;
             return;
         }
@@ -857,6 +1010,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         if (!music) {
             this.audioChannel.pause();
             this.set({ isPlaying: false });
+            this.commitPlaybackEvent('queue-handoff-recovery', 'handoff');
             this.handoffAudioMode = null;
             return;
         }
@@ -888,6 +1042,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 throw new Error('The source registration changed during audio recovery.');
             }
             this.set({ isPlaying: true });
+            this.audioBuffering = false;
             this.startPlaybackTracker(session.currentMusicId);
         } else {
             this.set({ isPlaying: false });
@@ -902,6 +1057,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
         this.audioChannel.pause();
         this.set({ isPlaying: false });
+        this.commitPlaybackEvent('queue-handoff-abandoned', 'handoff');
         this.handoffAudioMode = null;
     }
 
@@ -933,6 +1089,29 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
         try {
             this.applyPlaybackHandoffSnapshot(dispatch.snapshot, true);
+            if (dispatch.playbackHistory) {
+                const checkpoint = {
+                    ...dispatch.playbackHistory,
+                    lastResumedAt: null,
+                    active: false,
+                    source: 'queue-handoff-transfer'
+                };
+                const music = getMusic(dispatch.snapshot.currentMusicId);
+                if (
+                    !music
+                    || !this.playbackSessionTracker.restore(checkpoint, {
+                        id: music.id,
+                        durationMs: convertToMillisecond(music.duration)
+                    })
+                ) {
+                    throw new Error('The transferred playback history is invalid.');
+                }
+                savePlaybackResumeCheckpoint(checkpoint);
+                this.setPlaybackCheckpointWatermark(checkpoint);
+                this.handoffPlaybackSessionId = checkpoint.clientSessionId;
+            } else {
+                this.handoffPlaybackSessionId = null;
+            }
             if (dispatch.snapshot.state === 'playing') {
                 await this.audioChannel.commitMutedPlayback();
                 this.set({ isPlaying: true });
@@ -969,7 +1148,9 @@ class QueueStore extends BaseStore<QueueStoreState> {
         }
 
         this.handoffAudioMode = null;
+        this.handoffPlaybackSessionId = null;
         if (this.state.isPlaying && this.state.currentTrackId) {
+            this.audioBuffering = false;
             this.startPlaybackTracker(this.state.currentTrackId);
         }
     }
@@ -986,12 +1167,22 @@ class QueueStore extends BaseStore<QueueStoreState> {
         this.handoffAudioMode ??= 'target-active';
         this.audioChannel.cancelMutedPlayback();
         this.set({ isPlaying: false });
+        if (this.handoffPlaybackSessionId) {
+            clearPlaybackResumeCheckpoint(this.handoffPlaybackSessionId);
+            this.playbackSessionTracker.reset();
+            this.handoffPlaybackSessionId = null;
+        }
         this.handoffAudioMode = null;
     }
 
     silencePlaybackForSocketDisconnect(
         possibleOwnerEndpointId: string | null = null
     ) {
+        if (this.pageUnloading) {
+            this.set({ isPlaying: false });
+            return;
+        }
+
         const currentMusicId = this.state.currentTrackId;
         const positionMs = this.currentAudioPositionMs(
             convertToMillisecond(this.state.currentTime)
@@ -1008,9 +1199,24 @@ class QueueStore extends BaseStore<QueueStoreState> {
         }
 
         if (currentMusicId) {
+            const playbackHistory = this.playbackSessionTracker.createCheckpoint(
+                'queue-socket-disconnect',
+                Date.now(),
+                true
+            );
             playbackSessionStore.bufferSocketDisconnectPause({
                 currentMusicId,
-                positionMs
+                positionMs,
+                playbackHistory: playbackHistory ? {
+                    clientSessionId: playbackHistory.clientSessionId,
+                    branchId: playbackHistory.branchId,
+                    parentBranchId: playbackHistory.parentBranchId,
+                    branchBasePlayedMs: playbackHistory.branchBasePlayedMs,
+                    startedAt: playbackHistory.startedAt,
+                    accumulatedPlayedMs: playbackHistory.accumulatedPlayedMs,
+                    hadSeek: playbackHistory.hadSeek === true,
+                    updatedAt: playbackHistory.updatedAt
+                } : null
             }, possibleOwnerEndpointId);
         }
     }
@@ -1213,6 +1419,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                         )
                     };
                 }
+                this.commitPlaybackEvent('queue-remote-track-change', 'skipped');
             } else if (desired.position.mode === 'absolute') {
                 if (!this.audioChannel.seekWithResult(desiredPosition)) {
                     return {
@@ -1224,6 +1431,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                         )
                     };
                 }
+                this.playbackSessionTracker.markSeek();
                 this.set({
                     currentTime: desiredPosition,
                     progress: getProgress(
@@ -1556,6 +1764,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
         if (this.state.selected !== null) {
             if (this.state.currentTime > 10) {
+                this.playbackSessionTracker.markSeek();
                 this.audioChannel.seek(0);
                 return;
             }
@@ -1608,6 +1817,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         this.playbackQueueStoreUnsubscribe = null;
         window.removeEventListener('beforeunload', this.handleBeforeUnload);
         window.removeEventListener('pagehide', this.handlePageHide);
+        window.removeEventListener('pageshow', this.handlePageShow);
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         this.audioChannel.dispose();
     }
@@ -1852,6 +2062,12 @@ class QueueStore extends BaseStore<QueueStoreState> {
             const selectedMusicId = snapshot.currentIndex === null
                 ? null
                 : snapshot.musicIds[snapshot.currentIndex];
+            if (
+                this.state.currentTrackId
+                && selectedMusicId !== this.state.currentTrackId
+            ) {
+                this.commitPlaybackEvent('queue-server-restore', 'stopped');
+            }
             const resumeTime = selectedMusicId === this.state.currentTrackId
                 ? this.state.currentTime
                 : 0;
@@ -1888,6 +2104,8 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 if (restoredQueueState.currentTime > 0) {
                     this.audioChannel.seek(restoredQueueState.currentTime);
                 }
+
+                this.restorePlaybackSessionTracker();
             }
         } finally {
             this.applyingQueueSnapshot = false;
@@ -1895,22 +2113,63 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     private handleBeforeUnload = () => {
-        this.commitPlaybackEvent('queue-unload');
+        const now = Date.now();
+        this.pageUnloading = true;
+        this.audioBuffering = false;
+        this.playbackSessionTracker.pause(now);
+        this.set({ isPlaying: false });
+        this.reportSharedPlaybackState('paused');
+        this.commitPlaybackEvent('queue-unload', 'unload', true);
         this.persistQueueState();
-        this.audioChannel.stop();
+        this.audioChannel.pause();
     };
 
-    private handlePageHide = () => {
+    private handlePageHide = (event: PageTransitionEvent) => {
         this.persistQueueState();
+        if (this.pageUnloading) {
+            return;
+        }
+
+        if (event.persisted) {
+            const now = Date.now();
+            this.pageUnloading = true;
+            this.audioBuffering = false;
+            this.playbackSessionTracker.pause(now);
+            this.set({ isPlaying: false });
+            this.reportSharedPlaybackState('paused');
+            void this.persistPlaybackCheckpoint(
+                'queue-pagehide',
+                true,
+                now
+            ).persisted;
+            this.audioChannel.pause();
+            return;
+        }
+
         this.reportSharedPlaybackState(
             this.state.isPlaying ? 'playing' : 'paused'
         );
         void this.persistPlaybackCheckpoint('queue-pagehide', true).persisted;
     };
 
+    private handlePageShow = (event: PageTransitionEvent) => {
+        if (!event.persisted) {
+            return;
+        }
+
+        this.pageUnloading = false;
+        this.audioBuffering = false;
+        this.set({ isPlaying: false });
+        this.restorePlaybackSessionTracker();
+        this.reportSharedPlaybackState('paused');
+    };
+
     private handleVisibilityChange = () => {
         if (document.hidden) {
             this.persistQueueState();
+            if (this.pageUnloading) {
+                return;
+            }
             this.reportSharedPlaybackState(
                 this.state.isPlaying ? 'playing' : 'paused'
             );
@@ -1931,10 +2190,25 @@ class QueueStore extends BaseStore<QueueStoreState> {
             return;
         }
 
+        const playbackHistory = this.playbackSessionTracker.createCheckpoint(
+            'queue-shared-playback',
+            Date.now(),
+            true
+        );
         playbackSessionStore.report({
             state,
             currentMusicId: this.state.currentTrackId,
-            positionMs: convertToMillisecond(currentTime)
+            positionMs: convertToMillisecond(currentTime),
+            playbackHistory: playbackHistory ? {
+                clientSessionId: playbackHistory.clientSessionId,
+                branchId: playbackHistory.branchId,
+                parentBranchId: playbackHistory.parentBranchId,
+                branchBasePlayedMs: playbackHistory.branchBasePlayedMs,
+                startedAt: playbackHistory.startedAt,
+                accumulatedPlayedMs: playbackHistory.accumulatedPlayedMs,
+                hadSeek: playbackHistory.hadSeek === true,
+                updatedAt: playbackHistory.updatedAt
+            } : null
         }, {
             claimActive,
             checkpoint
@@ -1951,9 +2225,14 @@ class QueueStore extends BaseStore<QueueStoreState> {
             };
         }
 
-        if (this.lastCheckpointClientSessionId !== checkpoint.clientSessionId) {
+        const branchId = checkpoint.branchId ?? checkpoint.clientSessionId;
+        if (
+            this.lastCheckpointClientSessionId !== checkpoint.clientSessionId
+            || this.lastCheckpointBranchId !== branchId
+        ) {
             this.lastCheckpointClientSessionId = checkpoint.clientSessionId;
-            this.lastCheckpointPlayedMs = 0;
+            this.lastCheckpointBranchId = branchId;
+            this.lastCheckpointPlayedMs = checkpoint.branchBasePlayedMs ?? 0;
         }
 
         const playedDelta = checkpoint.accumulatedPlayedMs - this.lastCheckpointPlayedMs;
@@ -1965,8 +2244,8 @@ class QueueStore extends BaseStore<QueueStoreState> {
             };
         }
 
-        this.lastCheckpointClientSessionId = checkpoint.clientSessionId;
-        this.lastCheckpointPlayedMs = checkpoint.accumulatedPlayedMs;
+        this.setPlaybackCheckpointWatermark(checkpoint);
+        savePlaybackResumeCheckpoint(checkpoint);
         const persisted = savePlaybackCheckpoint(checkpoint);
 
         return {
@@ -1976,19 +2255,70 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     private async flushCommittedPlaybackEvent(
-        clientSessionId: string,
+        checkpoint: PlaybackSessionCheckpoint,
         persisted: Promise<void>,
         payload: Parameters<typeof MusicListener.count>[0]
     ) {
-        await persisted;
+        try {
+            await persisted;
+        } catch {
+            // A checkpoint failure must not block the independent history write.
+        }
 
-        const delivered = await MusicListener.count(payload);
+        let delivered = false;
+        try {
+            delivered = await MusicListener.count(payload);
+        } catch {
+            // History delivery remains best effort from the audio player's view.
+            return;
+        }
 
         if (!delivered) {
             return;
         }
 
-        await deletePlaybackCheckpoint(clientSessionId);
+        try {
+            await deletePlaybackCheckpoint(checkpoint);
+        } catch {
+            // A duplicate recovery is safe because the server update is monotonic.
+        }
+    }
+
+    private restorePlaybackSessionTracker() {
+        if (this.playbackSessionTracker.hasSession()) {
+            return;
+        }
+
+        const checkpoint = readPlaybackResumeCheckpoint();
+        const currentMusic = this.state.currentTrackId
+            ? getMusic(this.state.currentTrackId)
+            : undefined;
+        if (!checkpoint || !currentMusic) {
+            return;
+        }
+
+        const restored = this.playbackSessionTracker.restore(checkpoint, {
+            id: currentMusic.id,
+            durationMs: convertToMillisecond(currentMusic.duration)
+        });
+        if (!restored) {
+            clearPlaybackResumeCheckpoint(checkpoint.clientSessionId);
+            return;
+        }
+
+        this.lastCheckpointClientSessionId = checkpoint.clientSessionId;
+        this.lastCheckpointBranchId = checkpoint.branchId
+            ?? checkpoint.clientSessionId;
+        this.lastCheckpointPlayedMs = checkpoint.accumulatedPlayedMs;
+    }
+
+    private setPlaybackCheckpointWatermark(
+        checkpoint: PlaybackSessionCheckpoint
+    ) {
+        this.lastCheckpointClientSessionId = checkpoint.clientSessionId;
+        this.lastCheckpointBranchId = checkpoint.branchId
+            ?? checkpoint.clientSessionId;
+        this.lastCheckpointPlayedMs = checkpoint.accumulatedPlayedMs;
     }
 }
 

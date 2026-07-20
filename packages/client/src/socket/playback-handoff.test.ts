@@ -65,13 +65,17 @@ import {
     HANDOFF_ACTIVATION_TIMEOUT_MS,
     HANDOFF_RELEASE_TIMEOUT_MS,
     HANDOFF_SOURCE_SETTLE_TIMEOUT_MS,
+    PLAYBACK_HANDOFF_ACTIVATE,
     PLAYBACK_HANDOFF_RELEASE,
     PLAYBACK_HANDOFF_SETTLE_SOURCE,
+    type PlaybackHandoffActivationDispatch,
     type PlaybackHandoffReleaseDispatch,
     type PlaybackHandoffSourceSettleDispatch
 } from './playback-handoff-contract';
 import {
+    PlaybackHandoffController,
     PlaybackHandoffSourceTarget,
+    type PlaybackHandoffControllerAdapter,
     type PlaybackHandoffSourceAdapter
 } from './playback-handoff';
 
@@ -131,6 +135,18 @@ const restoreDispatch: PlaybackHandoffSourceSettleDispatch = {
     reason: null
 };
 
+const playbackHistory = {
+    clientSessionId: 'shared-playback-1',
+    branchId: 'target-branch-1',
+    parentBranchId: 'shared-playback-1',
+    branchBasePlayedMs: 12_000,
+    trackId: '1',
+    startedAt: '2026-07-19T23:59:50.000Z',
+    accumulatedPlayedMs: 22_000,
+    hadSeek: true,
+    updatedAt: '2026-07-20T00:00:12.000Z'
+};
+
 const flushPromises = async () => {
     await Promise.resolve();
     await Promise.resolve();
@@ -156,7 +172,8 @@ describe('PlaybackHandoffSourceTarget', () => {
             release: vi.fn().mockResolvedValue({
                 status: 'released',
                 endpointSequence: 5,
-                positionMs: 12_000
+                positionMs: 12_000,
+                playbackHistory
             }),
             settle: vi.fn().mockResolvedValue({
                 status: 'settled',
@@ -185,7 +202,8 @@ describe('PlaybackHandoffSourceTarget', () => {
         await flushPromises();
         expect(acknowledge).toHaveBeenCalledWith(expect.objectContaining({
             status: 'released',
-            positionMs: 12_000
+            positionMs: 12_000,
+            playbackHistory
         }));
     };
 
@@ -281,5 +299,104 @@ describe('PlaybackHandoffSourceTarget', () => {
         expect(adapter.abandon).toHaveBeenCalledOnce();
         expect(adapter.recover).not.toHaveBeenCalled();
         expect(adapter.flushBufferedReport).toHaveBeenCalledOnce();
+    });
+});
+
+describe('PlaybackHandoffController activation', () => {
+    let controller: PlaybackHandoffController;
+    let adapter: PlaybackHandoffControllerAdapter;
+
+    const activation: PlaybackHandoffActivationDispatch = {
+        protocolVersion: 1,
+        commandEpoch: 'epoch-1',
+        handoffId: 'handoff-target-1',
+        handoffSequence: 2,
+        sourceEndpointId: 'source-tab',
+        targetEndpointId: 'target-tab',
+        targetRegistrationGeneration: 3,
+        claimSessionRevision: 4,
+        activateBy: '2026-07-20T00:00:10.000Z',
+        snapshot: {
+            ...snapshot,
+            sessionRevision: 4
+        },
+        playbackHistory
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mocks.socketHandlers.clear();
+        mocks.registration = {
+            endpointId: 'target-tab',
+            registrationGeneration: 3,
+            commandEpoch: 'epoch-1',
+            registrationProof: 'proof-target'
+        };
+        mocks.registrationSubscriber = null;
+        adapter = {
+            activate: vi.fn().mockResolvedValue({
+                status: 'completed',
+                endpointSequence: 5,
+                positionMs: 12_000
+            }),
+            abort: vi.fn()
+        };
+        controller = new PlaybackHandoffController();
+        controller.connect(adapter);
+    });
+
+    afterEach(() => {
+        controller.disconnect();
+    });
+
+    it('forwards a validated cumulative history transfer to the target adapter', async () => {
+        const acknowledge = vi.fn();
+
+        mocks.socketHandlers.get(PLAYBACK_HANDOFF_ACTIVATE)?.(
+            activation,
+            acknowledge
+        );
+        await flushPromises();
+
+        expect(adapter.activate).toHaveBeenCalledWith(activation);
+        expect(acknowledge).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'completed',
+            endpointSequence: 5
+        }));
+    });
+
+    it('rejects a history transfer with a noncanonical parent', async () => {
+        const acknowledge = vi.fn();
+
+        mocks.socketHandlers.get(PLAYBACK_HANDOFF_ACTIVATE)?.({
+            ...activation,
+            playbackHistory: {
+                ...playbackHistory,
+                parentBranchId: 'missing-parent'
+            }
+        }, acknowledge);
+        await flushPromises();
+
+        expect(adapter.activate).not.toHaveBeenCalled();
+        expect(acknowledge).not.toHaveBeenCalled();
+    });
+
+    it('accepts an older activation without a history transfer', async () => {
+        const acknowledge = vi.fn();
+        const legacyActivation = { ...activation } as Partial<
+            PlaybackHandoffActivationDispatch
+        >;
+        delete legacyActivation.playbackHistory;
+
+        mocks.socketHandlers.get(PLAYBACK_HANDOFF_ACTIVATE)?.(
+            legacyActivation,
+            acknowledge
+        );
+        await flushPromises();
+
+        expect(adapter.activate).toHaveBeenCalledWith(legacyActivation);
+        expect(acknowledge).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'completed'
+        }));
     });
 });

@@ -17,7 +17,13 @@ describe('music mutation resolvers', () => {
             playCount: 1,
             lastPlayedAt: '2026-06-06T11:00:00.000Z',
             totalPlayedMs: 35_000,
+            skipCount: 0,
+            lastSkippedAt: null,
+            completionCount: 0,
+            lastCompletedAt: null,
             countedAsPlay: true,
+            completionRate: 35_000 / 180_000,
+            outcome: 'listen',
             deduped: false
         };
         const input = {
@@ -55,7 +61,13 @@ describe('music mutation resolvers', () => {
             playCount: 1,
             lastPlayedAt: '2026-06-06T11:00:00.000Z',
             totalPlayedMs: 35_000,
+            skipCount: 0,
+            lastSkippedAt: null,
+            completionCount: 0,
+            lastCompletedAt: null,
             countedAsPlay: true,
+            completionRate: 35_000 / 180_000,
+            outcome: 'listen',
             deduped: true
         };
         const input = {

@@ -33,8 +33,14 @@ export interface CountPayload {
     playedMs: number;
     completionRate?: number;
     startedAt: string;
+    endedAt: string;
+    endReason: 'ended' | 'skipped' | 'stopped' | 'handoff' | 'unload' | 'recovery';
+    hadSeek: boolean;
     source?: string;
     clientSessionId?: string;
+    branchId?: string;
+    parentBranchId?: string | null;
+    branchBasePlayedMs?: number;
 }
 
 interface Like extends OriginClientNotificationPayload {
@@ -52,7 +58,13 @@ interface Count extends OriginClientNotificationPayload {
     playCount: number;
     lastPlayedAt: string | null;
     totalPlayedMs: number;
+    skipCount: number;
+    lastSkippedAt: string | null;
+    completionCount: number;
+    lastCompletedAt: string | null;
     countedAsPlay: boolean;
+    completionRate: number;
+    outcome: 'listen' | 'skip' | 'complete' | 'legacy';
 }
 
 interface TagsUpdated extends OriginClientNotificationPayload {
@@ -166,12 +178,20 @@ export class MusicListener implements Listener {
                     id: checkpoint.trackId,
                     playedMs: checkpoint.accumulatedPlayedMs,
                     startedAt: checkpoint.startedAt,
-                    source: 'queue-recovery',
-                    clientSessionId: checkpoint.clientSessionId
+                    endedAt: checkpoint.endedAt ?? checkpoint.updatedAt,
+                    endReason: checkpoint.endReason ?? 'recovery',
+                    hadSeek: checkpoint.hadSeek ?? false,
+                    source: checkpoint.endReason
+                        ? checkpoint.source
+                        : 'queue-recovery',
+                    clientSessionId: checkpoint.clientSessionId,
+                    branchId: checkpoint.branchId,
+                    parentBranchId: checkpoint.parentBranchId,
+                    branchBasePlayedMs: checkpoint.branchBasePlayedMs
                 });
 
                 if (delivered) {
-                    await deletePlaybackCheckpoint(checkpoint.clientSessionId);
+                    await deletePlaybackCheckpoint(checkpoint);
                 }
             }
         } finally {

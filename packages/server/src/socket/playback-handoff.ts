@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Socket } from 'socket.io';
 
 import {
@@ -30,6 +31,7 @@ import {
     type PlaybackHandoffActivationDispatch,
     type PlaybackHandoffError,
     type PlaybackHandoffErrorCode,
+    type PlaybackHandoffHistoryTransfer,
     type PlaybackHandoffPhase,
     type PlaybackHandoffReleaseAck,
     type PlaybackHandoffReleaseDispatch,
@@ -73,6 +75,7 @@ interface PlaybackHandoffReservation {
     resolved: ResolvedPlaybackHandoff | null;
     claimed: ClaimedPlaybackHandoff | null;
     sourceReleaseSequence: number | null;
+    playbackHistory: PlaybackHandoffHistoryTransfer | null;
     latestStatus: PlaybackHandoffStatus | null;
     initialStatus: Promise<PlaybackHandoffStatus>;
     resolveInitialStatus: (status: PlaybackHandoffStatus) => void;
@@ -113,6 +116,93 @@ const normalizePositiveSequence = (value: unknown) => (
         ? Number(value)
         : null
 );
+
+const normalizePlaybackHistory = (
+    value: unknown,
+    expectedTrackId: string
+): PlaybackHandoffHistoryTransfer | null | undefined => {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    if (!value || typeof value !== 'object') {
+        return undefined;
+    }
+
+    const candidate = value as Partial<PlaybackHandoffHistoryTransfer>;
+    const clientSessionId = normalizeOpaqueId(candidate.clientSessionId);
+    const branchId = normalizeOpaqueId(candidate.branchId ?? candidate.clientSessionId);
+    const parentBranchId = candidate.parentBranchId === undefined
+        || candidate.parentBranchId === null
+        ? null
+        : normalizeOpaqueId(candidate.parentBranchId);
+    const branchBasePlayedMs = candidate.branchBasePlayedMs ?? 0;
+    const trackId = normalizeOpaqueId(candidate.trackId);
+    const startedAt = typeof candidate.startedAt === 'string'
+        ? new Date(candidate.startedAt)
+        : null;
+    const updatedAt = typeof candidate.updatedAt === 'string'
+        ? new Date(candidate.updatedAt)
+        : null;
+    if (
+        !clientSessionId
+        || !branchId
+        || (candidate.parentBranchId !== undefined
+            && candidate.parentBranchId !== null
+            && !parentBranchId)
+        || parentBranchId === branchId
+        || (parentBranchId !== null && parentBranchId !== clientSessionId)
+        || !Number.isSafeInteger(branchBasePlayedMs)
+        || Number(branchBasePlayedMs) < 0
+        || (parentBranchId === null && Number(branchBasePlayedMs) !== 0)
+        || (parentBranchId === null && branchId !== clientSessionId)
+        || trackId !== expectedTrackId
+        || !startedAt
+        || Number.isNaN(startedAt.getTime())
+        || !updatedAt
+        || Number.isNaN(updatedAt.getTime())
+        || startedAt > updatedAt
+        || !Number.isSafeInteger(candidate.accumulatedPlayedMs)
+        || Number(candidate.accumulatedPlayedMs) < 0
+        || Number(candidate.accumulatedPlayedMs) < Number(branchBasePlayedMs)
+        || typeof candidate.hadSeek !== 'boolean'
+    ) {
+        return undefined;
+    }
+
+    return {
+        clientSessionId,
+        branchId,
+        parentBranchId,
+        branchBasePlayedMs: Number(branchBasePlayedMs),
+        trackId,
+        startedAt: startedAt.toISOString(),
+        accumulatedPlayedMs: Number(candidate.accumulatedPlayedMs),
+        hadSeek: candidate.hadSeek,
+        updatedAt: updatedAt.toISOString()
+    };
+};
+
+const toTargetPlaybackHistory = (
+    history: PlaybackHandoffHistoryTransfer | null,
+    handoffId: string
+): PlaybackHandoffHistoryTransfer | null => {
+    if (!history) {
+        return null;
+    }
+
+    const branchId = createHash('sha256')
+        .update(history.clientSessionId)
+        .update('\0')
+        .update(handoffId)
+        .digest('hex');
+
+    return {
+        ...history,
+        branchId,
+        parentBranchId: history.clientSessionId,
+        branchBasePlayedMs: history.accumulatedPlayedMs
+    };
+};
 
 const normalizeRequest = (input: unknown): PlaybackHandoffRequest | null => {
     if (!input || typeof input !== 'object') {
@@ -212,9 +302,14 @@ const isReleaseAck = (
         return false;
     }
 
+    const playbackHistory = normalizePlaybackHistory(
+        candidate.status === 'released' ? candidate.playbackHistory : undefined,
+        reservation.resolved?.snapshot.currentMusicId ?? ''
+    );
     return candidate.status === 'released'
         ? normalizePositiveSequence(candidate.endpointSequence) !== null
             && Number.isFinite(candidate.positionMs)
+            && playbackHistory !== undefined
         : candidate.status === 'rejected'
             ? normalizeRevision(candidate.lastEndpointSequence) !== null
                 && normalizeTargetError(candidate.error) !== null
@@ -487,6 +582,7 @@ export class PlaybackHandoffCoordinator {
             resolved: null,
             claimed: null,
             sourceReleaseSequence: null,
+            playbackHistory: null,
             latestStatus: null,
             initialStatus,
             resolveInitialStatus,
@@ -592,6 +688,10 @@ export class PlaybackHandoffCoordinator {
             reservation.handoffSequence = this.allocateHandoffSequence();
 
             if (reservation.request.force) {
+                reservation.playbackHistory = toTargetPlaybackHistory(
+                    resolved.playbackHistory,
+                    reservation.request.handoffId
+                );
                 reservation.state = 'claiming';
                 this.publish(reservation, 'claiming', null,
                     resolved.snapshot.sessionRevision,
@@ -724,6 +824,14 @@ export class PlaybackHandoffCoordinator {
         }
 
         reservation.sourceReleaseSequence = acknowledgement.endpointSequence;
+        const releasedPlaybackHistory = normalizePlaybackHistory(
+            acknowledgement.playbackHistory,
+            reservation.resolved.snapshot.currentMusicId
+        ) ?? reservation.resolved.playbackHistory;
+        reservation.playbackHistory = toTargetPlaybackHistory(
+            releasedPlaybackHistory,
+            reservation.request.handoffId
+        );
         reservation.state = 'claiming';
         this.publish(
             reservation,
@@ -753,7 +861,8 @@ export class PlaybackHandoffCoordinator {
             const claimed = await this.claimHandoff(
                 resolved,
                 releasedPositionMs,
-                new Date(this.now())
+                new Date(this.now()),
+                reservation.playbackHistory
             );
             if (reservation.state !== 'claiming') {
                 return;
@@ -829,7 +938,8 @@ export class PlaybackHandoffCoordinator {
             activateBy: new Date(
                 this.now() + HANDOFF_ACTIVATION_TIMEOUT_MS
             ).toISOString(),
-            snapshot: claimed.snapshot
+            snapshot: claimed.snapshot,
+            playbackHistory: reservation.playbackHistory
         };
 
         this.setTimer(reservation, HANDOFF_ACTIVATION_TIMEOUT_MS, () => {

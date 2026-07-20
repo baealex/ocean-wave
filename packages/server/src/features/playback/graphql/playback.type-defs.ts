@@ -90,6 +90,17 @@ export const playbackType = gql`
         name: String!
     }
 
+    input PlaybackHistoryLineageInput {
+        clientSessionId: String!
+        branchId: String
+        parentBranchId: String
+        branchBasePlayedMs: Float
+        startedAt: String!
+        accumulatedPlayedMs: Float!
+        hadSeek: Boolean!
+        updatedAt: String!
+    }
+
     input ReportPlaybackStateInput {
         deviceId: String!
         registrationGeneration: Int!
@@ -101,6 +112,7 @@ export const playbackType = gql`
         currentMusicId: ID
         positionMs: Float!
         observedAt: String
+        playbackHistory: PlaybackHistoryLineageInput
     }
 
     input SavePlaybackQueueInput {

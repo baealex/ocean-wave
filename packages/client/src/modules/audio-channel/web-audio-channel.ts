@@ -3,7 +3,7 @@ import type { AudioChannel, AudioChannelEventHandler } from './audio-channel';
 import type { Music } from '~/models/type';
 
 import { audioSettingsStore } from '~/store/audio-settings';
-import { shouldStartMix } from './mix-timing';
+import { resolveMixDuration, shouldStartMix } from './mix-timing';
 
 export class WebAudioChannel implements AudioChannel {
     private audio: HTMLAudioElement;
@@ -13,6 +13,10 @@ export class WebAudioChannel implements AudioChannel {
     private loadedDuration: number | null;
     private pendingSeekTime: number | null;
     private ignoreNextPause: boolean;
+    private mixStartedAtMs: number | null;
+    private mixOutgoingStartedAtSeconds: number | null;
+    private mixDurationMs: number;
+    private loadingMixTarget: boolean;
 
     constructor(_handler: AudioChannelEventHandler) {
         this.audio = new Audio();
@@ -21,8 +25,14 @@ export class WebAudioChannel implements AudioChannel {
         this.loadedDuration = null;
         this.pendingSeekTime = null;
         this.ignoreNextPause = false;
+        this.mixStartedAtMs = null;
+        this.mixOutgoingStartedAtSeconds = null;
+        this.mixDurationMs = 0;
+        this.loadingMixTarget = false;
         this.handler = {
             onPlay: () => _handler.onPlay?.(),
+            onPlaying: () => _handler.onPlaying?.(),
+            onWaiting: () => _handler.onWaiting?.(),
             onPause: () => {
                 if (this.ignoreNextPause) {
                     this.ignoreNextPause = false;
@@ -33,6 +43,8 @@ export class WebAudioChannel implements AudioChannel {
             },
             onStop: () => _handler.onStop?.(),
             onEnded: () => _handler.onEnded(),
+            onCrossfadeStart: () => _handler.onCrossfadeStart?.(),
+            onCrossfadeEnd: listenedMs => _handler.onCrossfadeEnd?.(listenedMs),
             onTimeUpdate: () => {
                 _handler.onTimeUpdate(this.audio.currentTime, (fadeTime: number, onMix: () => void) => {
                     const shouldMix = shouldStartMix({
@@ -44,6 +56,24 @@ export class WebAudioChannel implements AudioChannel {
 
                     if (!this.mixInterval && shouldMix) {
                         onMix();
+                        this.mixStartedAtMs = Date.now();
+                        const mixDuration = resolveMixDuration({
+                            metadataDuration: this.loadedDuration,
+                            mediaDuration: this.audio.duration
+                        });
+                        const remainingSeconds = mixDuration === null
+                            ? fadeTime
+                            : Math.max(mixDuration - this.audio.currentTime, 0);
+                        this.mixDurationMs = Math.min(
+                            fadeTime,
+                            remainingSeconds
+                        ) * 1_000;
+                        this.mixOutgoingStartedAtSeconds = Number.isFinite(
+                            this.audio.currentTime
+                        )
+                            ? this.audio.currentTime
+                            : null;
+                        this.handler.onCrossfadeStart?.();
 
                         this.swapAudio();
                         this.setNewAudio();
@@ -62,18 +92,19 @@ export class WebAudioChannel implements AudioChannel {
                             webAudioContext.setGain(this.backgroundAudio, nextBackgroundAudioVolume);
 
                             if (this.audio.volume >= 1) {
-                                this.audio.volume = 1;
-                                this.backgroundAudio.volume = 0;
-                                webAudioContext.setGain(this.audio, 1);
-                                webAudioContext.setGain(this.backgroundAudio, 0);
-                                this.backgroundAudio.pause();
-                                webAudioContext.disconnect(this.backgroundAudio);
-                                clearInterval(this.mixInterval!);
-                                this.mixInterval = null;
+                                this.finishMix(true);
                             }
                         }, fadeTime * 1000 / 10);
-                        _handler.onEnded();
+                        this.loadingMixTarget = true;
+                        try {
+                            _handler.onEnded();
+                        } finally {
+                            this.loadingMixTarget = false;
+                        }
+                        return true;
                     }
+
+                    return false;
                 });
             }
         };
@@ -84,6 +115,8 @@ export class WebAudioChannel implements AudioChannel {
     setNewAudio() {
         this.audio = new Audio();
         this.audio.addEventListener('play', this.handler.onPlay!);
+        this.audio.addEventListener('playing', this.handler.onPlaying!);
+        this.audio.addEventListener('waiting', this.handler.onWaiting!);
         this.audio.addEventListener('pause', this.handler.onPause!);
         this.audio.addEventListener('abort', this.handler.onStop!);
         this.audio.addEventListener('ended', this.handler.onEnded!);
@@ -94,6 +127,8 @@ export class WebAudioChannel implements AudioChannel {
     swapAudio() {
         const tempAudio = this.audio;
         tempAudio.removeEventListener('play', this.handler.onPlay!);
+        tempAudio.removeEventListener('playing', this.handler.onPlaying!);
+        tempAudio.removeEventListener('waiting', this.handler.onWaiting!);
         tempAudio.removeEventListener('pause', this.handler.onPause!);
         tempAudio.removeEventListener('abort', this.handler.onStop!);
         tempAudio.removeEventListener('ended', this.handler.onEnded!);
@@ -103,6 +138,10 @@ export class WebAudioChannel implements AudioChannel {
     }
 
     load(music: Music) {
+        if (this.mixInterval && !this.loadingMixTarget) {
+            this.finishMix(false);
+        }
+
         let audioResource: string;
 
         const { format, bitrate, useOriginal } = audioSettingsStore.state;
@@ -172,20 +211,12 @@ export class WebAudioChannel implements AudioChannel {
     }
 
     pause() {
-        const mixInterval = this.mixInterval;
-        if (mixInterval) {
-            clearInterval(mixInterval);
-            this.mixInterval = null;
+        const mixing = this.mixInterval !== null;
+        if (mixing) {
+            this.finishMix(false);
         }
         this.audio.pause();
         this.backgroundAudio.pause();
-        if (mixInterval) {
-            this.audio.volume = 1;
-            this.backgroundAudio.volume = 0;
-            webAudioContext.setGain(this.audio, 1, 0);
-            webAudioContext.setGain(this.backgroundAudio, 0, 0);
-            webAudioContext.disconnect(this.backgroundAudio);
-        }
     }
 
     stop() {
@@ -228,11 +259,12 @@ export class WebAudioChannel implements AudioChannel {
 
     dispose() {
         if (this.mixInterval) {
-            clearInterval(this.mixInterval);
-            this.mixInterval = null;
+            this.finishMix(false);
         }
 
         this.audio.removeEventListener('play', this.handler.onPlay!);
+        this.audio.removeEventListener('playing', this.handler.onPlaying!);
+        this.audio.removeEventListener('waiting', this.handler.onWaiting!);
         this.audio.removeEventListener('pause', this.handler.onPause!);
         this.audio.removeEventListener('abort', this.handler.onStop!);
         this.audio.removeEventListener('ended', this.handler.onEnded!);
@@ -253,4 +285,38 @@ export class WebAudioChannel implements AudioChannel {
         this.pendingSeekTime = null;
         this.seek(time);
     };
+
+    private finishMix(completed: boolean) {
+        if (!this.mixInterval || this.mixStartedAtMs === null) {
+            return;
+        }
+
+        clearInterval(this.mixInterval);
+        this.mixInterval = null;
+        const maximumElapsedMs = completed
+            ? this.mixDurationMs
+            : Math.min(
+                Math.max(Date.now() - this.mixStartedAtMs, 0),
+                this.mixDurationMs
+            );
+        const mediaAdvancedMs = this.mixOutgoingStartedAtSeconds !== null
+            && Number.isFinite(this.backgroundAudio.currentTime)
+            ? Math.max(
+                (this.backgroundAudio.currentTime
+                    - this.mixOutgoingStartedAtSeconds) * 1_000,
+                0
+            )
+            : 0;
+        const listenedMs = Math.min(mediaAdvancedMs, maximumElapsedMs);
+        this.mixStartedAtMs = null;
+        this.mixOutgoingStartedAtSeconds = null;
+        this.mixDurationMs = 0;
+        this.audio.volume = 1;
+        this.backgroundAudio.volume = 0;
+        webAudioContext.setGain(this.audio, 1, 0);
+        webAudioContext.setGain(this.backgroundAudio, 0, 0);
+        this.backgroundAudio.pause();
+        webAudioContext.disconnect(this.backgroundAudio);
+        this.handler.onCrossfadeEnd?.(listenedMs);
+    }
 }

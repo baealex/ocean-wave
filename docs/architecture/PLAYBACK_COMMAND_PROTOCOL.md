@@ -31,6 +31,22 @@ The following remain outside this protocol:
 
 `Play Here` is a separate handoff transaction. It releases the previous endpoint and claims the new endpoint atomically instead of pretending to be a normal remote command.
 
+A successful source release also transfers its cumulative playback-history
+identity when one exists. The target continues that same `clientSessionId`,
+track id, listened time, and seek flag on a new child branch rooted at the
+source's cumulative baseline instead of creating a second logical playback.
+Source and target branches contribute monotonic deltas to one event; the
+detailed counting and terminal-signal rules live in
+[Playback History and Listening Signals](./PLAYBACK_HISTORY.md).
+
+The active endpoint also includes that lineage in periodic authoritative session
+reports. If the source later becomes unreachable and the user confirms a forced
+handoff, the server sends the last persisted lineage to the target. The offline
+source's eventual checkpoint recovery and the target's terminal write therefore
+use the same logical identity while retaining both post-baseline deltas rather
+than incrementing playback twice. A committed command that selects another track
+clears the previous track's persisted lineage in the same session transaction.
+
 ## 2. Authority and Roles
 
 The protocol has three roles:

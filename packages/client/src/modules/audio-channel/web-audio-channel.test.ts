@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     initialized: vi.fn().mockReturnValue(true),
     init: vi.fn(),
     setGain: vi.fn(),
+    resolveMixDuration: vi.fn().mockReturnValue(60),
     shouldStartMix: vi.fn().mockReturnValue(true)
 }));
 
@@ -27,6 +28,7 @@ vi.mock('../web-audio-context', () => ({
 }));
 
 vi.mock('./mix-timing', () => ({
+    resolveMixDuration: mocks.resolveMixDuration,
     shouldStartMix: mocks.shouldStartMix
 }));
 
@@ -106,7 +108,10 @@ const music = {
     duration: 60
 } as Music;
 
-const createCrossfade = async () => {
+const createCrossfade = async (handlers: {
+    onCrossfadeStart?: () => void;
+    onCrossfadeEnd?: (listenedMs: number) => void;
+} = {}) => {
     let channel!: WebAudioChannel;
     channel = new WebAudioChannel({
         onEnded: () => {
@@ -115,7 +120,8 @@ const createCrossfade = async () => {
         },
         onTimeUpdate: (_time, mix) => {
             mix(20, () => undefined);
-        }
+        },
+        ...handlers
     });
 
     const outgoing = FakeAudio.instances[FakeAudio.instances.length - 1]!;
@@ -175,6 +181,62 @@ describe('WebAudioChannel handoff safety', () => {
         expect(incoming.volume).toBe(1);
         expect(outgoing.paused).toBe(true);
         expect(outgoing.volume).toBe(0);
+    });
+
+    it('reports only the outgoing media-time advance when a crossfade is interrupted', async () => {
+        const onCrossfadeStart = vi.fn();
+        const onCrossfadeEnd = vi.fn();
+        const { channel, outgoing } = await createCrossfade({
+            onCrossfadeStart,
+            onCrossfadeEnd
+        });
+
+        await vi.advanceTimersByTimeAsync(5_000);
+        outgoing.currentTime = 52;
+        channel.pause();
+
+        expect(onCrossfadeStart).toHaveBeenCalledOnce();
+        expect(onCrossfadeEnd).toHaveBeenCalledWith(2_000);
+    });
+
+    it('reports the full outgoing tail when a crossfade completes', async () => {
+        const onCrossfadeEnd = vi.fn();
+        const { outgoing } = await createCrossfade({ onCrossfadeEnd });
+        outgoing.currentTime = 60;
+
+        await vi.advanceTimersByTimeAsync(20_000);
+
+        expect(onCrossfadeEnd).toHaveBeenCalledWith(10_000);
+    });
+
+    it('does not credit a stalled outgoing tail beyond media progression', async () => {
+        const onCrossfadeEnd = vi.fn();
+        const { outgoing } = await createCrossfade({ onCrossfadeEnd });
+        outgoing.currentTime = 53;
+        outgoing.dispatch('stalled');
+
+        await vi.advanceTimersByTimeAsync(20_000);
+
+        expect(onCrossfadeEnd).toHaveBeenCalledWith(3_000);
+    });
+
+    it('forwards buffering and resumed-playing media events', () => {
+        const onPlaying = vi.fn();
+        const onWaiting = vi.fn();
+        new WebAudioChannel({
+            onEnded: () => undefined,
+            onTimeUpdate: () => undefined,
+            onPlaying,
+            onWaiting
+        });
+        const audio = FakeAudio.instances[FakeAudio.instances.length - 1]!;
+
+        audio.dispatch('waiting');
+        audio.dispatch('stalled');
+        audio.dispatch('playing');
+
+        expect(onWaiting).toHaveBeenCalledOnce();
+        expect(onPlaying).toHaveBeenCalledOnce();
     });
 
     it('restarts an ended warm-up before making it audible', async () => {

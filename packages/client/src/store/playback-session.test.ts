@@ -218,11 +218,19 @@ describe('PlaybackSessionStore', () => {
         });
         const store = new PlaybackSessionStore();
         store.connect();
+        const playbackHistory = {
+            clientSessionId: 'logical-listen-1',
+            startedAt: '2026-07-14T00:00:00.000Z',
+            accumulatedPlayedMs: 1_500,
+            hadSeek: false,
+            updatedAt: '2026-07-14T00:00:01.500Z'
+        };
 
         store.report({
             state: 'playing',
             currentMusicId: '42',
-            positionMs: 1_500
+            positionMs: 1_500,
+            playbackHistory
         }, { claimActive: true });
 
         await vi.waitFor(() => expect(mocks.reportPlaybackState).toHaveBeenCalledOnce());
@@ -235,7 +243,8 @@ describe('PlaybackSessionStore', () => {
             claimActive: true,
             state: 'playing',
             currentMusicId: '42',
-            positionMs: 1_500
+            positionMs: 1_500,
+            playbackHistory
         }));
         await vi.waitFor(() => expect(store.state.snapshot).toEqual(accepted));
 

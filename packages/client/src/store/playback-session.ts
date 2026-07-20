@@ -40,6 +40,7 @@ interface LocalPlaybackReport {
     state: SharedPlaybackState;
     currentMusicId: string | null;
     positionMs: number;
+    playbackHistory?: ReportPlaybackStateInput['playbackHistory'];
 }
 
 interface ReportOptions {
@@ -247,7 +248,8 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
             local: {
                 state: local.state,
                 currentMusicId: local.currentMusicId,
-                positionMs: Math.max(Math.round(local.positionMs), 0)
+                positionMs: Math.max(Math.round(local.positionMs), 0),
+                playbackHistory: local.playbackHistory
             },
             expectedRevision: lineage?.expectedRevision
                 ?? this.state.snapshot?.revision
@@ -267,7 +269,10 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
     }
 
     bufferSocketDisconnectPause(
-        local: Pick<LocalPlaybackReport, 'currentMusicId' | 'positionMs'>,
+        local: Pick<
+            LocalPlaybackReport,
+            'currentMusicId' | 'positionMs' | 'playbackHistory'
+        >,
         possibleOwnerEndpointId: string | null = null
     ) {
         const registeredEndpointId = this.registration?.endpointId
@@ -300,7 +305,10 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
             local: {
                 state: 'paused',
                 currentMusicId: local.currentMusicId,
-                positionMs: Math.max(Math.round(local.positionMs), 0)
+                positionMs: Math.max(Math.round(local.positionMs), 0),
+                playbackHistory: local.playbackHistory === undefined
+                    ? lineage?.local.playbackHistory
+                    : local.playbackHistory
             },
             expectedRevision: lineage?.expectedRevision
                 ?? this.state.snapshot?.revision
@@ -403,7 +411,8 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
             state: intent.local.state,
             currentMusicId: intent.local.currentMusicId,
             positionMs: intent.local.positionMs,
-            observedAt: new Date().toISOString()
+            observedAt: new Date().toISOString(),
+            playbackHistory: intent.local.playbackHistory
         };
 
         try {

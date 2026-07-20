@@ -20,7 +20,7 @@ Native mobile realtime participation, multi-room playback, and simultaneous play
 ## 2. Current State
 
 The web client currently owns playback through `queueStore`, `WebAudioChannel`, and `localStorage`.
-It also keeps recoverable play-count checkpoints in IndexedDB. The server stores completed `PlaybackEvent` records and persistent playback-device metadata. The legacy Socket.IO connector list still represents raw connections, while the playback endpoint registry separately represents browser devices and tab leases.
+It also keeps branch-aware cumulative playback-history checkpoints in IndexedDB and reload lineage in `sessionStorage`. The server stores monotonic `PlaybackEvent` records and persistent playback-device metadata. The legacy Socket.IO connector list still represents raw connections, while the playback endpoint registry separately represents browser devices and tab leases. Listening, skip, completion, seek, replay, and deduplication rules are defined in [Playback History and Listening Signals](./PLAYBACK_HISTORY.md).
 
 These responsibilities remain separate:
 
@@ -28,7 +28,7 @@ These responsibilities remain separate:
 | --- | --- |
 | Audio element and immediate controls | Active web player |
 | Reload-safe local queue and position | Web `queueStore` and `localStorage` |
-| Recoverable play-count delivery | Existing IndexedDB playback checkpoints |
+| Recoverable playback-history delivery | Branch-keyed IndexedDB checkpoints and tab-scoped reload lineage |
 | Cross-client playback snapshot | Server `PlaybackSession` |
 | Cross-client queue snapshot | Server `PlaybackQueue` |
 | Playback device metadata | Server `PlaybackDevice` and `PlaybackEndpoint` records |
@@ -37,7 +37,7 @@ These responsibilities remain separate:
 | Realtime change notification | Socket.IO |
 | Acknowledged live playback commands | Socket.IO command channel |
 
-`PlaybackSession` is not a replacement for `PlaybackEvent`. A session describes what is happening now; an event records listening history after playback is committed.
+`PlaybackSession` is not a replacement for `PlaybackEvent`. A session describes what is happening now; an event records cumulative listening history after playback is committed. The session also retains the current track-fenced canonical history identity, active branch, branch parent and baseline, cumulative time, seek flag, and timestamps reported by the active endpoint. A normal `Play Here` release refreshes that lineage, while an explicit forced handoff creates a child branch from the last authoritative offline-source baseline. Delayed source and target recovery can then contribute to one event without losing either branch or counting the baseline twice. A server-committed command that changes tracks clears the old track's lineage atomically before another forced handoff can read it.
 
 ## 3. Source of Truth and Transport
 
@@ -107,6 +107,11 @@ PlaybackSession
 - positionMs
 - positionUpdatedAt
 - startedAt (nullable)
+- historyMusicId (nullable; fences lineage to the current track)
+- historySessionId, historyBranchId, historyParentBranchId (nullable)
+- historyBranchBasePlayedMs, historyPlayedMs
+- historyStartedAt, historyUpdatedAt (nullable)
+- historyHadSeek
 - revision
 - createdAt
 - updatedAt

@@ -19,6 +19,17 @@ export interface PlaybackSessionSnapshot {
     serverTime: string;
 }
 
+export interface PlaybackHistoryLineageInput {
+    clientSessionId: string;
+    branchId?: string;
+    parentBranchId?: string | null;
+    branchBasePlayedMs?: number;
+    startedAt: string;
+    accumulatedPlayedMs: number;
+    hadSeek: boolean;
+    updatedAt: string;
+}
+
 export interface ReportPlaybackStateInput {
     deviceId: string;
     registrationGeneration: number;
@@ -30,6 +41,7 @@ export interface ReportPlaybackStateInput {
     currentMusicId: string | null;
     positionMs: number;
     observedAt: string;
+    playbackHistory?: PlaybackHistoryLineageInput | null;
 }
 
 export interface PlaybackSessionReportResult {

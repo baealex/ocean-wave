@@ -60,21 +60,29 @@ import {
     getPlaybackCheckpoint,
     savePlaybackCheckpoint
 } from '~/modules/playback-checkpoint-store';
+import type { PlaybackSessionCheckpoint } from '~/modules/playback-session';
 import {
     MUSIC_LIKE,
     MusicListener
 } from './music-listener';
 import { socket } from './socket';
 
-const createCheckpoint = () => ({
+const createCheckpoint = (
+    overrides: Partial<PlaybackSessionCheckpoint> = {}
+): PlaybackSessionCheckpoint => ({
     clientSessionId: 'session-1',
+    branchId: 'target-branch-1',
+    parentBranchId: 'session-1',
+    branchBasePlayedMs: 8_000,
     trackId: 'track-1',
     startedAt: '2026-04-10T10:00:00.000Z',
     accumulatedPlayedMs: 12_000,
+    hadSeek: true,
     lastResumedAt: '2026-04-10T10:00:05.000Z',
     active: false,
     updatedAt: '2026-04-10T10:00:12.000Z',
-    source: 'queue-pagehide'
+    source: 'queue-pagehide',
+    ...overrides
 });
 
 describe('MusicListener playback recovery', () => {
@@ -120,6 +128,9 @@ describe('MusicListener playback recovery', () => {
             playedMs: 15_000,
             completionRate: 0.25,
             startedAt: '2026-04-10T10:00:00.000Z',
+            endedAt: '2026-04-10T10:00:15.000Z',
+            endReason: 'skipped',
+            hadSeek: false,
             source: 'queue-track-change'
         });
 
@@ -161,7 +172,10 @@ describe('MusicListener playback recovery', () => {
             id: 'track-1',
             clientSessionId: 'session-1',
             playedMs: 15_000,
-            startedAt: '2026-04-10T10:00:00.000Z'
+            startedAt: '2026-04-10T10:00:00.000Z',
+            endedAt: '2026-04-10T10:00:15.000Z',
+            endReason: 'stopped',
+            hadSeek: false
         });
 
         expect(delivered).toBe(true);
@@ -182,7 +196,10 @@ describe('MusicListener playback recovery', () => {
             id: 'track-1',
             clientSessionId: 'session-timeout',
             playedMs: 15_000,
-            startedAt: '2026-04-10T10:00:00.000Z'
+            startedAt: '2026-04-10T10:00:00.000Z',
+            endedAt: '2026-04-10T10:00:15.000Z',
+            endReason: 'unload' as const,
+            hadSeek: false
         };
         recordPlaybackMock.mockReturnValue(new Promise(() => {}));
 
@@ -248,8 +265,107 @@ describe('MusicListener playback recovery', () => {
         expect(recordPlaybackMock).toHaveBeenCalledWith(expect.objectContaining({
             id: 'track-1',
             clientSessionId: 'session-1',
+            branchId: 'target-branch-1',
+            parentBranchId: 'session-1',
+            branchBasePlayedMs: 8_000,
             playedMs: 12_000,
+            endedAt: '2026-04-10T10:00:12.000Z',
+            endReason: 'recovery',
+            hadSeek: true,
             source: 'queue-recovery'
+        }));
+        expect(await getPlaybackCheckpoint('session-1')).toBeNull();
+    });
+
+    it('keeps a newer branch snapshot when sibling recovery acknowledgements arrive late', async () => {
+        let resolveFirstRecord: (value: unknown) => void = () => {};
+        const successfulRecord = {
+            type: 'success',
+            recordPlayback: {
+                id: 'track-1',
+                playCount: 1,
+                lastPlayedAt: '2026-04-10T10:00:20.000Z',
+                totalPlayedMs: 50_000,
+                countedAsPlay: true,
+                deduped: false
+            }
+        };
+        recordPlaybackMock
+            .mockReturnValueOnce(new Promise((resolve) => {
+                resolveFirstRecord = resolve;
+            }))
+            .mockResolvedValue(successfulRecord);
+        const rootCheckpoint = createCheckpoint({
+            clientSessionId: 'shared-session',
+            branchId: 'shared-session',
+            parentBranchId: null,
+            branchBasePlayedMs: 0,
+            accumulatedPlayedMs: 39_000,
+            updatedAt: '2026-04-10T10:00:12.000Z'
+        });
+        const targetCheckpoint = createCheckpoint({
+            clientSessionId: 'shared-session',
+            branchId: 'target-branch',
+            parentBranchId: 'shared-session',
+            branchBasePlayedMs: 30_000,
+            accumulatedPlayedMs: 50_000,
+            updatedAt: '2026-04-10T10:00:15.000Z'
+        });
+        const newerRootCheckpoint = createCheckpoint({
+            ...rootCheckpoint,
+            accumulatedPlayedMs: 45_000,
+            updatedAt: '2026-04-10T10:00:20.000Z',
+            source: 'queue-checkpoint'
+        });
+        await savePlaybackCheckpoint(rootCheckpoint);
+        await savePlaybackCheckpoint(targetCheckpoint);
+
+        const recovery = MusicListener.recoverPlaybackCheckpoints();
+        await vi.waitFor(() => {
+            expect(recordPlaybackMock).toHaveBeenCalledTimes(1);
+        });
+        await savePlaybackCheckpoint(newerRootCheckpoint);
+        resolveFirstRecord(successfulRecord);
+        await recovery;
+
+        expect(recordPlaybackMock).toHaveBeenCalledTimes(2);
+        expect(await getPlaybackCheckpoint(
+            'shared-session',
+            'shared-session'
+        )).toEqual(newerRootCheckpoint);
+        expect(await getPlaybackCheckpoint(
+            'shared-session',
+            'target-branch'
+        )).toBeNull();
+    });
+
+    it('replays the original terminal signal after a failed delivery', async () => {
+        recordPlaybackMock.mockResolvedValue({
+            type: 'success',
+            recordPlayback: {
+                id: 'track-1',
+                playCount: 1,
+                lastPlayedAt: '2026-04-10T10:00:12.000Z',
+                totalPlayedMs: 12_000,
+                countedAsPlay: true,
+                deduped: false
+            }
+        });
+        await savePlaybackCheckpoint({
+            ...createCheckpoint(),
+            endedAt: '2026-04-10T10:00:13.000Z',
+            endReason: 'skipped',
+            source: 'queue-track-change'
+        });
+
+        await MusicListener.recoverPlaybackCheckpoints();
+
+        expect(recordPlaybackMock).toHaveBeenCalledWith(expect.objectContaining({
+            clientSessionId: 'session-1',
+            endedAt: '2026-04-10T10:00:13.000Z',
+            endReason: 'skipped',
+            hadSeek: true,
+            source: 'queue-track-change'
         }));
         expect(await getPlaybackCheckpoint('session-1')).toBeNull();
     });

@@ -77,6 +77,10 @@ model Music {
     sampleRate    Float
     playCount     Int             @default(0)
     lastPlayedAt  DateTime?
+    skipCount     Int             @default(0)
+    lastSkippedAt DateTime?
+    completionCount Int           @default(0)
+    lastCompletedAt DateTime?
     lastSeenAt    DateTime?
     missingSinceAt DateTime?
     syncStatus    String          @default("active")
@@ -186,13 +190,30 @@ model PlaybackEvent {
     playedMs       Float
     completionRate Float
     countedAsPlay  Boolean  @default(false)
+    outcome        String   @default("legacy")
+    endReason      String   @default("legacy")
+    hadSeek        Boolean  @default(false)
     source         String
     clientSessionId String? @unique
     connectorId    String?
     Music          Music    @relation(fields: [musicId], references: [id])
     musicId        Int
+    Branch         PlaybackEventBranch[]
 
     @@index([musicId, endedAt])
+}
+
+model PlaybackEventBranch {
+    id               Int           @id @default(autoincrement())
+    branchId         String
+    parentBranchId   String?
+    basePlayedMs     Float         @default(0)
+    reportedPlayedMs Float         @default(0)
+    PlaybackEvent    PlaybackEvent @relation(fields: [playbackEventId], references: [id], onDelete: Cascade)
+    playbackEventId  Int
+
+    @@unique([playbackEventId, branchId])
+    @@index([playbackEventId, parentBranchId])
 }
 
 model PlaybackSession {
@@ -205,6 +226,15 @@ model PlaybackSession {
     positionMs           Float    @default(0)
     positionUpdatedAt    DateTime @default(now())
     startedAt            DateTime?
+    historyMusicId       Int?
+    historySessionId     String?
+    historyBranchId      String?
+    historyParentBranchId String?
+    historyBranchBasePlayedMs Float @default(0)
+    historyStartedAt     DateTime?
+    historyPlayedMs      Float    @default(0)
+    historyHadSeek       Boolean  @default(false)
+    historyUpdatedAt     DateTime?
     revision             Int      @default(0)
     createdAt            DateTime @default(now())
     updatedAt            DateTime @updatedAt

@@ -24,6 +24,17 @@ export interface PlaybackSessionSnapshot {
     serverTime: string;
 }
 
+export interface PlaybackHistoryLineageInput {
+    clientSessionId: string;
+    branchId?: string;
+    parentBranchId?: string | null;
+    branchBasePlayedMs?: number;
+    startedAt: string;
+    accumulatedPlayedMs: number;
+    hadSeek: boolean;
+    updatedAt: string;
+}
+
 export interface ReportPlaybackStateInput {
     deviceId: string;
     sequence: number;
@@ -33,6 +44,7 @@ export interface ReportPlaybackStateInput {
     currentMusicId?: string | null;
     positionMs: number;
     observedAt?: string | null;
+    playbackHistory?: PlaybackHistoryLineageInput | null;
 }
 
 export type PlaybackSessionConflictReason =
@@ -170,6 +182,80 @@ const validateInput = (input: ReportPlaybackStateInput) => {
         );
     }
 
+    let playbackHistory: {
+        clientSessionId: string;
+        branchId: string;
+        parentBranchId: string | null;
+        branchBasePlayedMs: number;
+        startedAt: Date;
+        accumulatedPlayedMs: number;
+        hadSeek: boolean;
+        updatedAt: Date;
+    } | null | undefined;
+    if (input.playbackHistory === undefined) {
+        playbackHistory = undefined;
+    } else if (input.playbackHistory === null) {
+        playbackHistory = null;
+    } else {
+        const clientSessionId = input.playbackHistory.clientSessionId.trim();
+        const branchId = (input.playbackHistory.branchId
+            ?? input.playbackHistory.clientSessionId).trim();
+        const parentBranchId = input.playbackHistory.parentBranchId === undefined
+            || input.playbackHistory.parentBranchId === null
+            ? null
+            : input.playbackHistory.parentBranchId.trim();
+        const branchBasePlayedMs = input.playbackHistory.branchBasePlayedMs ?? 0;
+        const startedAt = new Date(input.playbackHistory.startedAt);
+        const updatedAt = new Date(input.playbackHistory.updatedAt);
+        if (
+            !clientSessionId
+            || clientSessionId !== input.playbackHistory.clientSessionId
+            || clientSessionId.length > 128
+            || !branchId
+            || branchId !== (input.playbackHistory.branchId
+                ?? input.playbackHistory.clientSessionId)
+            || branchId.length > 128
+            || (
+                parentBranchId !== null
+                && (
+                    !parentBranchId
+                    || parentBranchId !== input.playbackHistory.parentBranchId
+                    || parentBranchId.length > 128
+                    || parentBranchId === branchId
+                    || parentBranchId !== clientSessionId
+                )
+            )
+            || !Number.isSafeInteger(branchBasePlayedMs)
+            || branchBasePlayedMs < 0
+            || (parentBranchId === null && branchBasePlayedMs !== 0)
+            || (parentBranchId === null && branchId !== clientSessionId)
+            || Number.isNaN(startedAt.getTime())
+            || Number.isNaN(updatedAt.getTime())
+            || startedAt > updatedAt
+            || !Number.isSafeInteger(input.playbackHistory.accumulatedPlayedMs)
+            || input.playbackHistory.accumulatedPlayedMs < 0
+            || input.playbackHistory.accumulatedPlayedMs < branchBasePlayedMs
+            || typeof input.playbackHistory.hadSeek !== 'boolean'
+            || currentMusicId === null
+        ) {
+            throw new PlaybackSessionServiceError(
+                'Playback history lineage is invalid.',
+                'INVALID_PLAYBACK_HISTORY'
+            );
+        }
+
+        playbackHistory = {
+            clientSessionId,
+            branchId,
+            parentBranchId,
+            branchBasePlayedMs,
+            startedAt,
+            accumulatedPlayedMs: input.playbackHistory.accumulatedPlayedMs,
+            hadSeek: input.playbackHistory.hadSeek,
+            updatedAt
+        };
+    }
+
     return {
         deviceId,
         sequence: input.sequence,
@@ -177,7 +263,42 @@ const validateInput = (input: ReportPlaybackStateInput) => {
         claimActive: input.claimActive === true,
         state,
         currentMusicId,
-        positionMs: Math.round(input.positionMs)
+        positionMs: Math.round(input.positionMs),
+        playbackHistory
+    };
+};
+
+const historyUpdateData = (
+    history: ReturnType<typeof validateInput>['playbackHistory'],
+    currentMusicId: number | null
+) => {
+    if (history === undefined) {
+        return {};
+    }
+    if (history === null) {
+        return {
+            historyMusicId: null,
+            historySessionId: null,
+            historyBranchId: null,
+            historyParentBranchId: null,
+            historyBranchBasePlayedMs: 0,
+            historyStartedAt: null,
+            historyPlayedMs: 0,
+            historyHadSeek: false,
+            historyUpdatedAt: null
+        };
+    }
+
+    return {
+        historyMusicId: currentMusicId,
+        historySessionId: history.clientSessionId,
+        historyBranchId: history.branchId,
+        historyParentBranchId: history.parentBranchId,
+        historyBranchBasePlayedMs: history.branchBasePlayedMs,
+        historyStartedAt: history.startedAt,
+        historyPlayedMs: history.accumulatedPlayedMs,
+        historyHadSeek: history.hadSeek,
+        historyUpdatedAt: history.updatedAt
     };
 };
 
@@ -249,6 +370,10 @@ export const reportPlaybackState = async (
                     startedAt: normalized.state === PLAYBACK_STATES.playing
                         ? serverTime
                         : null,
+                    ...historyUpdateData(
+                        normalized.playbackHistory ?? null,
+                        music?.id ?? null
+                    ),
                     revision: 1
                 }
             });
@@ -292,6 +417,35 @@ export const reportPlaybackState = async (
         const startedAt = normalized.state === PLAYBACK_STATES.playing
             ? (continuesCurrentPlay ? current.startedAt ?? serverTime : serverTime)
             : (normalized.state === PLAYBACK_STATES.paused ? current.startedAt : null);
+        const nextMusicId = music?.id ?? null;
+        const playbackHistory = normalized.state === PLAYBACK_STATES.stopped
+            ? null
+            : normalized.playbackHistory !== undefined
+                ? normalized.playbackHistory
+                : current.currentMusicId === nextMusicId
+                    ? undefined
+                    : null;
+        const mergedPlaybackHistory = playbackHistory
+            && current.historySessionId === playbackHistory.clientSessionId
+            && current.historyMusicId === nextMusicId
+            && current.historyBranchId === playbackHistory.branchId
+            && current.historyParentBranchId === playbackHistory.parentBranchId
+            && current.historyBranchBasePlayedMs
+                === playbackHistory.branchBasePlayedMs
+            ? {
+                ...playbackHistory,
+                startedAt: current.historyStartedAt ?? playbackHistory.startedAt,
+                accumulatedPlayedMs: Math.max(
+                    current.historyPlayedMs,
+                    playbackHistory.accumulatedPlayedMs
+                ),
+                hadSeek: current.historyHadSeek || playbackHistory.hadSeek,
+                updatedAt: current.historyUpdatedAt
+                    && current.historyUpdatedAt > playbackHistory.updatedAt
+                    ? current.historyUpdatedAt
+                    : playbackHistory.updatedAt
+            }
+            : playbackHistory;
         const update = await transaction.playbackSession.updateMany({
             where: {
                 id: current.id,
@@ -307,6 +461,7 @@ export const reportPlaybackState = async (
                 positionMs,
                 positionUpdatedAt: serverTime,
                 startedAt,
+                ...historyUpdateData(mergedPlaybackHistory, nextMusicId),
                 revision: { increment: 1 }
             }
         });

@@ -2,6 +2,7 @@ import type { Socket } from 'socket.io';
 
 import models from '~/models';
 import { PlaybackHandoffServiceError } from '~/features/playback/services/playback-handoff';
+import { recordPlayback } from '~/features/music/services/playback-records';
 
 import {
     PLAYBACK_HANDOFF_ACTIVATE,
@@ -179,6 +180,17 @@ describe('playback handoff coordinator integration', () => {
 
     it('releases the old endpoint before atomically claiming and activating the target', async () => {
         const eventOrder: string[] = [];
+        const playbackHistory = {
+            clientSessionId: 'shared-handoff-history',
+            branchId: 'shared-handoff-history',
+            parentBranchId: null,
+            branchBasePlayedMs: 0,
+            trackId: firstMusicId.toString(),
+            startedAt: '2026-07-20T23:59:30.000Z',
+            accumulatedPlayedMs: 42_000,
+            hadSeek: true,
+            updatedAt: '2026-07-21T00:00:12.000Z'
+        };
         const sourceSocket = createSocket('source-socket', 'source-tab', 2, (
             event,
             payload,
@@ -195,7 +207,8 @@ describe('playback handoff coordinator integration', () => {
                     sourceRegistrationGeneration: dispatch.sourceRegistrationGeneration,
                     status: 'released',
                     endpointSequence: 8,
-                    positionMs: 12_500
+                    positionMs: 12_500,
+                    playbackHistory
                 });
             }
             if (event === PLAYBACK_HANDOFF_SETTLE_SOURCE) {
@@ -210,6 +223,14 @@ describe('playback handoff coordinator integration', () => {
             if (event === PLAYBACK_HANDOFF_ACTIVATE) {
                 eventOrder.push('activate');
                 const dispatch = payload as PlaybackHandoffActivationDispatch;
+                expect(dispatch.playbackHistory).toEqual(expect.objectContaining({
+                    ...playbackHistory,
+                    branchId: expect.any(String),
+                    parentBranchId: playbackHistory.branchId,
+                    branchBasePlayedMs: playbackHistory.accumulatedPlayedMs
+                }));
+                expect(dispatch.playbackHistory?.branchId)
+                    .not.toBe(playbackHistory.branchId);
                 acknowledge?.({
                     protocolVersion: 1,
                     handoffId: dispatch.handoffId,
@@ -254,11 +275,105 @@ describe('playback handoff coordinator integration', () => {
         coordinator.clear();
     });
 
+    it.each(['another track', 'a noncanonical parent'])(
+        'rejects a release that transfers history for %s',
+        async (invalidHistory) => {
+            const sourceSocket = createSocket('source-socket', 'source-tab', 2, (
+                event,
+                payload,
+                acknowledge
+            ) => {
+                if (event !== PLAYBACK_HANDOFF_RELEASE) {
+                    return;
+                }
+                const dispatch = payload as PlaybackHandoffReleaseDispatch;
+                acknowledge?.({
+                    protocolVersion: 1,
+                    handoffId: dispatch.handoffId,
+                    handoffSequence: dispatch.handoffSequence,
+                    sourceEndpointId: dispatch.sourceEndpointId,
+                    sourceRegistrationGeneration: dispatch.sourceRegistrationGeneration,
+                    status: 'released',
+                    endpointSequence: 8,
+                    positionMs: 12_500,
+                    playbackHistory: invalidHistory === 'another track'
+                        ? {
+                            clientSessionId: 'wrong-track-history',
+                            trackId: secondMusicId.toString(),
+                            startedAt: '2026-07-20T23:59:30.000Z',
+                            accumulatedPlayedMs: 42_000,
+                            hadSeek: false,
+                            updatedAt: '2026-07-21T00:00:12.000Z'
+                        }
+                        : {
+                            clientSessionId: 'canonical-history',
+                            branchId: 'target-branch',
+                            parentBranchId: 'missing-parent',
+                            branchBasePlayedMs: 20_000,
+                            trackId: firstMusicId.toString(),
+                            startedAt: '2026-07-20T23:59:30.000Z',
+                            accumulatedPlayedMs: 42_000,
+                            hadSeek: false,
+                            updatedAt: '2026-07-21T00:00:12.000Z'
+                        }
+                });
+            });
+            const targetSocket = createSocket('target-socket', 'target-tab', 3);
+            const routes = new Map([
+                ['source-tab', route(sourceSocket, 'source-tab', 2, 7)],
+                ['target-tab', route(targetSocket, 'target-tab', 3, 3)]
+            ]);
+            const coordinator = new PlaybackHandoffCoordinator({
+                commandEpoch: 'epoch-1',
+                getRoute: endpointId => routes.get(endpointId) ?? null,
+                onStateChanged: jest.fn()
+            });
+
+            await expect(coordinator.request(targetSocket, request())).resolves.toEqual(
+                expect.objectContaining({ phase: 'releasing' })
+            );
+            await expect(waitForTerminalStatus(targetSocket)).resolves.toEqual(
+                expect.objectContaining({
+                    phase: 'rejected',
+                    error: expect.objectContaining({ code: 'SOURCE_STATE_MISMATCH' })
+                })
+            );
+            expect(targetSocket.pushedEvents)
+                .not.toContain(PLAYBACK_HANDOFF_ACTIVATE);
+            coordinator.clear();
+        }
+    );
+
     it('allows an explicit forced claim only after the old endpoint is terminated', async () => {
+        const playbackHistory = {
+            clientSessionId: 'forced-shared-history',
+            branchId: 'forced-shared-history',
+            parentBranchId: null,
+            branchBasePlayedMs: 0,
+            trackId: firstMusicId.toString(),
+            startedAt: '2026-07-20T23:59:30.000Z',
+            accumulatedPlayedMs: 42_000,
+            hadSeek: false,
+            updatedAt: '2026-07-21T00:00:12.000Z'
+        };
         await models.playbackSession.update({
             where: { scopeKey: 'local' },
-            data: { state: 'stopped' }
+            data: {
+                state: 'stopped',
+                historyMusicId: firstMusicId,
+                historySessionId: playbackHistory.clientSessionId,
+                historyBranchId: playbackHistory.branchId,
+                historyParentBranchId: playbackHistory.parentBranchId,
+                historyBranchBasePlayedMs: playbackHistory.branchBasePlayedMs,
+                historyStartedAt: new Date(playbackHistory.startedAt),
+                historyPlayedMs: playbackHistory.accumulatedPlayedMs,
+                historyHadSeek: playbackHistory.hadSeek,
+                historyUpdatedAt: new Date(playbackHistory.updatedAt)
+            }
         });
+        let targetPlaybackHistory!: NonNullable<
+            PlaybackHandoffActivationDispatch['playbackHistory']
+        >;
         const targetSocket = createSocket('target-socket', 'target-tab', 3, (
             event,
             payload,
@@ -269,6 +384,16 @@ describe('playback handoff coordinator integration', () => {
             }
             const dispatch = payload as PlaybackHandoffActivationDispatch;
             expect(dispatch.snapshot.state).toBe('paused');
+            expect(dispatch.playbackHistory).toEqual(expect.objectContaining({
+                clientSessionId: playbackHistory.clientSessionId,
+                parentBranchId: playbackHistory.branchId,
+                branchBasePlayedMs: playbackHistory.accumulatedPlayedMs,
+                accumulatedPlayedMs: playbackHistory.accumulatedPlayedMs
+            }));
+            if (!dispatch.playbackHistory) {
+                throw new Error('Expected forced handoff history lineage.');
+            }
+            targetPlaybackHistory = dispatch.playbackHistory;
             acknowledge?.({
                 protocolVersion: 1,
                 handoffId: dispatch.handoffId,
@@ -312,8 +437,54 @@ describe('playback handoff coordinator integration', () => {
         })).resolves.toEqual(expect.objectContaining({
             state: 'paused',
             activeDeviceId: 'target-tab',
+            historyMusicId: firstMusicId,
+            historySessionId: playbackHistory.clientSessionId,
+            historyBranchId: targetPlaybackHistory?.branchId,
+            historyParentBranchId: playbackHistory.branchId,
+            historyBranchBasePlayedMs: playbackHistory.accumulatedPlayedMs,
             revision: 5
         }));
+
+        await recordPlayback({
+            id: firstMusicId.toString(),
+            clientSessionId: playbackHistory.clientSessionId,
+            branchId: playbackHistory.branchId,
+            parentBranchId: playbackHistory.parentBranchId,
+            branchBasePlayedMs: playbackHistory.branchBasePlayedMs,
+            playedMs: 49_000,
+            startedAt: playbackHistory.startedAt,
+            endedAt: playbackHistory.updatedAt,
+            endReason: 'recovery',
+            hadSeek: playbackHistory.hadSeek,
+            source: 'queue-recovery'
+        }, new Date('2026-07-21T00:00:42.000Z'));
+        await recordPlayback({
+            id: firstMusicId.toString(),
+            clientSessionId: playbackHistory.clientSessionId,
+            branchId: targetPlaybackHistory?.branchId,
+            parentBranchId: targetPlaybackHistory?.parentBranchId,
+            branchBasePlayedMs: targetPlaybackHistory?.branchBasePlayedMs,
+            playedMs: 60_000,
+            startedAt: playbackHistory.startedAt,
+            endedAt: '2026-07-21T00:01:00.000Z',
+            endReason: 'ended',
+            hadSeek: playbackHistory.hadSeek,
+            source: 'queue-ended'
+        }, new Date('2026-07-21T00:01:00.000Z'));
+
+        await expect(models.playbackEvent.count({
+            where: {
+                musicId: firstMusicId,
+                clientSessionId: playbackHistory.clientSessionId
+            }
+        })).resolves.toBe(1);
+        await expect(models.music.findUniqueOrThrow({
+            where: { id: firstMusicId }
+        })).resolves.toMatchObject({
+            playCount: 1,
+            totalPlayedMs: 67_000,
+            completionCount: 1
+        });
         coordinator.clear();
     });
 
@@ -361,6 +532,7 @@ describe('playback handoff coordinator integration', () => {
             if (event === PLAYBACK_HANDOFF_ACTIVATE) {
                 eventOrder.push('target-started');
                 const dispatch = payload as PlaybackHandoffActivationDispatch;
+                expect(dispatch.playbackHistory).toBeNull();
                 acknowledge?.({
                     protocolVersion: 1,
                     handoffId: dispatch.handoffId,

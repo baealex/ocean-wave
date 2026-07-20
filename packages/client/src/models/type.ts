@@ -9,6 +9,10 @@ export interface Music {
     playCount: number;
     lastPlayedAt: string | null;
     totalPlayedMs: number;
+    skipCount: number;
+    lastSkippedAt: string | null;
+    completionCount: number;
+    lastCompletedAt: string | null;
     filePath: string;
     hasMetadataOverride: boolean;
     isLiked: boolean;
