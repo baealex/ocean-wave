@@ -19,17 +19,29 @@ import {
     restoreQueueState
 } from '~/modules/queue-state';
 import { toast } from '~/modules/toast';
-import { convertToMillisecond } from '~/modules/time';
+import { convertToMillisecond, convertToSecond } from '~/modules/time';
 import { PlaybackSessionTracker } from '~/modules/playback-session';
+import {
+    isPlaybackCommandBarrierActive,
+    isPlaybackCommandExecutionBarrierActive
+} from '~/modules/playback-command-barrier';
+import { resolveSharedPlaybackPositionMs } from '~/modules/shared-playback';
 import {
     deletePlaybackCheckpoint,
     savePlaybackCheckpoint
 } from '~/modules/playback-checkpoint-store';
 import { MusicListener } from '~/socket';
 import { shuffle } from '~/modules/shuffle';
+import type {
+    PlaybackCommandDispatch,
+    PlaybackCommandError,
+    PlaybackCommandState
+} from '~/socket/playback-command-contract';
 
 const PLAYBACK_CHECKPOINT_INTERVAL_MS = 10_000;
 const SERVER_QUEUE_SAVE_DELAY_MS = 1_000;
+const PLAYBACK_COMMAND_RECOVERY_REQUEST_TIMEOUT_MS = 5_000;
+const PLAYBACK_COMMAND_MEDIA_RECOVERY_TIMEOUT_MS = 2_000;
 
 interface QueueStoreState {
     selected: number | null;
@@ -64,6 +76,12 @@ const getProgress = (time: number, duration: number | undefined) => {
 
     return Number((time / duration * 100).toFixed(2));
 };
+
+const playbackCommandError = (
+    code: PlaybackCommandError['code'],
+    message: string,
+    retryable = false
+): PlaybackCommandError => ({ code, message, retryable });
 
 class QueueStore extends BaseStore<QueueStoreState> {
     saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -133,6 +151,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 this.reportSharedPlaybackState('stopped');
             },
             onEnded: () => {
+                if (isPlaybackCommandExecutionBarrierActive()) return;
                 if (this.state.selected === null) return;
 
                 if (this.state.repeatMode === 'one') {
@@ -193,7 +212,11 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 toast(state.error);
             }
 
-            if (!this.musicLoaded || state.restoreVersion === this.appliedRestoreVersion) {
+            if (
+                !this.musicLoaded
+                || isPlaybackCommandBarrierActive()
+                || state.restoreVersion === this.appliedRestoreVersion
+            ) {
                 return;
             }
 
@@ -295,6 +318,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     async reset(ids: string[]) {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         this.commitPlaybackEvent('queue-reset');
         this.reportSharedPlaybackState('stopped');
 
@@ -310,6 +334,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     async add(id: string) {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         if (this.state.items.includes(id)) {
             if (this.state.playMode === 'immediately') {
                 this.select(this.state.items.indexOf(id));
@@ -363,6 +388,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     async removeItems(ids: string[]) {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         const newItems = this.state.items.filter((i) => !ids.includes(i));
         const newSourceItems = this.state.sourceItems.filter((i) => !ids.includes(i));
 
@@ -408,6 +434,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     select(index: number, play = true) {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         this.commitPlaybackEvent('queue-track-change');
 
         const nextQueueState = createQueueState(this.state.items, index);
@@ -431,27 +458,430 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     play() {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         if (this.state.selected !== null) {
             this.audioChannel.play();
         }
     }
 
     pause() {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         this.audioChannel.pause();
     }
 
     stop() {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         this.commitPlaybackEvent('queue-stop');
         this.audioChannel.stop();
     }
 
     seek(time: number) {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         this.audioChannel.seek(time);
         this.reportSharedPlaybackState(
             this.state.isPlaying ? 'playing' : 'paused',
             this.state.isPlaying,
             time
         );
+    }
+
+    preparePlaybackCommand(dispatch: PlaybackCommandDispatch): PlaybackCommandError | null {
+        const session = playbackSessionStore.state.snapshot;
+        const queue = playbackQueueStore.state.snapshot;
+
+        if (
+            playbackSessionStore.hasPendingReport
+            || playbackQueueStore.hasPendingSave
+            || this.serverQueueSaveTimer
+        ) {
+            return playbackCommandError(
+                'TARGET_STATE_MISMATCH',
+                'The target has a playback snapshot write in progress.',
+                true
+            );
+        }
+
+        if (
+            !session
+            || session.revision !== dispatch.expectedSource.sessionRevision
+            || session.activeDeviceId !== dispatch.targetEndpointId
+            || session.state !== dispatch.expectedSource.state
+            || session.currentMusicId !== dispatch.expectedSource.currentMusicId
+        ) {
+            return playbackCommandError(
+                'TARGET_STATE_MISMATCH',
+                'The target playback session does not match the command source.',
+                true
+            );
+        }
+
+        if (
+            dispatch.expectedSource.queueRevision !== null
+            && (
+                !queue
+                || queue.revision !== dispatch.expectedSource.queueRevision
+                || queue.currentIndex !== dispatch.expectedSource.currentIndex
+                || queue.shuffle !== this.state.shuffle
+                || queue.repeatMode !== this.state.repeatMode
+                || queue.musicIds.length !== this.state.items.length
+                || queue.musicIds.some((id, index) => id !== this.state.items[index])
+                || queue.sourceMusicIds.length !== this.state.sourceItems.length
+                || queue.sourceMusicIds.some(
+                    (id, index) => id !== this.state.sourceItems[index]
+                )
+            )
+        ) {
+            return playbackCommandError(
+                'TARGET_STATE_MISMATCH',
+                'The target playback queue does not match the command source.',
+                true
+            );
+        }
+
+        const localState = this.state.isPlaying ? 'playing' : (
+            session.state === 'stopped' ? 'stopped' : 'paused'
+        );
+        const localTrackMatches = session.state === 'stopped'
+            ? true
+            : this.state.currentTrackId === dispatch.expectedSource.currentMusicId;
+
+        if (
+            localState !== dispatch.expectedSource.state
+            || !localTrackMatches
+            || this.state.selected !== dispatch.expectedSource.currentIndex
+        ) {
+            return playbackCommandError(
+                'TARGET_STATE_MISMATCH',
+                'The target audio state does not match the command source.',
+                true
+            );
+        }
+
+        if (
+            dispatch.desiredResult.currentMusicId
+            && !getMusic(dispatch.desiredResult.currentMusicId)
+        ) {
+            return playbackCommandError(
+                'MEDIA_UNAVAILABLE',
+                'The resolved playback item is unavailable on the target.'
+            );
+        }
+
+        return null;
+    }
+
+    async executePlaybackCommand(dispatch: PlaybackCommandDispatch): Promise<
+        | { status: 'completed'; resultingState: PlaybackCommandState }
+        | { status: 'rejected'; error: PlaybackCommandError }
+    > {
+        const desired = dispatch.desiredResult;
+        const desiredPositionMs = desired.position.mode === 'absolute'
+            ? desired.position.positionMs
+            : convertToMillisecond(this.state.currentTime);
+        const desiredPosition = convertToSecond(desiredPositionMs);
+        const trackChanged = desired.currentMusicId !== this.state.currentTrackId
+            || desired.currentIndex !== this.state.selected;
+
+        try {
+            if (trackChanged) {
+                const music = desired.currentMusicId
+                    ? getMusic(desired.currentMusicId)
+                    : undefined;
+
+                if (!music || desired.currentIndex === null) {
+                    return {
+                        status: 'rejected',
+                        error: playbackCommandError(
+                            'MEDIA_UNAVAILABLE',
+                            'The resolved playback item is unavailable on the target.'
+                        )
+                    };
+                }
+
+                const nextQueueState = createQueueState(
+                    this.state.items,
+                    desired.currentIndex
+                );
+                if (nextQueueState.currentTrackId !== desired.currentMusicId) {
+                    return {
+                        status: 'rejected',
+                        error: playbackCommandError(
+                            'TARGET_STATE_MISMATCH',
+                            'The resolved queue selection is unavailable on the target.',
+                            true
+                        )
+                    };
+                }
+
+                document.title = `${music.name} - ${music.artist.name}`;
+                this.set({
+                    ...nextQueueState,
+                    progress: getProgress(desiredPosition, music.duration),
+                    currentTime: desiredPosition,
+                    isPlaying: desired.state === 'playing'
+                });
+                this.audioChannel.load(music);
+                if (
+                    desiredPosition > 0
+                    && !this.audioChannel.seekWithResult(desiredPosition)
+                ) {
+                    return {
+                        status: 'rejected',
+                        error: playbackCommandError(
+                            'MEDIA_NOT_READY',
+                            'The target media position is not ready for this command.',
+                            true
+                        )
+                    };
+                }
+            } else if (desired.position.mode === 'absolute') {
+                if (!this.audioChannel.seekWithResult(desiredPosition)) {
+                    return {
+                        status: 'rejected',
+                        error: playbackCommandError(
+                            'MEDIA_NOT_READY',
+                            'The target media position is not ready for this command.',
+                            true
+                        )
+                    };
+                }
+                this.set({
+                    currentTime: desiredPosition,
+                    progress: getProgress(
+                        desiredPosition,
+                        desired.currentMusicId
+                            ? getMusic(desired.currentMusicId)?.duration
+                            : undefined
+                    )
+                });
+            }
+
+            const shouldStartAudio = desired.state === 'playing' && (
+                dispatch.expectedSource.state !== 'playing' || trackChanged
+            );
+
+            if (shouldStartAudio) {
+                await this.audioChannel.playWithResult();
+                this.set({ isPlaying: true });
+            } else if (
+                desired.state === 'paused'
+                && dispatch.expectedSource.state === 'playing'
+            ) {
+                this.audioChannel.pause();
+                this.set({ isPlaying: false });
+            }
+
+            const resultingPositionMs = desired.position.mode === 'absolute'
+                ? desired.position.positionMs
+                : convertToMillisecond(this.audioChannel.getCurrentTime());
+
+            if (!Number.isFinite(resultingPositionMs) || resultingPositionMs < 0) {
+                return {
+                    status: 'rejected',
+                    error: playbackCommandError(
+                        'MEDIA_NOT_READY',
+                        'The target media position is unavailable.',
+                        true
+                    )
+                };
+            }
+
+            return {
+                status: 'completed',
+                resultingState: {
+                    state: desired.state,
+                    currentMusicId: desired.currentMusicId,
+                    currentIndex: desired.currentIndex,
+                    positionMs: Math.max(Math.round(resultingPositionMs), 0)
+                }
+            };
+        } catch (error) {
+            const name = error instanceof DOMException ? error.name : '';
+            if (name === 'NotAllowedError') {
+                return {
+                    status: 'rejected',
+                    error: playbackCommandError(
+                        'AUTOPLAY_BLOCKED',
+                        'Browser autoplay policy blocked the remote playback command.'
+                    )
+                };
+            }
+            if (name === 'NotSupportedError') {
+                return {
+                    status: 'rejected',
+                    error: playbackCommandError(
+                        'MEDIA_UNAVAILABLE',
+                        'The resolved media cannot be played on the target.'
+                    )
+                };
+            }
+
+            return {
+                status: 'rejected',
+                error: playbackCommandError(
+                    'MEDIA_NOT_READY',
+                    'The target media element is not ready for this command.',
+                    true
+                )
+            };
+        }
+    }
+
+    async recoverPlaybackCommand(fence: {
+        sessionRevision: number | null;
+        queueRevision: number | null;
+    }, beginReconciliation: () => boolean) {
+        if (this.serverQueueSaveTimer) {
+            clearTimeout(this.serverQueueSaveTimer);
+            this.serverQueueSaveTimer = null;
+        }
+
+        const sessionReady = playbackSessionStore.quiesceForPlaybackCommandRecovery();
+        const queueReady = playbackQueueStore.quiesceForPlaybackCommandRecovery();
+        if (!sessionReady || !queueReady) {
+            throw new Error(
+                'Playback command recovery is waiting for prior snapshot writes.'
+            );
+        }
+
+        const [sessionResult, queueResult] = await Promise.allSettled([
+            playbackSessionStore.refresh(PLAYBACK_COMMAND_RECOVERY_REQUEST_TIMEOUT_MS),
+            playbackQueueStore.refresh(PLAYBACK_COMMAND_RECOVERY_REQUEST_TIMEOUT_MS)
+        ]);
+
+        if (
+            sessionResult.status !== 'fulfilled'
+            || queueResult.status !== 'fulfilled'
+            || sessionResult.value.type !== 'success'
+            || queueResult.value.type !== 'success'
+        ) {
+            throw new Error('Playback command recovery could not refresh both snapshots.');
+        }
+
+        const queue = queueResult.value.snapshot;
+        const session = sessionResult.value.snapshot;
+        const endpointId = playbackSessionStore.endpointId;
+
+        if (!endpointId) {
+            throw new Error(
+                'Playback command recovery requires an active endpoint registration.'
+            );
+        }
+
+        if (
+            fence.sessionRevision !== null
+            && (!session || session.revision < fence.sessionRevision)
+        ) {
+            throw new Error('Playback command recovery returned a stale session snapshot.');
+        }
+
+        if (
+            fence.queueRevision !== null
+            && (!queue || queue.revision < fence.queueRevision)
+        ) {
+            throw new Error('Playback command recovery returned a stale queue snapshot.');
+        }
+
+        if (!beginReconciliation()) {
+            throw new Error('Playback command recovery is no longer current.');
+        }
+
+        if (queue) {
+            await this.restoreServerQueue(queue, true);
+            this.appliedRestoreVersion = playbackQueueStore.state.restoreVersion;
+        }
+
+        if (
+            !session
+            || session.activeDeviceId !== playbackSessionStore.endpointId
+            || !session.currentMusicId
+            || session.state === 'stopped'
+        ) {
+            if (this.state.isPlaying) {
+                this.audioChannel.pause();
+            }
+            await this.set({ isPlaying: false });
+            this.assertPlaybackCommandRecoveryCurrent(session, queue, endpointId);
+            return;
+        }
+
+        const music = getMusic(session.currentMusicId);
+        if (!music) {
+            this.audioChannel.pause();
+            await this.set({ isPlaying: false });
+            this.assertPlaybackCommandRecoveryCurrent(session, queue, endpointId);
+            return;
+        }
+
+        const positionMs = resolveSharedPlaybackPositionMs({
+            snapshot: session,
+            receivedAtMs: playbackSessionStore.state.receivedAtMs,
+            nowMs: Date.now(),
+            durationMs: convertToMillisecond(music.duration)
+        });
+        const position = convertToSecond(positionMs);
+        this.audioChannel.seek(position);
+        await this.set({
+            currentTime: position,
+            progress: getProgress(position, music.duration)
+        });
+
+        if (session.state === 'playing') {
+            if (!this.state.isPlaying) {
+                try {
+                    await this.playRecoveredAudio();
+                } catch {
+                    this.audioChannel.pause();
+                    this.set({ isPlaying: false });
+                    setTimeout(() => {
+                        this.reportSharedPlaybackState('paused');
+                    }, 0);
+                    this.assertPlaybackCommandRecoveryCurrent(session, queue, endpointId);
+                    return;
+                }
+            }
+            this.set({ isPlaying: true });
+        } else {
+            if (this.state.isPlaying) {
+                this.audioChannel.pause();
+            }
+            this.set({ isPlaying: false });
+        }
+        this.assertPlaybackCommandRecoveryCurrent(session, queue, endpointId);
+    }
+
+    private assertPlaybackCommandRecoveryCurrent(
+        session: typeof playbackSessionStore.state.snapshot,
+        queue: typeof playbackQueueStore.state.snapshot,
+        endpointId: string | null
+    ) {
+        if (
+            playbackSessionStore.state.snapshot === session
+            && playbackQueueStore.state.snapshot === queue
+            && playbackSessionStore.endpointId === endpointId
+        ) {
+            return;
+        }
+
+        this.audioChannel.pause();
+        this.set({ isPlaying: false });
+        throw new Error('Playback command recovery was superseded by newer state.');
+    }
+
+    private playRecoveredAudio() {
+        return new Promise<void>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                reject(new Error('Playback command media recovery timed out.'));
+            }, PLAYBACK_COMMAND_MEDIA_RECOVERY_TIMEOUT_MS);
+
+            void this.audioChannel.playWithResult().then(() => {
+                clearTimeout(timer);
+                resolve();
+            }, (error) => {
+                clearTimeout(timer);
+                reject(error);
+            });
+        });
     }
 
     setPlayMode(mode: 'later' | 'immediately') {
@@ -467,6 +897,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     changeRepeatMode() {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         const repeatRotate = ['none', 'all', 'one'] as const;
         const current = repeatRotate.indexOf(this.state.repeatMode);
         const next = repeatRotate[(current + 1) % repeatRotate.length];
@@ -474,6 +905,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     reorder(activeId: string, overId: string) {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         const nextItems = reorderQueueItems(this.state.items, activeId, overId);
 
         if (nextItems === this.state.items) {
@@ -487,6 +919,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     reorderToIndex(activeId: string, targetIndex: number) {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         const nextItems = moveQueueItemToIndex(this.state.items, activeId, targetIndex);
 
         if (nextItems === this.state.items) {
@@ -500,6 +933,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     toggleShuffle() {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         const selectedMusic = this.state.currentTrackId;
 
         if (!selectedMusic) {
@@ -532,6 +966,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     next() {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         if (this.state.selected !== null) {
             this.select((this.state.selected + 1) % this.state.items.length);
             this.audioChannel.play();
@@ -539,6 +974,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     prev() {
+        if (isPlaybackCommandExecutionBarrierActive()) return;
         if (this.state.selected !== null) {
             if (this.state.currentTime > 10) {
                 this.audioChannel.seek(0);
@@ -557,6 +993,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         if (
             this.musicLoaded
             && !this.applyingQueueSnapshot
+            && !isPlaybackCommandBarrierActive()
             && this.hasServerQueueChange(state, previousState)
         ) {
             this.scheduleServerQueueSave();
@@ -636,8 +1073,8 @@ class QueueStore extends BaseStore<QueueStoreState> {
         });
     }
 
-    private async restoreServerQueue(snapshot: PlaybackQueueSnapshot) {
-        if (this.state.isPlaying) {
+    private async restoreServerQueue(snapshot: PlaybackQueueSnapshot, force = false) {
+        if (this.state.isPlaying && !force) {
             return;
         }
 

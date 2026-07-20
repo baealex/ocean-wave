@@ -7,6 +7,12 @@ import {
     playbackEndpointRegistry
 } from './playback-endpoints';
 import { SYNC_EVENT } from './sync';
+import {
+    PLAYBACK_COMMAND_REQUEST,
+    PLAYBACK_COMMAND_RESULT,
+    PLAYBACK_COMMAND_START
+} from './playback-command-contract';
+import { playbackCommandCoordinator } from './playback-command';
 import { socketManager } from './index';
 
 describe('socket manager', () => {
@@ -14,6 +20,9 @@ describe('socket manager', () => {
         SYNC_EVENT,
         PLAYBACK_ENDPOINT_REGISTER,
         PLAYBACK_ENDPOINT_HEARTBEAT,
+        PLAYBACK_COMMAND_REQUEST,
+        PLAYBACK_COMMAND_START,
+        PLAYBACK_COMMAND_RESULT,
         'get-connectors',
         'remove-connector',
         'disconnect'
@@ -23,11 +32,13 @@ describe('socket manager', () => {
         jest.restoreAllMocks();
         connectors.set([]);
         playbackEndpointRegistry.clear();
+        playbackCommandCoordinator.clear();
     });
 
     afterEach(() => {
         connectors.set([]);
         playbackEndpointRegistry.clear();
+        playbackCommandCoordinator.clear();
     });
 
     it('does not register ordinary data write events as Socket.IO commands', () => {

@@ -42,10 +42,11 @@ const PLAYBACK_QUEUE_FIELDS = `
     updatedAt
 `;
 
-export const fetchPlaybackQueue = () => graphQuery<{
+export const fetchPlaybackQueue = (requestTimeoutMs?: number) => graphQuery<{
     playbackQueue: PlaybackQueueSnapshot | null;
 }>({
     operationName: 'PlaybackQueue',
+    requestTimeoutMs,
     query: `query PlaybackQueue {
         playbackQueue {
             ${PLAYBACK_QUEUE_FIELDS}

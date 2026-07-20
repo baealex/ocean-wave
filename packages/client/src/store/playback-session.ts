@@ -6,6 +6,7 @@ import {
     type SharedPlaybackState
 } from '~/api/playback-session';
 import { nextPlaybackEndpointSequence } from '~/modules/playback-device';
+import { isPlaybackCommandBarrierActive } from '~/modules/playback-command-barrier';
 import { isNewerPlaybackSnapshot } from '~/modules/shared-playback';
 import { PlaybackListener } from '~/socket';
 import {
@@ -25,6 +26,10 @@ interface PlaybackSessionStoreState {
     loading: boolean;
     error: string | null;
 }
+
+export type PlaybackSessionRefreshResult =
+    | { type: 'success'; snapshot: PlaybackSessionSnapshot | null }
+    | { type: 'error' | 'superseded' };
 
 interface LocalPlaybackReport {
     state: SharedPlaybackState;
@@ -66,10 +71,12 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
     private unsubscribeRegistration: (() => void) | null = null;
     private pendingIntent: PendingPlaybackIntent | null = null;
     private inFlight: InFlightPlaybackReport | null = null;
+    private readonly outstandingReports = new Set<symbol>();
     private claimRequired = false;
     private claimVersion = 0;
     private registrationGapEndpointId: string | null = null;
     private lastReportAtMs = 0;
+    private refreshSequence = 0;
 
     constructor() {
         super();
@@ -88,6 +95,24 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
 
     get deviceId() {
         return this.endpointId;
+    }
+
+    get hasPendingReport() {
+        return this.pendingIntent !== null
+            || this.inFlight !== null
+            || this.outstandingReports.size > 0;
+    }
+
+    quiesceForPlaybackCommandRecovery() {
+        this.pendingIntent = null;
+
+        if (this.outstandingReports.size > 0) {
+            return false;
+        }
+
+        this.claimRequired = false;
+        this.claimVersion += 1;
+        return true;
     }
 
     connect() {
@@ -125,28 +150,44 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
         this.claimRequired = false;
         this.claimVersion = 0;
         this.registrationGapEndpointId = null;
+        this.refreshSequence += 1;
         this.set({ endpointId: null });
     }
 
-    async refresh() {
+    async refresh(requestTimeoutMs?: number): Promise<PlaybackSessionRefreshResult> {
+        const refreshSequence = ++this.refreshSequence;
         this.set({ loading: true });
-        const response = await fetchPlaybackSession();
+        const response = await fetchPlaybackSession(requestTimeoutMs);
+
+        if (refreshSequence !== this.refreshSequence) {
+            return { type: 'superseded' };
+        }
 
         if (response.type === 'error') {
             this.set({
                 loading: false,
                 error: response.errors[0]?.message ?? 'Unable to read shared playback state.'
             });
-            return;
+            return { type: 'error' };
         }
 
         if (response.playbackSession) {
             this.applySnapshot(response.playbackSession, true);
+        } else {
+            this.set({
+                snapshot: null,
+                receivedAtMs: Date.now()
+            });
         }
         this.set({ loading: false, error: null });
+        return { type: 'success', snapshot: this.state.snapshot };
     }
 
     report(local: LocalPlaybackReport, options: ReportOptions = {}) {
+        if (isPlaybackCommandBarrierActive()) {
+            return;
+        }
+
         const now = Date.now();
         const claimActive = options.claimActive === true;
         const isCurrentEndpointActive = Boolean(
@@ -208,7 +249,12 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
     private async flushPending() {
         const registration = this.registration;
 
-        if (this.inFlight || !this.pendingIntent || !registration) {
+        if (
+            isPlaybackCommandBarrierActive()
+            || this.inFlight
+            || !this.pendingIntent
+            || !registration
+        ) {
             return;
         }
 
@@ -225,6 +271,7 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
             claimRequired,
             claimVersion
         };
+        this.outstandingReports.add(token);
         let continueFlushing = true;
         const input: ReportPlaybackStateInput = {
             deviceId: registration.endpointId,
@@ -274,6 +321,7 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
                 this.claimRequired = false;
             }
         } finally {
+            this.outstandingReports.delete(token);
             if (this.inFlight?.token === token) {
                 this.inFlight = null;
 

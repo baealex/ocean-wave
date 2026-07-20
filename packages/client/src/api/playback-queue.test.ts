@@ -29,6 +29,20 @@ describe('playback queue API', () => {
         }));
     });
 
+    it('bounds command recovery snapshot requests', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({
+            data: { data: { playbackQueue: null } }
+        });
+
+        await fetchPlaybackQueue(5_000);
+
+        expect(post).toHaveBeenCalledWith(
+            '/graphql',
+            expect.objectContaining({ operationName: 'PlaybackQueue' }),
+            { timeout: 5_000 }
+        );
+    });
+
     it('sends the complete queue snapshot through GraphQL variables', async () => {
         const post = vi.spyOn(axios, 'post').mockResolvedValue({
             data: { data: { savePlaybackQueue: {} } }

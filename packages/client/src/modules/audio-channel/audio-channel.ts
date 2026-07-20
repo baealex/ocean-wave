@@ -13,9 +13,12 @@ export interface AudioChannelEventHandler {
 export interface AudioChannel {
     load: (music: Music) => void;
     play: () => void;
+    playWithResult: () => Promise<void>;
+    getCurrentTime: () => number;
     pause: () => void;
     stop: () => void;
     seek: (time: number) => void;
+    seekWithResult: (time: number) => boolean;
     download: (music: Music) => void;
     dispose: () => void;
 }

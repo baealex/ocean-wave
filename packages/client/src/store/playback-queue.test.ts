@@ -27,6 +27,10 @@ vi.mock('~/socket', () => ({
 
 import type { PlaybackQueueSnapshot } from '~/api/playback-queue';
 import {
+    beginPlaybackCommandBarrier,
+    endPlaybackCommandBarrier
+} from '~/modules/playback-command-barrier';
+import {
     PlaybackQueueStore,
     type LocalPlaybackQueueSnapshot
 } from './playback-queue';
@@ -82,6 +86,28 @@ describe('PlaybackQueueStore', () => {
         expect(mocks.socketOff).toHaveBeenCalledWith('connect', expect.any(Function));
     });
 
+    it('reports a bounded recovery read failure without reusing it as success', async () => {
+        const snapshot = createSnapshot({ revision: 4 });
+        mocks.fetchPlaybackQueue.mockResolvedValueOnce({
+            type: 'success',
+            playbackQueue: snapshot
+        });
+        const store = new PlaybackQueueStore();
+        await expect(store.refresh()).resolves.toEqual({
+            type: 'success',
+            snapshot
+        });
+        mocks.fetchPlaybackQueue.mockResolvedValueOnce({
+            type: 'error',
+            category: 'network',
+            errors: [{ code: 'ECONNABORTED', message: 'timed out' }]
+        });
+
+        await expect(store.refresh(5_000)).resolves.toEqual({ type: 'error' });
+        expect(mocks.fetchPlaybackQueue).toHaveBeenLastCalledWith(5_000);
+        expect(store.state.snapshot).toEqual(snapshot);
+    });
+
     it('holds a local change until the server revision is known', async () => {
         const serverSnapshot = createSnapshot({ revision: 4 });
         const accepted = createSnapshot({ revision: 5, repeatMode: 'all' });
@@ -110,6 +136,53 @@ describe('PlaybackQueueStore', () => {
             expectedRevision: 4
         });
         await vi.waitFor(() => expect(store.state.snapshot).toEqual(accepted));
+    });
+
+    it('drops command-originated queue saves while the barrier is active', () => {
+        const store = new PlaybackQueueStore();
+        beginPlaybackCommandBarrier('queue-command-test');
+
+        try {
+            store.save(localSnapshot);
+            expect(store.hasPendingSave).toBe(false);
+            expect(mocks.savePlaybackQueue).not.toHaveBeenCalled();
+        } finally {
+            endPlaybackCommandBarrier('queue-command-test');
+        }
+    });
+
+    it('quiesces queued writes and does not retry them through the command barrier', async () => {
+        let resolveSave: ((value: unknown) => void) | undefined;
+        mocks.fetchPlaybackQueue.mockResolvedValue({
+            type: 'success',
+            playbackQueue: createSnapshot()
+        });
+        mocks.savePlaybackQueue.mockReturnValue(new Promise((resolve) => {
+            resolveSave = resolve;
+        }));
+        const store = new PlaybackQueueStore();
+        await store.refresh();
+        store.save(localSnapshot);
+        store.save({ ...localSnapshot, repeatMode: 'all' });
+        await vi.waitFor(() => expect(mocks.savePlaybackQueue).toHaveBeenCalledOnce());
+
+        beginPlaybackCommandBarrier('queue-recovery-test');
+        try {
+            expect(store.quiesceForPlaybackCommandRecovery()).toBe(false);
+            resolveSave?.({
+                type: 'error',
+                category: 'network',
+                errors: [{ code: 'NETWORK_ERROR', message: 'offline' }]
+            });
+            await vi.waitFor(() => expect(store.state.error).toBe('offline'));
+
+            expect(mocks.savePlaybackQueue).toHaveBeenCalledOnce();
+            expect(store.hasPendingSave).toBe(true);
+            expect(store.quiesceForPlaybackCommandRecovery()).toBe(true);
+            expect(store.hasPendingSave).toBe(false);
+        } finally {
+            endPlaybackCommandBarrier('queue-recovery-test');
+        }
     });
 
     it('keeps only the latest local snapshot while a save is in flight', async () => {

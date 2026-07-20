@@ -122,12 +122,20 @@ export class WebAudioChannel implements AudioChannel {
     }
 
     play() {
+        void this.playWithResult().catch(() => undefined);
+    }
+
+    playWithResult() {
         if (!webAudioContext.initialized()) {
             webAudioContext.init();
         }
         webAudioContext.connect(this.audio);
         webAudioContext.setGain(this.audio, this.audio.volume);
-        this.audio.play();
+        return this.audio.play();
+    }
+
+    getCurrentTime() {
+        return this.audio.currentTime;
     }
 
     pause() {
@@ -153,6 +161,15 @@ export class WebAudioChannel implements AudioChannel {
         }
 
         this.audio.currentTime = time;
+    }
+
+    seekWithResult(time: number) {
+        if (!Number.isFinite(time) || time < 0 || this.audio.readyState === 0) {
+            return false;
+        }
+
+        this.audio.currentTime = time;
+        return true;
     }
 
     download(music: Music) {

@@ -1,0 +1,243 @@
+import models from '~/models';
+import type {
+    PlaybackCommandExecutionResult,
+    PlaybackCommandRequest
+} from '~/socket/playback-command-contract';
+
+import {
+    PlaybackCommandServiceError,
+    commitPlaybackCommandResult,
+    resolvePlaybackCommand
+} from './playback-command';
+
+const createMusic = async (name: string, duration = 180) => {
+    const unique = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const artist = await models.artist.create({
+        data: { name: `${name} Artist ${unique}` }
+    });
+    const album = await models.album.create({
+        data: {
+            name: `${name} Album ${unique}`,
+            cover: `/covers/${unique}.jpg`,
+            publishedYear: '2026',
+            artistId: artist.id
+        }
+    });
+
+    return models.music.create({
+        data: {
+            name: `${name} ${unique}`,
+            artistId: artist.id,
+            albumId: album.id,
+            filePath: `/music/${unique}.mp3`,
+            duration,
+            codec: 'mp3',
+            container: 'mp3',
+            bitrate: 320,
+            sampleRate: 44100,
+            trackNumber: 1
+        }
+    });
+};
+
+describe('playback command service', () => {
+    let firstMusicId: number;
+    let secondMusicId: number;
+
+    beforeEach(async () => {
+        await models.playbackQueue.deleteMany();
+        await models.playbackSession.deleteMany();
+        const first = await createMusic('Command First', 60);
+        const second = await createMusic('Command Second', 90);
+        firstMusicId = first.id;
+        secondMusicId = second.id;
+        await models.playbackSession.create({
+            data: {
+                scopeKey: 'local',
+                state: 'paused',
+                activeDeviceId: 'target-tab',
+                activeDeviceSequence: 4,
+                currentMusicId: firstMusicId,
+                positionMs: 12_000,
+                positionUpdatedAt: new Date('2026-07-20T00:00:00.000Z'),
+                startedAt: new Date('2026-07-20T00:00:00.000Z'),
+                revision: 3,
+                Queue: {
+                    create: {
+                        currentIndex: 0,
+                        shuffle: false,
+                        repeatMode: 'none',
+                        revision: 2,
+                        Item: {
+                            create: [
+                                { musicId: firstMusicId, order: 0 },
+                                { musicId: secondMusicId, order: 1 }
+                            ]
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    afterEach(async () => {
+        await models.playbackQueue.deleteMany();
+        await models.playbackSession.deleteMany();
+    });
+
+    const request = (
+        command: PlaybackCommandRequest['command'],
+        expectedQueueRevision: number | null
+    ): PlaybackCommandRequest => ({
+        protocolVersion: 1,
+        commandId: '10000000-0000-4000-8000-000000000001',
+        targetEndpointId: 'target-tab',
+        expectedSessionRevision: 3,
+        expectedQueueRevision,
+        command
+    });
+
+    it('resolves all command transitions from authoritative session and queue state', async () => {
+        const now = new Date('2026-07-20T00:00:01.000Z');
+        const play = await resolvePlaybackCommand(request({ type: 'play' }, null), now);
+        const pause = await resolvePlaybackCommand(request({ type: 'pause' }, null), now);
+        const seek = await resolvePlaybackCommand(request({
+            type: 'seek',
+            positionMs: 120_000
+        }, null), now);
+        const next = await resolvePlaybackCommand(request({ type: 'next' }, 2), now);
+        const previous = await resolvePlaybackCommand(request({ type: 'previous' }, 2), now);
+
+        expect(play.desiredResult).toEqual({
+            state: 'playing',
+            currentMusicId: firstMusicId.toString(),
+            currentIndex: 0,
+            position: { mode: 'absolute', positionMs: 12_000 }
+        });
+        expect(pause.desiredResult).toEqual({
+            state: 'paused',
+            currentMusicId: firstMusicId.toString(),
+            currentIndex: 0,
+            position: { mode: 'capture-current' }
+        });
+        expect(seek.desiredResult.position).toEqual({
+            mode: 'absolute',
+            positionMs: 60_000
+        });
+        expect(next.desiredResult).toEqual({
+            state: 'playing',
+            currentMusicId: secondMusicId.toString(),
+            currentIndex: 1,
+            position: { mode: 'absolute', positionMs: 0 }
+        });
+        expect(previous.desiredResult).toEqual({
+            state: 'paused',
+            currentMusicId: firstMusicId.toString(),
+            currentIndex: 0,
+            position: { mode: 'absolute', positionMs: 0 }
+        });
+    });
+
+    it('rejects non-active targets and stale queue revisions before dispatch', async () => {
+        await expect(resolvePlaybackCommand({
+            ...request({ type: 'pause' }, null),
+            targetEndpointId: 'other-tab'
+        })).rejects.toEqual(expect.objectContaining({
+            code: 'TARGET_NOT_ACTIVE',
+            retryable: true,
+            sessionRevision: 3,
+            queueRevision: 2
+        } satisfies Partial<PlaybackCommandServiceError>));
+
+        await expect(resolvePlaybackCommand(
+            request({ type: 'next' }, 1)
+        )).rejects.toEqual(expect.objectContaining({
+            code: 'STALE_QUEUE_REVISION',
+            retryable: true,
+            queueRevision: 2
+        } satisfies Partial<PlaybackCommandServiceError>));
+    });
+
+    it('commits a queue transition and session result in one revision-fenced transaction', async () => {
+        const resolved = await resolvePlaybackCommand(
+            request({ type: 'next' }, 2),
+            new Date('2026-07-20T00:00:01.000Z')
+        );
+        const result: Extract<PlaybackCommandExecutionResult, { status: 'completed' }> = {
+            protocolVersion: 1,
+            commandId: '10000000-0000-4000-8000-000000000001',
+            targetEndpointId: 'target-tab',
+            targetRegistrationGeneration: 1,
+            commandSequence: 1,
+            executionToken: '30000000-0000-4000-8000-000000000001',
+            status: 'completed',
+            endpointSequence: 5,
+            observedAt: '2026-07-20T00:00:01.000Z',
+            resultingState: {
+                state: 'playing',
+                currentMusicId: secondMusicId.toString(),
+                currentIndex: 1,
+                positionMs: 0
+            }
+        };
+
+        await expect(commitPlaybackCommandResult(
+            'target-tab',
+            resolved,
+            result,
+            new Date('2026-07-20T00:00:01.000Z')
+        )).resolves.toEqual({
+            sessionRevision: 4,
+            queueRevision: 3
+        });
+        await expect(models.playbackSession.findUnique({
+            where: { scopeKey: 'local' },
+            include: { Queue: true }
+        })).resolves.toEqual(expect.objectContaining({
+            state: 'playing',
+            currentMusicId: secondMusicId,
+            activeDeviceId: 'target-tab',
+            activeDeviceSequence: 5,
+            revision: 4,
+            Queue: expect.objectContaining({ currentIndex: 1, revision: 3 })
+        }));
+    });
+
+    it('rolls back the queue fence when the session changes before completion', async () => {
+        const resolved = await resolvePlaybackCommand(
+            request({ type: 'next' }, 2),
+            new Date('2026-07-20T00:00:01.000Z')
+        );
+        await models.playbackSession.update({
+            where: { scopeKey: 'local' },
+            data: { revision: { increment: 1 } }
+        });
+
+        await expect(commitPlaybackCommandResult('target-tab', resolved, {
+            protocolVersion: 1,
+            commandId: '10000000-0000-4000-8000-000000000001',
+            targetEndpointId: 'target-tab',
+            targetRegistrationGeneration: 1,
+            commandSequence: 1,
+            executionToken: '30000000-0000-4000-8000-000000000001',
+            status: 'completed',
+            endpointSequence: 5,
+            observedAt: '2026-07-20T00:00:01.000Z',
+            resultingState: {
+                state: 'playing',
+                currentMusicId: secondMusicId.toString(),
+                currentIndex: 1,
+                positionMs: 0
+            }
+        })).rejects.toEqual(expect.objectContaining({
+            code: 'STALE_SESSION_REVISION',
+            retryable: true
+        } satisfies Partial<PlaybackCommandServiceError>));
+        await expect(models.playbackQueue.findFirst({
+            where: { Session: { scopeKey: 'local' } }
+        })).resolves.toEqual(expect.objectContaining({
+            currentIndex: 0,
+            revision: 2
+        }));
+    });
+});

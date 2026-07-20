@@ -39,11 +39,12 @@ export interface PlaybackSessionReportResult {
     } | null;
 }
 
-export const fetchPlaybackSession = () => {
+export const fetchPlaybackSession = (requestTimeoutMs?: number) => {
     return graphQuery<{
         playbackSession: PlaybackSessionSnapshot | null;
     }>({
         operationName: 'PlaybackSession',
+        requestTimeoutMs,
         query: `query PlaybackSession {
             playbackSession {
                 id

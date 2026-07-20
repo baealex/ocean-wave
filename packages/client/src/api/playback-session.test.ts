@@ -33,6 +33,20 @@ describe('playback session API', () => {
         }));
     });
 
+    it('bounds command recovery snapshot requests', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({
+            data: { data: { playbackSession: null } }
+        });
+
+        await fetchPlaybackSession(5_000);
+
+        expect(post).toHaveBeenCalledWith(
+            '/graphql',
+            expect.objectContaining({ operationName: 'PlaybackSession' }),
+            { timeout: 5_000 }
+        );
+    });
+
     it('reports runtime values only through GraphQL variables', async () => {
         const post = vi.spyOn(axios, 'post').mockResolvedValue({
             data: {
