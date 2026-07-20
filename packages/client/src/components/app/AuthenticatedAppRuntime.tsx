@@ -10,6 +10,7 @@ import { musicStore } from '~/store/music';
 import { playbackDevicesStore } from '~/store/playback-devices';
 import { playbackSessionStore } from '~/store/playback-session';
 import { playbackQueueStore } from '~/store/playback-queue';
+import { remotePlaybackControlStore } from '~/store/remote-playback-control';
 import { queueStore } from '~/store/queue';
 import {
     MusicListener,
@@ -60,6 +61,7 @@ export default function AuthenticatedAppRuntime({
         playbackSessionStore.connect();
         playbackQueueStore.connect();
         playbackCommandController.connect();
+        remotePlaybackControlStore.connect();
         playbackCommandTarget.connect({
             prepare: dispatch => queueStore.preparePlaybackCommand(dispatch),
             execute: dispatch => queueStore.executePlaybackCommand(dispatch),
@@ -70,6 +72,7 @@ export default function AuthenticatedAppRuntime({
 
         return () => {
             playbackCommandTarget.disconnect();
+            remotePlaybackControlStore.disconnect();
             playbackCommandController.disconnect();
             playbackDevicesStore.disconnect();
             playbackSessionStore.disconnect();

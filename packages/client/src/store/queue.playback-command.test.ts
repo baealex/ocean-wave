@@ -10,6 +10,7 @@ import {
 } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+    audioEventHandler: null as null | import('~/modules/audio-channel').AudioChannelEventHandler,
     audio: {
         load: vi.fn(),
         play: vi.fn(),
@@ -57,6 +58,7 @@ const mocks = vi.hoisted(() => ({
         error: null
     },
     sessionRefresh: vi.fn(),
+    sessionReport: vi.fn(),
     queueRefresh: vi.fn(),
     musicSubscriber: null as null | ((state: { loaded: boolean }) => Promise<void>),
     queueSubscriber: null as null | ((
@@ -67,7 +69,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('~/modules/audio-channel', () => ({
     WebAudioChannel: class {
-        constructor() {
+        constructor(handler: import('~/modules/audio-channel').AudioChannelEventHandler) {
+            mocks.audioEventHandler = handler;
             return mocks.audio;
         }
     }
@@ -97,7 +100,7 @@ vi.mock('./playback-session', () => ({
             return mocks.endpointId;
         },
         hasPendingReport: false,
-        report: vi.fn(),
+        report: mocks.sessionReport,
         refresh: mocks.sessionRefresh,
         quiesceForPlaybackCommandRecovery: mocks.sessionQuiesce
     }
@@ -132,11 +135,13 @@ vi.mock('~/modules/playback-checkpoint-store', () => ({
 
 vi.mock('~/modules/toast', () => ({ toast: vi.fn() }));
 
-import type { PlaybackCommandDispatch } from '~/socket/playback-command-contract';
 import {
     beginPlaybackCommandBarrier,
-    endPlaybackCommandBarrier
+    beginPlaybackControllerCommandBarrier,
+    endPlaybackCommandBarrier,
+    endPlaybackControllerCommandBarrier
 } from '~/modules/playback-command-barrier';
+import type { PlaybackCommandDispatch } from '~/socket/playback-command-contract';
 
 const baseDispatch: PlaybackCommandDispatch = {
     protocolVersion: 1,
@@ -240,6 +245,7 @@ describe('queue playback command adapter', () => {
             currentTrackId: '1',
             queueLength: 2,
             isPlaying: false,
+            playMode: 'later',
             currentTime: 1,
             progress: 1.67,
             items: ['1', '2'],
@@ -374,6 +380,122 @@ describe('queue playback command adapter', () => {
         });
         expect(mocks.audio.load).toHaveBeenLastCalledWith(expect.objectContaining({ id: '1' }));
         expect(mocks.audio.playWithResult).toHaveBeenCalledTimes(3);
+    });
+
+    it('blocks controller-side queue and audio mutations for the full pending lifecycle', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const controllerBarrier = Symbol('controller-pending-test');
+        beginPlaybackControllerCommandBarrier(controllerBarrier);
+
+        try {
+            const stateBeforeActions = { ...queueStore.state };
+
+            queueStore.select(1);
+            queueStore.play();
+            queueStore.seek(20);
+            queueStore.next();
+            await queueStore.add('2');
+            await queueStore.removeItems(['1']);
+            queueStore.reorderToIndex('2', 0);
+            queueStore.toggleShuffle();
+
+            expect(queueStore.state).toEqual(stateBeforeActions);
+            expect(mocks.audio.load).not.toHaveBeenCalled();
+            expect(mocks.audio.play).not.toHaveBeenCalled();
+            expect(mocks.audio.seek).not.toHaveBeenCalled();
+        } finally {
+            endPlaybackControllerCommandBarrier(controllerBarrier);
+        }
+
+        queueStore.select(1);
+        expect(queueStore.state.currentTrackId).toBe('2');
+        expect(mocks.audio.load).toHaveBeenCalledWith(
+            expect.objectContaining({ id: '2' })
+        );
+    });
+
+    it('blocks delayed audio events from claiming or mixing during a controller command', () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const controllerBarrier = Symbol('controller-audio-event-test');
+        const mix = vi.fn();
+        beginPlaybackControllerCommandBarrier(controllerBarrier);
+
+        try {
+            mocks.audioEventHandler?.onPlay?.();
+            mocks.audioEventHandler?.onPause?.();
+            mocks.audioEventHandler?.onStop?.();
+            mocks.audioEventHandler?.onEnded();
+            mocks.audioEventHandler?.onTimeUpdate(20, mix);
+
+            expect(mocks.audio.pause).toHaveBeenCalledOnce();
+            expect(mocks.audio.load).not.toHaveBeenCalled();
+            expect(mocks.audio.play).not.toHaveBeenCalled();
+            expect(queueStore.state.isPlaying).toBe(false);
+            expect(mocks.sessionReport).not.toHaveBeenCalled();
+            expect(mix).not.toHaveBeenCalled();
+        } finally {
+            endPlaybackControllerCommandBarrier(controllerBarrier);
+        }
+
+        mocks.audioEventHandler?.onPlay?.();
+        expect(queueStore.state.isPlaying).toBe(true);
+        expect(mocks.sessionReport).toHaveBeenCalledWith(
+            expect.objectContaining({ state: 'playing' }),
+            expect.objectContaining({ claimActive: true })
+        );
+    });
+
+    it('rejects an incoming target command while this tab controls another player', () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const controllerBarrier = Symbol('controller-target-overlap-test');
+        expect(beginPlaybackControllerCommandBarrier(controllerBarrier)).toBe(true);
+
+        try {
+            expect(beginPlaybackCommandBarrier('overlapping-target-command')).toBe(false);
+            expect(queueStore.preparePlaybackCommand(baseDispatch)).toEqual({
+                code: 'TARGET_STATE_MISMATCH',
+                message: 'This player is already controlling another playback command.',
+                retryable: true
+            });
+        } finally {
+            endPlaybackControllerCommandBarrier(controllerBarrier);
+            endPlaybackCommandBarrier('overlapping-target-command');
+        }
+    });
+
+    it('prevents remote ownership from becoming an implicit local playback claim', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        mocks.endpointId = 'local-tab';
+        mocks.musicMap.set('3', {
+            id: '3',
+            name: 'Third',
+            duration: 120,
+            artist: { name: 'Artist' }
+        });
+        await queueStore.set({ playMode: 'immediately' });
+
+        const selectedBeforeActions = queueStore.state.selected;
+        queueStore.select(1);
+        queueStore.play();
+        queueStore.next();
+        queueStore.prev();
+        await queueStore.reset(['2']);
+        await queueStore.add('3');
+
+        expect(queueStore.state).toMatchObject({
+            selected: selectedBeforeActions,
+            currentTrackId: '1',
+            isPlaying: false,
+            items: ['1', '2', '3']
+        });
+        expect(mocks.audio.load).not.toHaveBeenCalled();
+        expect(mocks.audio.play).not.toHaveBeenCalled();
+        expect(mocks.sessionReport).not.toHaveBeenCalled();
+
+        mocks.audioEventHandler?.onPlay?.();
+        expect(mocks.audio.pause).toHaveBeenCalledOnce();
+        expect(queueStore.state.isPlaying).toBe(false);
+        expect(mocks.sessionReport).not.toHaveBeenCalled();
     });
 
     it('recovers only from successful snapshots at the acknowledged revisions', async () => {

@@ -1,7 +1,4 @@
 import { useState } from 'react';
-
-import { useAppStore as useStore } from '~/store/base-store';
-
 import {
     Button,
     SettingSection,
@@ -11,6 +8,7 @@ import {
 } from '~/components/shared';
 import { TextEntryDialog } from '~/components/shared/Modal';
 import { appCopy } from '~/config/copy';
+import { useAppStore as useStore } from '~/store/base-store';
 import { playbackDevicesStore } from '~/store/playback-devices';
 
 const DevicesIcon = () => (
@@ -47,7 +45,13 @@ const formatLastSeen = (lastSeenAt: string) => {
 };
 
 export const PlaybackDevicesSection = () => {
-    const [{ registry, loading, renamingDeviceId, error }] = useStore(playbackDevicesStore);
+    const [{
+        registry,
+        loading,
+        renamingDeviceId,
+        error,
+        errorRetryable
+    }] = useStore(playbackDevicesStore);
     const [editingDeviceId, setEditingDeviceId] = useState<string | null>(null);
     const [editingName, setEditingName] = useState('');
     const devices = registry?.devices ?? [];
@@ -82,9 +86,14 @@ export const PlaybackDevicesSection = () => {
                             className="text-[var(--b-color-badge-danger-text)]">
                             {error}
                         </Text>
-                        <Button size="xs" onClick={() => void playbackDevicesStore.refresh()}>
-                            Retry
-                        </Button>
+                        {errorRetryable && (
+                            <Button
+                                size="xs"
+                                disabled={loading}
+                                onClick={() => void playbackDevicesStore.refresh()}>
+                                Retry
+                            </Button>
+                        )}
                     </div>
                 )}
 

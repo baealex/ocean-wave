@@ -1,23 +1,31 @@
-import { useAppStore as useStore } from '~/store/base-store';
 import { useDeferredValue } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+    MusicActionPanelContent,
+    MusicListItem,
+    RemotePlaybackOwnershipNotice,
+    SmartMusicFilterPanelContent
+} from '~/components/music';
 
 import {
     Button,
     CollectionHeader,
-    StickyHeaderActions,
-    Loading,
     FixedVirtualList,
     ItemSortPanelContent,
+    Loading,
     PanelContent,
     SearchField,
-    StateMessage
+    StateMessage,
+    StickyHeaderActions
 } from '~/components/shared';
-import { MusicListItem, MusicActionPanelContent, SmartMusicFilterPanelContent } from '~/components/music';
+import { useRemotePlaybackOwnership, useResetQueue } from '~/hooks';
 import * as Icon from '~/icon';
 
 import { panel } from '~/modules/panel';
-import { useResetQueue } from '~/hooks';
+import {
+    REMOTE_PLAYBACK_OWNERSHIP_MESSAGE,
+    REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
+} from '~/modules/playback-ownership';
 import {
     DEFAULT_SMART_MUSIC_FILTER_ID,
     filterMusicsBySmartFilter,
@@ -25,6 +33,7 @@ import {
     resolveSmartMusicFilterId,
     type SmartMusicFilterId
 } from '~/modules/smart-music-filters';
+import { useAppStore as useStore } from '~/store/base-store';
 
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
@@ -35,6 +44,7 @@ const SMART_FILTER_PARAM = 'filter';
 export default function Music() {
     const navigate = useNavigate();
     const resetQueue = useResetQueue();
+    const remotePlaybackOwnership = useRemotePlaybackOwnership();
     const [searchParams, setSearchParams] = useSearchParams();
 
     const [{ musics, loaded }] = useStore(musicStore);
@@ -135,7 +145,16 @@ export default function Music() {
                 actions={(
                     <Button
                         variant="primary"
-                        disabled={filteredMusics.length === 0}
+                        aria-label={remotePlaybackOwnership
+                            ? 'Play favorites unavailable while another device owns playback'
+                            : undefined}
+                        aria-describedby={remotePlaybackOwnership
+                            ? REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
+                            : undefined}
+                        title={remotePlaybackOwnership
+                            ? REMOTE_PLAYBACK_OWNERSHIP_MESSAGE
+                            : undefined}
+                        disabled={filteredMusics.length === 0 || Boolean(remotePlaybackOwnership)}
                         onClick={() => void resetQueue(filteredMusics.map(music => music.id))}>
                         <Icon.Play /> Play
                     </Button>
@@ -173,6 +192,9 @@ export default function Music() {
                     </Button>
                 </StickyHeaderActions>
             </CollectionHeader>
+            {remotePlaybackOwnership && (
+                <RemotePlaybackOwnershipNotice className="mx-[var(--b-spacing-lg)] mb-[var(--b-spacing-md)]" />
+            )}
             {!loaded && (
                 <Loading />
             )}

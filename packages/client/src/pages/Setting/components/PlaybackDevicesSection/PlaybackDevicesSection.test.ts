@@ -13,7 +13,8 @@ const ui = vi.hoisted(() => ({
         registry: null as unknown,
         loading: false,
         renamingDeviceId: null as string | null,
-        error: null as string | null
+        error: null as string | null,
+        errorRetryable: false
     },
     refresh: vi.fn(),
     rename: vi.fn().mockResolvedValue(true)
@@ -87,7 +88,8 @@ describe('PlaybackDevicesSection', () => {
             registry: null,
             loading: false,
             renamingDeviceId: null,
-            error: null
+            error: null,
+            errorRetryable: false
         });
     });
 
@@ -98,10 +100,24 @@ describe('PlaybackDevicesSection', () => {
         playbackDevicesStore.setState({ loading: false });
         expect(renderSection()).toContain('No playback devices have registered yet.');
 
-        playbackDevicesStore.setState({ error: 'Unable to read playback devices.' });
+        playbackDevicesStore.setState({
+            error: 'Unable to read playback devices.',
+            errorRetryable: true
+        });
         const errorMarkup = renderSection();
         expect(errorMarkup).toContain('Unable to read playback devices.');
         expect(errorMarkup).toContain('Retry');
+    });
+
+    it('shows terminal registration guidance without registry retry', () => {
+        playbackDevicesStore.setState({
+            error: 'Playback endpoint capacity is full. Close another playback tab and reload.',
+            errorRetryable: false
+        });
+
+        const markup = renderSection();
+        expect(markup).toContain('Close another playback tab and reload.');
+        expect(markup).not.toContain('Retry');
     });
 
     it('renders active and online device information with a rename action', () => {

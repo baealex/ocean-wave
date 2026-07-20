@@ -1,13 +1,16 @@
 import {
     fetchPlaybackDeviceRegistry,
-    renamePlaybackDevice,
-    type PlaybackDeviceRegistrySnapshot
+    type PlaybackDeviceRegistrySnapshot,
+    type PlaybackDeviceSnapshot,
+    type PlaybackEndpointSnapshot,
+    renamePlaybackDevice
 } from '~/api/playback-devices';
+import { PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS } from '~/modules/playback-controller';
 import { getPlaybackInstallationId } from '~/modules/playback-device';
 import {
     PLAYBACK_ENDPOINTS_INVALIDATED,
-    playbackEndpointRegistration,
-    type PlaybackEndpointsInvalidatedNotification
+    type PlaybackEndpointsInvalidatedNotification,
+    playbackEndpointRegistration
 } from '~/socket/playback-endpoint';
 import {
     isOwnRealtimeNotification,
@@ -16,12 +19,42 @@ import {
 
 import { BaseStore } from './base-store';
 
+export interface ActivePlaybackTarget {
+    device: PlaybackDeviceSnapshot;
+    endpoint: PlaybackEndpointSnapshot;
+}
+
+export const resolveActivePlaybackTarget = (
+    registry: PlaybackDeviceRegistrySnapshot | null
+): ActivePlaybackTarget | null => {
+    if (!registry?.activeEndpointId) {
+        return null;
+    }
+
+    for (const device of registry.devices) {
+        const endpoint = device.endpoints.find(
+            candidate => candidate.id === registry.activeEndpointId
+        );
+
+        if (endpoint) {
+            return { device, endpoint };
+        }
+    }
+
+    return null;
+};
+
 interface PlaybackDevicesStoreState {
     registry: PlaybackDeviceRegistrySnapshot | null;
     loading: boolean;
     renamingDeviceId: string | null;
     error: string | null;
+    errorRetryable: boolean;
 }
+
+export type PlaybackDevicesRefreshResult =
+    | { type: 'success'; registry: PlaybackDeviceRegistrySnapshot }
+    | { type: 'error' | 'superseded' };
 
 export class PlaybackDevicesStore extends BaseStore<PlaybackDevicesStoreState> {
     private connected = false;
@@ -34,7 +67,8 @@ export class PlaybackDevicesStore extends BaseStore<PlaybackDevicesStoreState> {
             registry: null,
             loading: false,
             renamingDeviceId: null,
-            error: null
+            error: null,
+            errorRetryable: false
         };
     }
 
@@ -53,7 +87,10 @@ export class PlaybackDevicesStore extends BaseStore<PlaybackDevicesStoreState> {
             if (registration) {
                 void this.refresh();
             } else if (playbackEndpointRegistration.error) {
-                this.set({ error: playbackEndpointRegistration.error });
+                this.set({
+                    error: playbackEndpointRegistration.error,
+                    errorRetryable: false
+                });
             }
         });
         playbackEndpointRegistration.connect();
@@ -72,38 +109,51 @@ export class PlaybackDevicesStore extends BaseStore<PlaybackDevicesStoreState> {
         playbackEndpointRegistration.disconnect();
     }
 
-    async refresh() {
+    async refresh(
+        requestTimeoutMs = PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS
+    ): Promise<PlaybackDevicesRefreshResult> {
         const requestSequence = ++this.refreshSequence;
         this.set({ loading: true });
-        const response = await fetchPlaybackDeviceRegistry();
+        const response = await fetchPlaybackDeviceRegistry(requestTimeoutMs);
 
         if (requestSequence !== this.refreshSequence) {
-            return;
+            return { type: 'superseded' };
         }
 
         if (response.type === 'error') {
             this.set({
                 loading: false,
-                error: response.errors[0]?.message ?? 'Unable to read playback devices.'
+                error: response.errors[0]?.message ?? 'Unable to read playback devices.',
+                errorRetryable: true
             });
-            return;
+            return { type: 'error' };
         }
 
         this.set({
             registry: response.playbackDeviceRegistry,
             loading: false,
-            error: playbackEndpointRegistration.error
+            error: playbackEndpointRegistration.error,
+            errorRetryable: false
         });
+        return {
+            type: 'success',
+            registry: response.playbackDeviceRegistry
+        };
     }
 
     async rename(deviceId: string, name: string) {
-        this.set({ renamingDeviceId: deviceId, error: null });
+        this.set({
+            renamingDeviceId: deviceId,
+            error: null,
+            errorRetryable: false
+        });
         const response = await renamePlaybackDevice(deviceId, name);
 
         if (response.type === 'error') {
             this.set({
                 renamingDeviceId: null,
-                error: response.errors[0]?.message ?? 'Unable to rename playback device.'
+                error: response.errors[0]?.message ?? 'Unable to rename playback device.',
+                errorRetryable: false
             });
             return false;
         }
@@ -123,7 +173,8 @@ export class PlaybackDevicesStore extends BaseStore<PlaybackDevicesStoreState> {
             }
                 : state.registry,
             renamingDeviceId: null,
-            error: playbackEndpointRegistration.error
+            error: playbackEndpointRegistration.error,
+            errorRetryable: false
         }));
         void this.refresh();
         return true;

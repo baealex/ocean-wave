@@ -1,6 +1,4 @@
 import { useNavigate } from 'react-router-dom';
-
-import { useAppStore as useStore } from '~/store/base-store';
 import {
     CompactTrackRow,
     IconTextButton,
@@ -12,15 +10,24 @@ import {
     Surface,
     Text
 } from '~/components/shared';
+import { useRemotePlayback, useResetQueue } from '~/hooks';
 import * as Icon from '~/icon';
-import { useResetQueue } from '~/hooks';
+import type { Music } from '~/models/type';
+import { useAppStore as useStore } from '~/store/base-store';
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
-
-import type { Music } from '~/models/type';
+import {
+    isRemotePlaybackControlPending,
+    remotePlaybackControlStore
+} from '~/store/remote-playback-control';
 
 const QUEUE_PREVIEW_LIMIT = 3;
 const RECENTLY_ADDED_LIMIT = 4;
+const remotePlaybackStateLabel = {
+    playing: 'Playing',
+    paused: 'Paused',
+    stopped: 'Stopped'
+} as const;
 
 const isMusic = (music: Music | undefined): music is Music => Boolean(music);
 
@@ -33,6 +40,7 @@ export default function Home() {
     const resetQueue = useResetQueue();
 
     const [{ loaded, musics, musicMap }] = useStore(musicStore);
+    const [remoteControl] = useStore(remotePlaybackControlStore);
     const [{
         currentTrackId,
         isPlaying,
@@ -41,8 +49,13 @@ export default function Home() {
         queueLength,
         selected
     }] = useStore(queueStore);
+    const remotePlayback = useRemotePlayback();
+    const playbackControlsBlocked = Boolean(remotePlayback)
+        || isRemotePlaybackControlPending(remoteControl.phase);
 
     const currentMusic = currentTrackId ? musicMap.get(currentTrackId) : null;
+    const heroMusic = remotePlayback ? remotePlayback.music : currentMusic;
+    const heroProgress = remotePlayback?.progress ?? progress;
     const availableMusics = musics.filter(music => !music.isHated);
     const likedMusics = availableMusics.filter(music => music.isLiked);
     const albumCount = new Set(availableMusics.map(music => music.album.id)).size;
@@ -63,6 +76,11 @@ export default function Home() {
         .slice(0, RECENTLY_ADDED_LIMIT);
 
     const handlePrimaryAction = () => {
+        if (remotePlayback || playbackControlsBlocked) {
+            navigate('/player');
+            return;
+        }
+
         if (currentMusic) {
             if (isPlaying) {
                 queueStore.pause();
@@ -76,6 +94,10 @@ export default function Home() {
     };
 
     const handlePlayFavorites = () => {
+        if (playbackControlsBlocked) {
+            return;
+        }
+
         void resetQueue(likedMusics.map(music => music.id));
     };
 
@@ -110,11 +132,11 @@ export default function Home() {
         <>
             <Surface as="section" variant="subtle" radius="2xl" padding="hero" className="relative grid min-h-[clamp(208px,28vw,304px)] grid-cols-[minmax(144px,0.44fr)_minmax(0,1fr)] items-center gap-[clamp(20px,4vw,48px)] overflow-hidden shadow-[var(--b-card-shadow-main)] max-[900px]:min-h-0 max-[900px]:grid-cols-1">
                 <div className="relative flex min-w-0 justify-center before:absolute before:left-1/2 before:top-1/2 before:h-[78%] before:w-[78%] before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border before:border-[var(--b-color-point-glow)] before:content-[''] after:absolute after:left-1/2 after:top-1/2 after:h-[92%] after:w-[92%] after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-[var(--b-radius-2xl)] after:border after:border-[var(--b-color-border-subtle)] after:content-['']">
-                    {currentMusic ? (
+                    {heroMusic ? (
                         <Image
                             className="relative z-[1] aspect-square w-[min(100%,200px)] rounded-[var(--b-radius-2xl)] border border-[var(--b-color-border-subtle)] object-cover shadow-[var(--b-shadow-artwork-hero)] max-sm:w-[min(100%,224px)] max-sm:rounded-[var(--b-radius-xl)]"
-                            src={currentMusic.album.cover}
-                            alt={currentMusic.album.name}
+                            src={heroMusic.album.cover}
+                            alt={heroMusic.album.name}
                             loading="eager"
                             icon={<Icon.Disc />}
                         />
@@ -132,29 +154,39 @@ export default function Home() {
                         size="overline"
                         weight="medium"
                         className="text-[var(--b-color-point-light)]">
-                        {currentMusic ? 'Now playing' : 'Now'}
+                        {remotePlayback
+                            ? `${remotePlaybackStateLabel[remotePlayback.state]} remotely`
+                            : playbackControlsBlocked
+                                ? 'Refreshing playback state'
+                            : currentMusic
+                                ? isPlaying ? 'Playing here' : 'Ready here'
+                                : 'Now'}
                     </Text>
 
                     <Text
                         as="h1"
                         size="2xl"
                         weight="bold"
-                        title={currentMusic?.name}
+                        title={heroMusic?.name}
                         className="max-w-[min(100%,448px)] overflow-hidden break-all leading-[1.08] [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] max-[900px]:max-w-[min(100%,384px)]">
-                        {currentMusic?.name ?? (loaded ? 'Ready when you are.' : 'Loading your library.')}
+                        {heroMusic?.name ?? (remotePlayback
+                            ? 'Remote playback item unavailable.'
+                            : loaded ? 'Ready when you are.' : 'Loading your library.')}
                     </Text>
 
                     <Text as="p" variant="secondary" size="md" className="max-w-[544px] leading-[1.6] max-sm:hidden">
-                        {currentMusic
-                            ? `${currentMusic.artist.name} · ${currentMusic.album.name}`
-                            : 'Select music to start playback.'}
+                        {heroMusic
+                            ? `${heroMusic.artist.name} · ${heroMusic.album.name}`
+                            : remotePlayback
+                                ? 'Playback remains owned by another device. Open controls or the queue to recover its current item.'
+                                : 'Select music to start playback.'}
                     </Text>
 
-                    {currentMusic && (
+                    {heroMusic && (
                         <div className="mt-1 h-1.5 w-[min(100%,352px)] overflow-hidden rounded-full bg-[var(--b-color-border-subtle)] max-[900px]:w-full" aria-hidden="true">
                             <div
                                 className="h-full w-full origin-left rounded-[inherit] bg-[var(--b-gradient-primary)]"
-                                style={{ transform: `scaleX(${progress / 100})` }}
+                                style={{ transform: `scaleX(${heroProgress / 100})` }}
                             />
                         </div>
                     )}
@@ -164,9 +196,18 @@ export default function Home() {
                             className="min-h-11 rounded-[var(--b-radius-md)] max-sm:w-full"
                             variant="primary"
                             size="lg"
-                            icon={currentMusic && isPlaying ? <Icon.Pause /> : <Icon.Play />}
-                            label={currentMusic ? (isPlaying ? 'Pause' : 'Resume') : 'Start library'}
-                            disabled={!currentMusic && availableMusics.length === 0}
+                            icon={remotePlayback || playbackControlsBlocked
+                                ? <Icon.Music />
+                                : currentMusic && isPlaying ? <Icon.Pause /> : <Icon.Play />}
+                            label={remotePlayback || playbackControlsBlocked
+                                ? 'Open controls'
+                                : currentMusic ? (isPlaying ? 'Pause' : 'Resume') : 'Start library'}
+                            disabled={
+                                !remotePlayback
+                                && !playbackControlsBlocked
+                                && !currentMusic
+                                && availableMusics.length === 0
+                            }
                             onClick={handlePrimaryAction}
                         />
 
@@ -174,9 +215,13 @@ export default function Home() {
                             className="min-h-11 rounded-[var(--b-radius-md)] max-sm:w-full"
                             variant="secondary"
                             size="lg"
-                            icon={currentMusic ? <Icon.Music /> : <Icon.ListMusic />}
-                            label={currentMusic ? 'Open player' : 'Open library'}
-                            onClick={() => navigate(currentMusic ? '/player' : '/library')}
+                            icon={remotePlayback
+                                ? <Icon.ListMusic />
+                                : currentMusic ? <Icon.Music /> : <Icon.ListMusic />}
+                            label={remotePlayback ? 'Open queue' : currentMusic ? 'Open player' : 'Open library'}
+                            onClick={() => navigate(
+                                remotePlayback ? '/queue' : currentMusic ? '/player' : '/library'
+                            )}
                         />
                     </div>
                 </div>
@@ -202,10 +247,11 @@ export default function Home() {
                                     key={music.id}
                                     music={music}
                                     rank={index + 1}
+                                    disabled={playbackControlsBlocked}
                                     onClick={() => {
                                         const queueIndex = items.indexOf(music.id);
 
-                                        if (queueIndex >= 0) {
+                                        if (queueIndex >= 0 && !playbackControlsBlocked) {
                                             queueStore.select(queueIndex);
                                         }
                                     }}
@@ -236,15 +282,19 @@ export default function Home() {
                             icon={<Icon.Play />}
                             label="Play library"
                             meta={formatCount(availableMusics.length, 'song')}
-                            disabled={availableMusics.length === 0}
-                            onClick={() => void resetQueue(availableMusics.map(music => music.id))}
+                            disabled={availableMusics.length === 0 || playbackControlsBlocked}
+                            onClick={() => {
+                                if (!playbackControlsBlocked) {
+                                    void resetQueue(availableMusics.map(music => music.id));
+                                }
+                            }}
                         />
                         <IconTextButton
                             className="w-full min-h-15 rounded-[var(--b-radius-lg)]"
                             icon={<Icon.Heart />}
                             label="Play favorites"
                             meta={formatCount(likedMusics.length, 'song')}
-                            disabled={likedMusics.length === 0}
+                            disabled={likedMusics.length === 0 || playbackControlsBlocked}
                             onClick={handlePlayFavorites}
                         />
                     </div>
@@ -277,7 +327,12 @@ export default function Home() {
                                 key={music.id}
                                 music={music}
                                 trailing={<Icon.Play />}
-                                onClick={() => void queueStore.add(music.id)}
+                                disabled={playbackControlsBlocked}
+                                onClick={() => {
+                                    if (!playbackControlsBlocked) {
+                                        void queueStore.add(music.id);
+                                    }
+                                }}
                             />
                         ))}
                     </div>

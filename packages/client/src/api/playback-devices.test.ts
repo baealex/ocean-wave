@@ -35,7 +35,7 @@ describe('playback devices API', () => {
             }
         });
 
-        await fetchPlaybackDeviceRegistry();
+        await fetchPlaybackDeviceRegistry(4_321);
 
         const payload = post.mock.calls[0]?.[1] as {
             operationName: string;
@@ -44,6 +44,7 @@ describe('playback devices API', () => {
         expect(payload.operationName).toBe('PlaybackDeviceRegistry');
         expect(payload.query).toContain('commandEpoch');
         expect(payload.query).toContain('registrationGeneration');
+        expect(post.mock.calls[0]?.[2]).toEqual({ timeout: 4_321 });
     });
 
     it('renames through GraphQL variables with origin metadata', async () => {

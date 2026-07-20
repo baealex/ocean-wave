@@ -1,15 +1,21 @@
-import { BaseStore } from './base-store';
-
-import { musicStore } from './music';
-import { playbackSessionStore } from './playback-session';
-import { playbackQueueStore } from './playback-queue';
 import type { PlaybackQueueSnapshot } from '~/api/playback-queue';
-
 import {
     type AudioChannel,
     type AudioChannelEventHandler,
     WebAudioChannel
 } from '~/modules/audio-channel';
+import {
+    deletePlaybackCheckpoint,
+    savePlaybackCheckpoint
+} from '~/modules/playback-checkpoint-store';
+import {
+    isLocalPlaybackMutationBarrierActive,
+    isPlaybackCommandBarrierActive,
+    isPlaybackCommandExecutionBarrierActive,
+    isPlaybackControllerCommandBarrierActive
+} from '~/modules/playback-command-barrier';
+import { isRemotePlaybackOwnershipActive } from '~/modules/playback-ownership';
+import { PlaybackSessionTracker } from '~/modules/playback-session';
 import { getNextSelectedIndexAfterRemovingCurrent } from '~/modules/queue-selection';
 import {
     deriveQueueState,
@@ -18,25 +24,20 @@ import {
     reorderQueueItems,
     restoreQueueState
 } from '~/modules/queue-state';
-import { toast } from '~/modules/toast';
-import { convertToMillisecond, convertToSecond } from '~/modules/time';
-import { PlaybackSessionTracker } from '~/modules/playback-session';
-import {
-    isPlaybackCommandBarrierActive,
-    isPlaybackCommandExecutionBarrierActive
-} from '~/modules/playback-command-barrier';
 import { resolveSharedPlaybackPositionMs } from '~/modules/shared-playback';
-import {
-    deletePlaybackCheckpoint,
-    savePlaybackCheckpoint
-} from '~/modules/playback-checkpoint-store';
-import { MusicListener } from '~/socket';
 import { shuffle } from '~/modules/shuffle';
+import { convertToMillisecond, convertToSecond } from '~/modules/time';
+import { toast } from '~/modules/toast';
+import { MusicListener } from '~/socket';
 import type {
     PlaybackCommandDispatch,
     PlaybackCommandError,
     PlaybackCommandState
 } from '~/socket/playback-command-contract';
+import { BaseStore } from './base-store';
+import { musicStore } from './music';
+import { playbackQueueStore } from './playback-queue';
+import { playbackSessionStore } from './playback-session';
 
 const PLAYBACK_CHECKPOINT_INTERVAL_MS = 10_000;
 const SERVER_QUEUE_SAVE_DELAY_MS = 1_000;
@@ -83,6 +84,21 @@ const playbackCommandError = (
     retryable = false
 ): PlaybackCommandError => ({ code, message, retryable });
 
+const remotePlaybackOwnsAudio = () => isRemotePlaybackOwnershipActive(
+    playbackSessionStore.state.snapshot,
+    playbackSessionStore.endpointId
+);
+
+const controllerCommandBlocksAudioCallbacks = () => (
+    isPlaybackControllerCommandBarrierActive()
+    && !isPlaybackCommandExecutionBarrierActive()
+);
+
+const isLocalAudioClaimBlocked = () => (
+    controllerCommandBlocksAudioCallbacks()
+    || remotePlaybackOwnsAudio()
+);
+
 class QueueStore extends BaseStore<QueueStoreState> {
     saveTimer: ReturnType<typeof setTimeout> | null = null;
     audioChannel: AudioChannel;
@@ -120,6 +136,12 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
         const audioChannelEventHandler: AudioChannelEventHandler = {
             onPlay: () => {
+                if (isLocalAudioClaimBlocked()) {
+                    this.audioChannel.pause();
+                    this.set({ isPlaying: false });
+                    return;
+                }
+
                 if (!this.state.currentTrackId) {
                     return;
                 }
@@ -151,7 +173,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 this.reportSharedPlaybackState('stopped');
             },
             onEnded: () => {
-                if (isPlaybackCommandExecutionBarrierActive()) return;
+                if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
                 if (this.state.selected === null) return;
 
                 if (this.state.repeatMode === 'one') {
@@ -178,6 +200,10 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 }
             },
             onTimeUpdate: (time, mix) => {
+                if (isLocalAudioClaimBlocked()) {
+                    return;
+                }
+
                 const music = this.state.currentTrackId
                     ? getMusic(this.state.currentTrackId)
                     : undefined;
@@ -318,7 +344,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     async reset(ids: string[]) {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
         this.commitPlaybackEvent('queue-reset');
         this.reportSharedPlaybackState('stopped');
 
@@ -334,9 +360,10 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     async add(id: string) {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive()) return;
+        const localClaimBlocked = remotePlaybackOwnsAudio();
         if (this.state.items.includes(id)) {
-            if (this.state.playMode === 'immediately') {
+            if (this.state.playMode === 'immediately' && !localClaimBlocked) {
                 this.select(this.state.items.indexOf(id));
                 return;
             }
@@ -378,6 +405,9 @@ class QueueStore extends BaseStore<QueueStoreState> {
         });
 
         toast('Added to queue');
+        if (localClaimBlocked) {
+            return;
+        }
         if (this.state.playMode === 'immediately') {
             this.select(nextItems.indexOf(id));
             return;
@@ -388,7 +418,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     async removeItems(ids: string[]) {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive()) return;
         const newItems = this.state.items.filter((i) => !ids.includes(i));
         const newSourceItems = this.state.sourceItems.filter((i) => !ids.includes(i));
 
@@ -434,7 +464,8 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     select(index: number, play = true) {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive()) return;
+        if (play && remotePlaybackOwnsAudio()) return;
         this.commitPlaybackEvent('queue-track-change');
 
         const nextQueueState = createQueueState(this.state.items, index);
@@ -458,25 +489,25 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     play() {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
         if (this.state.selected !== null) {
             this.audioChannel.play();
         }
     }
 
     pause() {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive()) return;
         this.audioChannel.pause();
     }
 
     stop() {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive()) return;
         this.commitPlaybackEvent('queue-stop');
         this.audioChannel.stop();
     }
 
     seek(time: number) {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive()) return;
         this.audioChannel.seek(time);
         this.reportSharedPlaybackState(
             this.state.isPlaying ? 'playing' : 'paused',
@@ -486,6 +517,14 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     preparePlaybackCommand(dispatch: PlaybackCommandDispatch): PlaybackCommandError | null {
+        if (isPlaybackControllerCommandBarrierActive()) {
+            return playbackCommandError(
+                'TARGET_STATE_MISMATCH',
+                'This player is already controlling another playback command.',
+                true
+            );
+        }
+
         const session = playbackSessionStore.state.snapshot;
         const queue = playbackQueueStore.state.snapshot;
 
@@ -897,7 +936,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     changeRepeatMode() {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive()) return;
         const repeatRotate = ['none', 'all', 'one'] as const;
         const current = repeatRotate.indexOf(this.state.repeatMode);
         const next = repeatRotate[(current + 1) % repeatRotate.length];
@@ -905,7 +944,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     reorder(activeId: string, overId: string) {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive()) return;
         const nextItems = reorderQueueItems(this.state.items, activeId, overId);
 
         if (nextItems === this.state.items) {
@@ -919,7 +958,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     reorderToIndex(activeId: string, targetIndex: number) {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive()) return;
         const nextItems = moveQueueItemToIndex(this.state.items, activeId, targetIndex);
 
         if (nextItems === this.state.items) {
@@ -933,7 +972,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     toggleShuffle() {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive()) return;
         const selectedMusic = this.state.currentTrackId;
 
         if (!selectedMusic) {
@@ -966,7 +1005,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     next() {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
         if (this.state.selected !== null) {
             this.select((this.state.selected + 1) % this.state.items.length);
             this.audioChannel.play();
@@ -974,7 +1013,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     prev() {
-        if (isPlaybackCommandExecutionBarrierActive()) return;
+        if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
         if (this.state.selected !== null) {
             if (this.state.currentTime > 10) {
                 this.audioChannel.seek(0);
@@ -1156,7 +1195,10 @@ class QueueStore extends BaseStore<QueueStoreState> {
         currentTime = this.state.currentTime,
         checkpoint = false
     ) {
-        if (!this.state.currentTrackId) {
+        if (
+            isLocalAudioClaimBlocked()
+            || !this.state.currentTrackId
+        ) {
             return;
         }
 
