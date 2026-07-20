@@ -14,6 +14,9 @@ export interface AudioChannel {
     load: (music: Music) => void;
     play: () => void;
     playWithResult: () => Promise<void>;
+    beginMutedPlayback: () => Promise<void>;
+    commitMutedPlayback: () => Promise<void>;
+    cancelMutedPlayback: () => void;
     getCurrentTime: () => number;
     pause: () => void;
     stop: () => void;

@@ -5,7 +5,13 @@ import {
 } from './origin-client';
 
 export type PlaybackDeviceType = 'desktop-web' | 'mobile-web';
-export type PlaybackCapability = 'play' | 'pause' | 'seek' | 'next' | 'previous';
+export type PlaybackCapability =
+    | 'play'
+    | 'pause'
+    | 'seek'
+    | 'next'
+    | 'previous'
+    | 'handoff';
 
 export interface PlaybackEndpointSnapshot {
     id: string;

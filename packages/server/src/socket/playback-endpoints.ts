@@ -220,7 +220,7 @@ const isRegistrationInput = (
         && typeof candidate.type === 'string'
         && candidate.type.length <= 32
         && Array.isArray(candidate.capabilities)
-        && candidate.capabilities.length <= 5
+        && candidate.capabilities.length <= 6
         && candidate.capabilities.every((value) => (
             typeof value === 'string' && value.length <= 32
         ))

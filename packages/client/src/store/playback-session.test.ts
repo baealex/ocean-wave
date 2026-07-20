@@ -353,6 +353,127 @@ describe('PlaybackSessionStore', () => {
         store.disconnect();
     });
 
+    it('buffers a barrier-safe pause for a possibly claimed disconnected target', async () => {
+        const paused = createSnapshot({
+            state: 'paused',
+            activeDeviceId: 'web-tab-local',
+            positionMs: 2_750,
+            revision: 2
+        });
+        mocks.fetchPlaybackSession.mockResolvedValue({
+            type: 'success',
+            playbackSession: createSnapshot({ revision: 1 })
+        });
+        mocks.reportPlaybackState.mockResolvedValue({
+            type: 'success',
+            reportPlaybackState: {
+                type: 'accepted',
+                session: paused,
+                conflict: null
+            }
+        });
+        const store = new PlaybackSessionStore();
+        store.connect();
+        await vi.waitFor(() => expect(store.state.snapshot?.revision).toBe(1));
+
+        mocks.registrationSubscriber?.(null);
+        beginPlaybackCommandBarrier('disconnect-pause-test');
+        try {
+            expect(store.bufferSocketDisconnectPause({
+                currentMusicId: '42',
+                positionMs: 2_750
+            }, 'web-tab-local')).toBe(true);
+            mocks.registrationSubscriber?.(createRegistration('web-tab-local', 2));
+            expect(mocks.reportPlaybackState).not.toHaveBeenCalled();
+        } finally {
+            endPlaybackCommandBarrier('disconnect-pause-test');
+        }
+
+        await expect(store.flushBufferedReport()).resolves.toBe(true);
+        await vi.waitFor(() => expect(mocks.reportPlaybackState).toHaveBeenCalledOnce());
+        expect(mocks.reportPlaybackState).toHaveBeenCalledWith(expect.objectContaining({
+            deviceId: 'web-tab-local',
+            registrationGeneration: 2,
+            claimActive: false,
+            state: 'paused',
+            currentMusicId: '42',
+            positionMs: 2_750
+        }));
+        store.disconnect();
+    });
+
+    it('buffers an exact passive pause when the active source disconnects before Force', async () => {
+        const paused = createSnapshot({
+            state: 'paused',
+            activeDeviceId: 'web-tab-local',
+            positionMs: 3_125,
+            revision: 2
+        });
+        mocks.fetchPlaybackSession.mockResolvedValue({
+            type: 'success',
+            playbackSession: createSnapshot({
+                state: 'playing',
+                activeDeviceId: 'web-tab-local',
+                positionMs: 3_000,
+                revision: 1
+            })
+        });
+        mocks.reportPlaybackState.mockResolvedValue({
+            type: 'success',
+            reportPlaybackState: {
+                type: 'accepted',
+                session: paused,
+                conflict: null
+            }
+        });
+        const store = new PlaybackSessionStore();
+        store.connect();
+        await vi.waitFor(() => expect(store.state.snapshot?.revision).toBe(1));
+
+        mocks.registrationSubscriber?.(null);
+        expect(store.bufferSocketDisconnectPause({
+            currentMusicId: '42',
+            positionMs: 3_125
+        })).toBe(true);
+        expect(mocks.reportPlaybackState).not.toHaveBeenCalled();
+
+        mocks.registrationSubscriber?.(createRegistration('web-tab-local', 2));
+        await vi.waitFor(() => expect(mocks.reportPlaybackState).toHaveBeenCalledOnce());
+        expect(mocks.reportPlaybackState).toHaveBeenCalledWith(expect.objectContaining({
+            deviceId: 'web-tab-local',
+            registrationGeneration: 2,
+            claimActive: false,
+            state: 'paused',
+            currentMusicId: '42',
+            positionMs: 3_125
+        }));
+        store.disconnect();
+    });
+
+    it('does not buffer a disconnect pause from an inactive endpoint', async () => {
+        mocks.fetchPlaybackSession.mockResolvedValue({
+            type: 'success',
+            playbackSession: createSnapshot({
+                activeDeviceId: 'another-tab',
+                revision: 1
+            })
+        });
+        const store = new PlaybackSessionStore();
+        store.connect();
+        await vi.waitFor(() => expect(store.state.snapshot?.revision).toBe(1));
+
+        mocks.registrationSubscriber?.(null);
+        expect(store.bufferSocketDisconnectPause({
+            currentMusicId: '42',
+            positionMs: 3_125
+        })).toBe(false);
+        mocks.registrationSubscriber?.(createRegistration('web-tab-local', 2));
+
+        await Promise.resolve();
+        expect(mocks.reportPlaybackState).not.toHaveBeenCalled();
+        store.disconnect();
+    });
+
     it('does not promote a passive report after endpoint rotation', async () => {
         const incumbent = createSnapshot({
             activeDeviceId: 'web-tab-local',

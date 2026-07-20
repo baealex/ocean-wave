@@ -13,6 +13,8 @@ import {
     PLAYBACK_COMMAND_START
 } from './playback-command-contract';
 import { playbackCommandCoordinator } from './playback-command';
+import { playbackHandoffCoordinator } from './playback-handoff';
+import { PLAYBACK_HANDOFF_REQUEST } from './playback-handoff-contract';
 import { socketManager } from './index';
 
 describe('socket manager', () => {
@@ -23,6 +25,7 @@ describe('socket manager', () => {
         PLAYBACK_COMMAND_REQUEST,
         PLAYBACK_COMMAND_START,
         PLAYBACK_COMMAND_RESULT,
+        PLAYBACK_HANDOFF_REQUEST,
         'get-connectors',
         'remove-connector',
         'disconnect'
@@ -33,12 +36,14 @@ describe('socket manager', () => {
         connectors.set([]);
         playbackEndpointRegistry.clear();
         playbackCommandCoordinator.clear();
+        playbackHandoffCoordinator.clear();
     });
 
     afterEach(() => {
         connectors.set([]);
         playbackEndpointRegistry.clear();
         playbackCommandCoordinator.clear();
+        playbackHandoffCoordinator.clear();
     });
 
     it('does not register ordinary data write events as Socket.IO commands', () => {

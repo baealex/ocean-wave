@@ -10,13 +10,33 @@ import {
 
 const ui = vi.hoisted(() => ({
     refresh: vi.fn(),
+    playHere: vi.fn(),
+    forcePlayHere: vi.fn(),
+    retryHandoff: vi.fn(),
+    resumeHere: vi.fn(),
+    dismissHandoff: vi.fn(),
     onOpenChange: null as null | ((open: boolean) => void),
     retryProps: null as null | Record<string, unknown>,
+    playHereProps: null as null | Record<string, unknown>,
+    forceProps: null as null | Record<string, unknown>,
     state: {
         registry: null as null | Record<string, unknown>,
         loading: false,
         error: null as string | null,
         errorRetryable: false
+    },
+    handoffState: {
+        handoffId: null,
+        sourceEndpointId: null,
+        sourceDeviceName: null,
+        targetEndpointId: null,
+        targetDeviceName: null,
+        phase: 'idle',
+        message: null as string | null,
+        error: null as null | Record<string, unknown>,
+        forceAvailable: false,
+        retryAvailable: false,
+        resumeAvailable: false
     }
 }));
 
@@ -73,10 +93,43 @@ vi.mock('~/store/playback-devices', () => ({
     }
 }));
 
+vi.mock('~/store/playback-handoff', () => ({
+    isPlaybackHandoffPending: (phase: string) => [
+        'preparing',
+        'releasing',
+        'claiming',
+        'activating',
+        'recovering',
+        'reconciling'
+    ].includes(phase),
+    playbackHandoffStore: {
+        get state() {
+            return ui.handoffState;
+        },
+        playHere: ui.playHere,
+        forcePlayHere: ui.forcePlayHere,
+        retry: ui.retryHandoff,
+        resumeHere: ui.resumeHere,
+        dismiss: ui.dismissHandoff
+    }
+}));
+
+vi.mock('~/store/playback-session', () => ({
+    playbackSessionStore: {
+        state: { endpointId: 'local-tab' }
+    }
+}));
+
 vi.mock('~/components/shared', () => ({
     Button: ({ children, ...props }: { children?: ReactNode; [key: string]: unknown }) => {
         if (children === 'Retry') {
             ui.retryProps = props;
+        }
+        if (children === 'Play Here') {
+            ui.playHereProps = props;
+        }
+        if (children === 'Force Play Here') {
+            ui.forceProps = props;
         }
         return createElement('button', props, children);
     },
@@ -129,7 +182,7 @@ import PlaybackDeviceMenu from './PlaybackDeviceMenu';
 
 const remoteEndpoint = {
     id: 'remote-tab',
-    capabilities: ['play', 'pause', 'seek', 'next', 'previous'],
+    capabilities: ['play', 'pause', 'seek', 'next', 'previous', 'handoff'],
     lastSeenAt: '2026-07-20T00:00:00.000Z',
     online: true,
     active: true,
@@ -167,6 +220,26 @@ describe('PlaybackDeviceMenu', () => {
         ui.refresh.mockReset();
         ui.onOpenChange = null;
         ui.retryProps = null;
+        ui.playHereProps = null;
+        ui.forceProps = null;
+        ui.playHere.mockReset();
+        ui.forcePlayHere.mockReset();
+        ui.retryHandoff.mockReset();
+        ui.resumeHere.mockReset();
+        ui.dismissHandoff.mockReset();
+        Object.assign(ui.handoffState, {
+            handoffId: null,
+            sourceEndpointId: null,
+            sourceDeviceName: null,
+            targetEndpointId: null,
+            targetDeviceName: null,
+            phase: 'idle',
+            message: null,
+            error: null,
+            forceAvailable: false,
+            retryAvailable: false,
+            resumeAvailable: false
+        });
         Object.assign(ui.state, {
             registry: {
                 commandEpoch: 'epoch-1',
@@ -180,19 +253,44 @@ describe('PlaybackDeviceMenu', () => {
         });
     });
 
-    it('names the active output and identifies this browser without unsafe handoff actions', () => {
+    it('offers Play Here on this browser when both endpoint registrations support handoff', () => {
         const markup = renderMenu();
 
         expect(markup).toContain('Playback output: Living Room Browser, Online. Open device list');
         expect(markup).toContain('Playback output');
-        expect(markup).toContain('Review the active output and available registered web players.');
+        expect(markup).toContain('Review the active output or move its queue and position to this browser.');
         expect(markup).toContain('aria-label="Playback devices"');
         expect(markup).toContain('Living Room Browser');
         expect(markup).toContain('Active player');
         expect(markup).toContain('Pocket Browser');
         expect(markup).toContain('This browser · Online');
-        expect(markup).not.toContain('Play here');
+        expect(markup).toContain('Play Here');
         expect(markup).toContain('Close playback output');
+
+        (ui.playHereProps?.onClick as undefined | (() => void))?.();
+        expect(ui.playHere).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows an explicit forced recovery choice after an offline source rejection', () => {
+        Object.assign(ui.handoffState, {
+            phase: 'rejected',
+            message: 'The source endpoint is offline.',
+            error: {
+                code: 'SOURCE_OFFLINE',
+                message: 'The source endpoint is offline.',
+                retryable: true,
+                forceAllowed: true
+            },
+            forceAvailable: true
+        });
+
+        const markup = renderMenu();
+        expect(markup).toContain('role="alert"');
+        expect(markup).toContain('The source endpoint is offline.');
+        expect(markup).toContain('Force Play Here');
+
+        (ui.forceProps?.onClick as undefined | (() => void))?.();
+        expect(ui.forcePlayHere).toHaveBeenCalledTimes(1);
     });
 
     it('keeps the last known device list visible with a retryable registry error', () => {

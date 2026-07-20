@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
         load: vi.fn(),
         play: vi.fn(),
         playWithResult: vi.fn().mockResolvedValue(undefined),
+        beginMutedPlayback: vi.fn().mockResolvedValue(undefined),
+        commitMutedPlayback: vi.fn().mockResolvedValue(undefined),
+        cancelMutedPlayback: vi.fn(),
         getCurrentTime: vi.fn().mockReturnValue(12),
         pause: vi.fn(),
         stop: vi.fn(),
@@ -59,6 +62,7 @@ const mocks = vi.hoisted(() => ({
     },
     sessionRefresh: vi.fn(),
     sessionReport: vi.fn(),
+    sessionBufferDisconnectPause: vi.fn(),
     queueRefresh: vi.fn(),
     musicSubscriber: null as null | ((state: { loaded: boolean }) => Promise<void>),
     queueSubscriber: null as null | ((
@@ -101,6 +105,7 @@ vi.mock('./playback-session', () => ({
         },
         hasPendingReport: false,
         report: mocks.sessionReport,
+        bufferSocketDisconnectPause: mocks.sessionBufferDisconnectPause,
         refresh: mocks.sessionRefresh,
         quiesceForPlaybackCommandRecovery: mocks.sessionQuiesce
     }
@@ -142,6 +147,12 @@ import {
     endPlaybackControllerCommandBarrier
 } from '~/modules/playback-command-barrier';
 import type { PlaybackCommandDispatch } from '~/socket/playback-command-contract';
+import type {
+    PlaybackHandoffActivationDispatch,
+    PlaybackHandoffReleaseDispatch,
+    PlaybackHandoffSnapshot,
+    PlaybackHandoffSourceSettleDispatch
+} from '~/socket/playback-handoff-contract';
 
 const baseDispatch: PlaybackCommandDispatch = {
     protocolVersion: 1,
@@ -169,6 +180,39 @@ const baseDispatch: PlaybackCommandDispatch = {
         currentIndex: 0,
         position: { mode: 'absolute', positionMs: 1_000 }
     }
+};
+
+const handoffSnapshot: PlaybackHandoffSnapshot = {
+    sessionRevision: 3,
+    queueRevision: 2,
+    state: 'playing',
+    currentMusicId: '1',
+    currentIndex: 0,
+    positionMs: 12_000,
+    queue: {
+        id: '1',
+        musicIds: ['1', '2'],
+        sourceMusicIds: [],
+        currentIndex: 0,
+        shuffle: false,
+        repeatMode: 'none',
+        revision: 2,
+        updatedAt: '2026-07-20T00:00:00.000Z'
+    }
+};
+
+const handoffRelease: PlaybackHandoffReleaseDispatch = {
+    protocolVersion: 1,
+    commandEpoch: 'epoch-1',
+    handoffId: 'handoff-1',
+    handoffSequence: 1,
+    sourceEndpointId: 'source-tab',
+    sourceRegistrationGeneration: 2,
+    targetEndpointId: 'target-tab',
+    targetRegistrationGeneration: 3,
+    issuedAt: '2026-07-20T00:00:00.000Z',
+    releaseBy: '2026-07-20T00:00:05.000Z',
+    snapshot: handoffSnapshot
 };
 
 describe('queue playback command adapter', () => {
@@ -205,6 +249,8 @@ describe('queue playback command adapter', () => {
         mocks.sessionQuiesce.mockReturnValue(true);
         mocks.queueQuiesce.mockReturnValue(true);
         mocks.audio.playWithResult.mockResolvedValue(undefined);
+        mocks.audio.beginMutedPlayback.mockResolvedValue(undefined);
+        mocks.audio.commitMutedPlayback.mockResolvedValue(undefined);
         mocks.musicMap = new Map([
             ['1', {
                 id: '1',
@@ -445,6 +491,38 @@ describe('queue playback command adapter', () => {
         );
     });
 
+    it('silences local audio and buffers a passive pause when the socket disconnects', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        await queueStore.set({ isPlaying: true, currentTime: 12 });
+        mocks.audio.getCurrentTime.mockReturnValueOnce(12.25);
+
+        queueStore.silencePlaybackForSocketDisconnect();
+
+        expect(mocks.audio.pause).toHaveBeenCalledOnce();
+        expect(queueStore.state.isPlaying).toBe(false);
+        expect(mocks.sessionBufferDisconnectPause).toHaveBeenCalledWith({
+            currentMusicId: '1',
+            positionMs: 12_250
+        }, null);
+    });
+
+    it('reports a delayed paused time update without restarting shared playback', () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const mix = vi.fn();
+
+        mocks.audioEventHandler?.onTimeUpdate(20, mix);
+
+        expect(mocks.sessionReport).toHaveBeenCalledWith({
+            state: 'paused',
+            currentMusicId: '1',
+            positionMs: 20_000
+        }, {
+            claimActive: false,
+            checkpoint: true
+        });
+        expect(queueStore.state.isPlaying).toBe(false);
+    });
+
     it('rejects an incoming target command while this tab controls another player', () => {
         endPlaybackCommandBarrier('queue-adapter-test');
         const controllerBarrier = Symbol('controller-target-overlap-test');
@@ -671,5 +749,441 @@ describe('queue playback command adapter', () => {
                 message: 'Browser autoplay policy blocked the remote playback command.'
             }
         });
+    });
+
+    it('warms muted target audio from the Play Here gesture and unmutes only after claim', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const controllerBarrier = Symbol('handoff-target-test');
+        beginPlaybackControllerCommandBarrier(controllerBarrier);
+        mocks.endpointId = 'target-tab';
+        mocks.sessionState.snapshot = {
+            ...mocks.sessionState.snapshot,
+            state: 'playing',
+            activeDeviceId: 'source-tab',
+            currentMusicId: '1',
+            revision: 3
+        };
+
+        try {
+            const preparation = queueStore.primePlaybackHandoff(handoffSnapshot);
+            expect(mocks.audio.beginMutedPlayback).toHaveBeenCalledOnce();
+            await expect(preparation).resolves.toEqual({ status: 'ready' });
+            expect(mocks.audio.load).toHaveBeenCalledWith(
+                expect.objectContaining({ id: '1' })
+            );
+
+            const activation: PlaybackHandoffActivationDispatch = {
+                protocolVersion: 1,
+                commandEpoch: 'epoch-1',
+                handoffId: 'handoff-1',
+                handoffSequence: 1,
+                sourceEndpointId: 'source-tab',
+                targetEndpointId: 'target-tab',
+                targetRegistrationGeneration: 3,
+                claimSessionRevision: 4,
+                activateBy: '2026-07-20T00:00:10.000Z',
+                snapshot: {
+                    ...handoffSnapshot,
+                    sessionRevision: 4,
+                    positionMs: 12_500
+                }
+            };
+            await expect(queueStore.activatePlaybackHandoff(activation)).resolves.toEqual(
+                expect.objectContaining({
+                    status: 'completed',
+                    positionMs: 12_500
+                })
+            );
+            expect(mocks.audio.commitMutedPlayback).toHaveBeenCalledOnce();
+            expect(queueStore.state.isPlaying).toBe(true);
+
+            queueStore.finishPlaybackHandoffTarget(true);
+            expect(mocks.audio.commitMutedPlayback).toHaveBeenCalledOnce();
+        } finally {
+            queueStore.finishPlaybackHandoffTarget(false);
+            endPlaybackControllerCommandBarrier(controllerBarrier);
+        }
+    });
+
+    it('rejects activation when an ended muted warm-up cannot restart', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const controllerBarrier = Symbol('handoff-ended-warmup-test');
+        beginPlaybackControllerCommandBarrier(controllerBarrier);
+        mocks.endpointId = 'target-tab';
+        mocks.sessionState.snapshot = {
+            ...mocks.sessionState.snapshot,
+            state: 'playing',
+            activeDeviceId: 'source-tab',
+            currentMusicId: '1',
+            revision: 3
+        };
+
+        try {
+            await expect(queueStore.primePlaybackHandoff(handoffSnapshot)).resolves.toEqual({
+                status: 'ready'
+            });
+            mocks.audio.commitMutedPlayback.mockRejectedValueOnce(
+                new DOMException('The ended warm-up could not restart.', 'NotAllowedError')
+            );
+
+            await expect(queueStore.activatePlaybackHandoff({
+                protocolVersion: 1,
+                commandEpoch: 'epoch-1',
+                handoffId: 'handoff-1',
+                handoffSequence: 1,
+                sourceEndpointId: 'source-tab',
+                targetEndpointId: 'target-tab',
+                targetRegistrationGeneration: 3,
+                claimSessionRevision: 4,
+                activateBy: '2026-07-20T00:00:10.000Z',
+                snapshot: {
+                    ...handoffSnapshot,
+                    sessionRevision: 4
+                }
+            })).resolves.toEqual({
+                status: 'rejected',
+                error: {
+                    code: 'AUTOPLAY_BLOCKED',
+                    message: 'Browser autoplay policy blocked Play Here. Try again from this button.',
+                    retryable: false,
+                    forceAllowed: false
+                }
+            });
+            expect(mocks.audio.cancelMutedPlayback).toHaveBeenCalledOnce();
+            expect(queueStore.state.isPlaying).toBe(false);
+        } finally {
+            queueStore.finishPlaybackHandoffTarget(false);
+            endPlaybackControllerCommandBarrier(controllerBarrier);
+        }
+    });
+
+    it('cancels target warm-up and rejects later activation after a socket disconnect', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const controllerBarrier = Symbol('handoff-target-disconnect-test');
+        beginPlaybackControllerCommandBarrier(controllerBarrier);
+        mocks.endpointId = 'target-tab';
+        mocks.sessionState.snapshot = {
+            ...mocks.sessionState.snapshot,
+            state: 'playing',
+            activeDeviceId: 'source-tab',
+            currentMusicId: '1',
+            revision: 3
+        };
+
+        try {
+            await expect(queueStore.primePlaybackHandoff(handoffSnapshot)).resolves.toEqual({
+                status: 'ready'
+            });
+
+            queueStore.silencePlaybackForSocketDisconnect('target-tab');
+
+            expect(mocks.audio.cancelMutedPlayback).toHaveBeenCalledOnce();
+            expect(queueStore.state.isPlaying).toBe(false);
+            expect(mocks.sessionBufferDisconnectPause).toHaveBeenCalledWith({
+                currentMusicId: '1',
+                positionMs: 12_000
+            }, 'target-tab');
+
+            await expect(queueStore.activatePlaybackHandoff({
+                protocolVersion: 1,
+                commandEpoch: 'epoch-1',
+                handoffId: 'handoff-1',
+                handoffSequence: 1,
+                sourceEndpointId: 'source-tab',
+                targetEndpointId: 'target-tab',
+                targetRegistrationGeneration: 3,
+                claimSessionRevision: 4,
+                activateBy: '2026-07-20T00:00:10.000Z',
+                snapshot: {
+                    ...handoffSnapshot,
+                    sessionRevision: 4
+                }
+            })).resolves.toEqual(expect.objectContaining({
+                status: 'rejected',
+                error: expect.objectContaining({ code: 'TARGET_STATE_MISMATCH' })
+            }));
+            expect(mocks.audio.commitMutedPlayback).not.toHaveBeenCalled();
+        } finally {
+            queueStore.finishPlaybackHandoffTarget(false);
+            endPlaybackControllerCommandBarrier(controllerBarrier);
+        }
+    });
+
+    it('prepares a stopped offline snapshot as paused without starting audio', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const controllerBarrier = Symbol('handoff-stopped-target-test');
+        beginPlaybackControllerCommandBarrier(controllerBarrier);
+        mocks.endpointId = 'target-tab';
+        mocks.sessionState.snapshot = {
+            ...mocks.sessionState.snapshot,
+            state: 'stopped',
+            activeDeviceId: 'source-tab',
+            currentMusicId: '1',
+            revision: 3
+        };
+
+        try {
+            await expect(queueStore.primePlaybackHandoff({
+                ...handoffSnapshot,
+                state: 'paused'
+            })).resolves.toEqual({ status: 'ready' });
+            expect(mocks.audio.beginMutedPlayback).not.toHaveBeenCalled();
+            expect(mocks.audio.load).toHaveBeenCalledWith(
+                expect.objectContaining({ id: '1' })
+            );
+        } finally {
+            queueStore.finishPlaybackHandoffTarget(false);
+            endPlaybackControllerCommandBarrier(controllerBarrier);
+        }
+    });
+
+    it('fails closed when target registration changes during gesture resume', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        let resolvePlayback!: (value: void | PromiseLike<void>) => void;
+        mocks.audio.playWithResult.mockReturnValueOnce(new Promise<void>((resolve) => {
+            resolvePlayback = resolve;
+        }));
+
+        const resume = queueStore.resumePlaybackHandoffHere();
+        await vi.waitFor(() => {
+            expect(mocks.audio.playWithResult).toHaveBeenCalledOnce();
+        });
+
+        mocks.endpointId = null;
+        resolvePlayback(undefined);
+
+        await expect(resume).resolves.toBe(false);
+        expect(mocks.audio.pause).toHaveBeenCalledOnce();
+        expect(queueStore.state.isPlaying).toBe(false);
+    });
+
+    it('fails closed when a playback barrier starts during gesture resume', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        let resolvePlayback!: (value: void | PromiseLike<void>) => void;
+        mocks.audio.playWithResult.mockReturnValueOnce(new Promise<void>((resolve) => {
+            resolvePlayback = resolve;
+        }));
+
+        const resume = queueStore.resumePlaybackHandoffHere();
+        await vi.waitFor(() => {
+            expect(mocks.audio.playWithResult).toHaveBeenCalledOnce();
+        });
+
+        const controllerBarrier = Symbol('handoff-resume-race-test');
+        expect(beginPlaybackControllerCommandBarrier(controllerBarrier)).toBe(true);
+        resolvePlayback(undefined);
+
+        try {
+            await expect(resume).resolves.toBe(false);
+            expect(mocks.audio.pause).toHaveBeenCalledOnce();
+            expect(queueStore.state.isPlaying).toBe(false);
+        } finally {
+            endPlaybackControllerCommandBarrier(controllerBarrier);
+        }
+    });
+
+    it('does not resume while the browser is a released handoff source', async () => {
+        await expect(queueStore.releasePlaybackHandoff({
+            ...handoffRelease,
+            sourceEndpointId: 'target-tab'
+        })).resolves.toEqual(expect.objectContaining({ status: 'released' }));
+        mocks.audio.playWithResult.mockClear();
+
+        await expect(queueStore.resumePlaybackHandoffHere()).resolves.toBe(false);
+        expect(mocks.audio.playWithResult).not.toHaveBeenCalled();
+
+        queueStore.abandonPlaybackHandoffSource();
+        expect(queueStore.state.isPlaying).toBe(false);
+    });
+
+    it('rejects resume after a source handoff starts and settles in flight', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        let resolvePlayback!: (value: void | PromiseLike<void>) => void;
+        mocks.audio.playWithResult.mockReturnValueOnce(new Promise<void>((resolve) => {
+            resolvePlayback = resolve;
+        }));
+
+        const resume = queueStore.resumePlaybackHandoffHere();
+        await vi.waitFor(() => {
+            expect(mocks.audio.playWithResult).toHaveBeenCalledOnce();
+        });
+
+        await queueStore.releasePlaybackHandoff({
+            ...handoffRelease,
+            sourceEndpointId: 'target-tab'
+        });
+        await queueStore.settlePlaybackHandoffSource({
+            protocolVersion: 1,
+            commandEpoch: 'epoch-1',
+            handoffId: 'handoff-2',
+            handoffSequence: 2,
+            sourceEndpointId: 'target-tab',
+            sourceRegistrationGeneration: 3,
+            action: 'complete',
+            sessionRevision: 4,
+            queueRevision: 2,
+            snapshot: {
+                ...handoffSnapshot,
+                sessionRevision: 4
+            },
+            reason: null
+        });
+        resolvePlayback(undefined);
+
+        await expect(resume).resolves.toBe(false);
+        expect(mocks.audio.pause).toHaveBeenCalledTimes(2);
+        expect(queueStore.state.isPlaying).toBe(false);
+    });
+
+    it('keeps a released source paused until rollback explicitly restores it', async () => {
+        mocks.endpointId = 'source-tab';
+        mocks.sessionState.snapshot = {
+            ...mocks.sessionState.snapshot,
+            state: 'playing',
+            activeDeviceId: 'source-tab',
+            currentMusicId: '1',
+            revision: 3
+        };
+        await queueStore.set({ isPlaying: true, currentTime: 12 });
+
+        expect(queueStore.preparePlaybackHandoffRelease(handoffRelease)).toBeNull();
+        await expect(queueStore.releasePlaybackHandoff(handoffRelease)).resolves.toEqual(
+            expect.objectContaining({
+                status: 'released',
+                positionMs: 12_000
+            })
+        );
+        expect(mocks.audio.pause).toHaveBeenCalledOnce();
+        expect(queueStore.state.isPlaying).toBe(false);
+
+        queueStore.silencePlaybackForSocketDisconnect();
+        expect(mocks.audio.pause).toHaveBeenCalledTimes(2);
+        expect(mocks.sessionBufferDisconnectPause).toHaveBeenCalledWith({
+            currentMusicId: '1',
+            positionMs: 12_000
+        }, null);
+
+        const restore: PlaybackHandoffSourceSettleDispatch = {
+            protocolVersion: 1,
+            commandEpoch: 'epoch-1',
+            handoffId: 'handoff-1',
+            handoffSequence: 1,
+            sourceEndpointId: 'source-tab',
+            sourceRegistrationGeneration: 2,
+            action: 'restore',
+            sessionRevision: 5,
+            queueRevision: 2,
+            snapshot: {
+                ...handoffSnapshot,
+                sessionRevision: 5,
+                positionMs: 12_500
+            },
+            reason: null
+        };
+        await expect(queueStore.settlePlaybackHandoffSource(restore)).resolves.toEqual(
+            expect.objectContaining({ status: 'settled' })
+        );
+        expect(mocks.audio.seek).toHaveBeenLastCalledWith(12.5);
+        expect(mocks.audio.playWithResult).toHaveBeenCalledOnce();
+        expect(queueStore.state.isPlaying).toBe(true);
+    });
+
+    it('refuses to recover a released source without its endpoint registration', async () => {
+        mocks.endpointId = 'source-tab';
+        mocks.sessionState.snapshot = {
+            ...mocks.sessionState.snapshot,
+            state: 'playing',
+            activeDeviceId: 'source-tab',
+            currentMusicId: '1',
+            revision: 3
+        };
+        await queueStore.set({ isPlaying: true, currentTime: 12 });
+
+        expect(queueStore.preparePlaybackHandoffRelease(handoffRelease)).toBeNull();
+        await expect(queueStore.releasePlaybackHandoff(handoffRelease)).resolves.toEqual(
+            expect.objectContaining({ status: 'released' })
+        );
+        mocks.endpointId = null;
+
+        await expect(
+            queueStore.recoverPlaybackHandoffSource(handoffRelease)
+        ).rejects.toThrow('requires the source registration');
+        expect(mocks.sessionQuiesce).not.toHaveBeenCalled();
+        expect(mocks.audio.playWithResult).not.toHaveBeenCalled();
+        expect(queueStore.state.isPlaying).toBe(false);
+
+        queueStore.abandonPlaybackHandoffSource();
+        expect(mocks.audio.pause).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps a released source paused when registration is lost during recovery', async () => {
+        mocks.endpointId = 'source-tab';
+        mocks.sessionState.snapshot = {
+            ...mocks.sessionState.snapshot,
+            state: 'playing',
+            activeDeviceId: 'source-tab',
+            currentMusicId: '1',
+            revision: 3
+        };
+        await queueStore.set({ isPlaying: true, currentTime: 12 });
+        expect(queueStore.preparePlaybackHandoffRelease(handoffRelease)).toBeNull();
+        await queueStore.releasePlaybackHandoff(handoffRelease);
+
+        let resolveSessionRefresh!: (
+            result: { type: 'success'; snapshot: typeof mocks.sessionState.snapshot }
+        ) => void;
+        mocks.sessionRefresh.mockReturnValueOnce(new Promise((resolve) => {
+            resolveSessionRefresh = resolve;
+        }));
+        const recovery = queueStore.recoverPlaybackHandoffSource(handoffRelease);
+        await vi.waitFor(() => expect(mocks.sessionRefresh).toHaveBeenCalledOnce());
+
+        mocks.endpointId = null;
+        resolveSessionRefresh({
+            type: 'success',
+            snapshot: mocks.sessionState.snapshot
+        });
+
+        await expect(recovery).rejects.toThrow(
+            'registration changed during handoff recovery'
+        );
+        expect(mocks.audio.playWithResult).not.toHaveBeenCalled();
+        expect(queueStore.state.isPlaying).toBe(false);
+
+        mocks.endpointId = 'source-tab';
+        queueStore.abandonPlaybackHandoffSource();
+    });
+
+    it('rejects Play Here before release when the gesture warm-up is blocked', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const controllerBarrier = Symbol('handoff-autoplay-test');
+        beginPlaybackControllerCommandBarrier(controllerBarrier);
+        mocks.endpointId = 'target-tab';
+        mocks.sessionState.snapshot = {
+            ...mocks.sessionState.snapshot,
+            state: 'playing',
+            activeDeviceId: 'source-tab',
+            currentMusicId: '1',
+            revision: 3
+        };
+        mocks.audio.beginMutedPlayback.mockRejectedValueOnce(
+            new DOMException('blocked', 'NotAllowedError')
+        );
+
+        try {
+            await expect(queueStore.primePlaybackHandoff(handoffSnapshot)).resolves.toEqual({
+                status: 'rejected',
+                error: {
+                    code: 'AUTOPLAY_BLOCKED',
+                    message: 'Browser autoplay policy blocked Play Here. Try again from this button.',
+                    retryable: false,
+                    forceAllowed: false
+                }
+            });
+            expect(mocks.audio.cancelMutedPlayback).toHaveBeenCalledOnce();
+        } finally {
+            queueStore.finishPlaybackHandoffTarget(false);
+            endPlaybackControllerCommandBarrier(controllerBarrier);
+        }
     });
 });

@@ -134,18 +134,64 @@ export class WebAudioChannel implements AudioChannel {
         return this.audio.play();
     }
 
+    beginMutedPlayback() {
+        if (!webAudioContext.initialized()) {
+            webAudioContext.init();
+        }
+        webAudioContext.connect(this.audio);
+        webAudioContext.setGain(this.audio, 0, 0);
+        return this.audio.play();
+    }
+
+    async commitMutedPlayback() {
+        if (this.audio.error) {
+            throw new DOMException(
+                'The muted playback warm-up failed before activation.',
+                'NotSupportedError'
+            );
+        }
+        if (this.audio.paused || this.audio.ended) {
+            await this.audio.play();
+        }
+        if (this.audio.error || this.audio.paused || this.audio.ended) {
+            throw new DOMException(
+                'The muted playback warm-up is no longer active.',
+                'AbortError'
+            );
+        }
+        webAudioContext.setGain(this.audio, 1, 0);
+    }
+
+    cancelMutedPlayback() {
+        this.pause();
+        webAudioContext.setGain(this.audio, 1, 0);
+    }
+
     getCurrentTime() {
         return this.audio.currentTime;
     }
 
     pause() {
+        const mixInterval = this.mixInterval;
+        if (mixInterval) {
+            clearInterval(mixInterval);
+            this.mixInterval = null;
+        }
         this.audio.pause();
+        this.backgroundAudio.pause();
+        if (mixInterval) {
+            this.audio.volume = 1;
+            this.backgroundAudio.volume = 0;
+            webAudioContext.setGain(this.audio, 1, 0);
+            webAudioContext.setGain(this.backgroundAudio, 0, 0);
+            webAudioContext.disconnect(this.backgroundAudio);
+        }
     }
 
     stop() {
         this.pendingSeekTime = null;
         this.ignoreNextPause = !this.audio.paused;
-        this.audio.pause();
+        this.pause();
         this.audio.currentTime = 0;
         this.handler.onStop?.();
     }

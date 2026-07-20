@@ -15,6 +15,11 @@ import {
     playbackDevicesStore,
     resolveActivePlaybackTarget
 } from '~/store/playback-devices';
+import {
+    isPlaybackHandoffPending,
+    playbackHandoffStore
+} from '~/store/playback-handoff';
+import { playbackSessionStore } from '~/store/playback-session';
 
 const cx = classNames;
 
@@ -56,12 +61,25 @@ const PlaybackDeviceMenu = ({
     compact = false
 }: PlaybackDeviceMenuProps) => {
     const [{ registry, loading, error, errorRetryable }] = useStore(playbackDevicesStore);
+    const [handoff] = useStore(playbackHandoffStore);
+    const [{ endpointId: localEndpointId }] = useStore(playbackSessionStore);
     const [open, setOpen] = useState(false);
     const triggerRef = useRef<HTMLButtonElement>(null);
     const devices = registry?.devices ?? [];
     const activeTarget = resolveActivePlaybackTarget(registry);
     const activeStatus = activeTarget?.endpoint.online ? 'Online' : 'Offline';
     const activeDeviceName = activeTarget?.device.name ?? 'No active player';
+    const localEndpoint = devices.flatMap(device => device.endpoints).find(
+        endpoint => endpoint.id === localEndpointId
+    );
+    const handoffPending = isPlaybackHandoffPending(handoff.phase);
+    const canOfferPlayHere = Boolean(
+        activeTarget
+        && localEndpoint
+        && activeTarget.endpoint.id !== localEndpoint.id
+        && activeTarget.endpoint.capabilities.includes('handoff')
+        && localEndpoint.capabilities.includes('handoff')
+    );
     const triggerLabel = activeTarget
         ? `Playback output: ${activeDeviceName}, ${activeStatus}. Open device list`
         : 'Open playback device list';
@@ -123,7 +141,7 @@ const PlaybackDeviceMenu = ({
                                 </Dialog.Title>
                                 <Dialog.Description asChild>
                                     <Text as="p" variant="secondary" size="sm" className={deviceDialogClass.description}>
-                                        Review the active output and available registered web players.
+                                        Review the active output or move its queue and position to this browser.
                                     </Text>
                                 </Dialog.Description>
                             </div>
@@ -200,6 +218,59 @@ const PlaybackDeviceMenu = ({
                                 </div>
                             )}
 
+                            {handoff.phase !== 'idle' && (
+                                <div
+                                    className={cx(
+                                        'mb-3 rounded-[var(--b-radius-md)] border px-3 py-2.5',
+                                        handoff.error
+                                            ? 'border-[var(--b-color-danger-border)]'
+                                            : 'border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)]'
+                                    )}
+                                    role={handoff.error ? 'alert' : 'status'}
+                                    aria-live="polite">
+                                    <Text
+                                        as="p"
+                                        size="sm"
+                                        variant={handoff.error ? 'secondary' : 'muted'}
+                                        className={handoff.error
+                                            ? 'text-[var(--b-color-badge-danger-text)]'
+                                            : undefined}>
+                                        {handoff.message}
+                                    </Text>
+                                    {!handoffPending && (
+                                        <div className="mt-2 flex flex-wrap gap-2">
+                                            {handoff.forceAvailable && (
+                                                <Button
+                                                    size="xs"
+                                                    onClick={() => void playbackHandoffStore.forcePlayHere()}>
+                                                    Force Play Here
+                                                </Button>
+                                            )}
+                                            {handoff.retryAvailable && !handoff.forceAvailable && (
+                                                <Button
+                                                    size="xs"
+                                                    onClick={() => void playbackHandoffStore.retry()}>
+                                                    Retry
+                                                </Button>
+                                            )}
+                                            {handoff.resumeAvailable && (
+                                                <Button
+                                                    size="xs"
+                                                    onClick={() => void playbackHandoffStore.resumeHere()}>
+                                                    Resume here
+                                                </Button>
+                                            )}
+                                            <Button
+                                                size="xs"
+                                                variant="secondary"
+                                                onClick={() => playbackHandoffStore.dismiss()}>
+                                                Dismiss
+                                            </Button>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                             {!loading && !error && devices.length === 0 && (
                                 <Text as="p" size="sm" variant="muted" className="py-3">
                                     No playback devices have registered yet.
@@ -211,6 +282,7 @@ const PlaybackDeviceMenu = ({
                                     {devices.map((device) => {
                                         const isCurrentDevice = device.id === playbackDevicesStore.currentDeviceId;
                                         const isActiveDevice = activeTarget?.device.id === device.id;
+                                        const showPlayHere = isCurrentDevice && canOfferPlayHere;
 
                                         return (
                                             <li
@@ -237,6 +309,15 @@ const PlaybackDeviceMenu = ({
                                                         {device.online ? 'Online' : 'Offline'}
                                                     </Text>
                                                 </div>
+
+                                                {showPlayHere && (
+                                                    <Button
+                                                        size="xs"
+                                                        disabled={handoffPending}
+                                                        onClick={() => void playbackHandoffStore.playHere()}>
+                                                        {handoffPending ? 'Moving…' : 'Play Here'}
+                                                    </Button>
+                                                )}
 
                                             </li>
                                         );

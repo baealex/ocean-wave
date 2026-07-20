@@ -14,6 +14,7 @@ import {
     isPlaybackCommandExecutionBarrierActive,
     isPlaybackControllerCommandBarrierActive
 } from '~/modules/playback-command-barrier';
+import { nextPlaybackEndpointSequence } from '~/modules/playback-device';
 import { isRemotePlaybackOwnershipActive } from '~/modules/playback-ownership';
 import { PlaybackSessionTracker } from '~/modules/playback-session';
 import { getNextSelectedIndexAfterRemovingCurrent } from '~/modules/queue-selection';
@@ -34,6 +35,14 @@ import type {
     PlaybackCommandError,
     PlaybackCommandState
 } from '~/socket/playback-command-contract';
+import {
+    playbackHandoffStateMatchesSource,
+    type PlaybackHandoffActivationDispatch,
+    type PlaybackHandoffError,
+    type PlaybackHandoffReleaseDispatch,
+    type PlaybackHandoffSnapshot,
+    type PlaybackHandoffSourceSettleDispatch
+} from '~/socket/playback-handoff-contract';
 import { BaseStore } from './base-store';
 import { musicStore } from './music';
 import { playbackQueueStore } from './playback-queue';
@@ -84,6 +93,13 @@ const playbackCommandError = (
     retryable = false
 ): PlaybackCommandError => ({ code, message, retryable });
 
+const playbackHandoffError = (
+    code: PlaybackHandoffError['code'],
+    message: string,
+    retryable = false,
+    forceAllowed = false
+): PlaybackHandoffError => ({ code, message, retryable, forceAllowed });
+
 const remotePlaybackOwnsAudio = () => isRemotePlaybackOwnershipActive(
     playbackSessionStore.state.snapshot,
     playbackSessionStore.endpointId
@@ -111,6 +127,12 @@ class QueueStore extends BaseStore<QueueStoreState> {
     private applyingQueueSnapshot = false;
     private musicLoaded = false;
     private appliedRestoreVersion = 0;
+    private handoffAudioMode:
+        | 'target-warmup'
+        | 'target-active'
+        | 'source-released'
+        | null = null;
+    private handoffAudioGeneration = 0;
 
     constructor() {
         super();
@@ -136,6 +158,10 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
         const audioChannelEventHandler: AudioChannelEventHandler = {
             onPlay: () => {
+                if (this.handoffAudioMode) {
+                    return;
+                }
+
                 if (isLocalAudioClaimBlocked()) {
                     this.audioChannel.pause();
                     this.set({ isPlaying: false });
@@ -159,6 +185,10 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 this.reportSharedPlaybackState('playing', true);
             },
             onPause: () => {
+                if (this.handoffAudioMode) {
+                    return;
+                }
+
                 const now = Date.now();
                 this.playbackSessionTracker.pause(now);
                 void this.persistPlaybackCheckpoint('queue-pause', true, now).persisted;
@@ -166,6 +196,10 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 this.reportSharedPlaybackState('paused');
             },
             onStop: () => {
+                if (this.handoffAudioMode) {
+                    return;
+                }
+
                 const now = Date.now();
                 this.playbackSessionTracker.pause(now);
                 void this.persistPlaybackCheckpoint('queue-stop', true, now).persisted;
@@ -173,6 +207,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 this.reportSharedPlaybackState('stopped');
             },
             onEnded: () => {
+                if (this.handoffAudioMode) return;
                 if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
                 if (this.state.selected === null) return;
 
@@ -200,6 +235,10 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 }
             },
             onTimeUpdate: (time, mix) => {
+                if (this.handoffAudioMode) {
+                    return;
+                }
+
                 if (isLocalAudioClaimBlocked()) {
                     return;
                 }
@@ -221,7 +260,12 @@ class QueueStore extends BaseStore<QueueStoreState> {
                     currentTime: time,
                     progress
                 });
-                this.reportSharedPlaybackState('playing', false, time, true);
+                this.reportSharedPlaybackState(
+                    this.state.isPlaying ? 'playing' : 'paused',
+                    false,
+                    time,
+                    true
+                );
             },
             onSkipToNext: () => {
                 this.next();
@@ -514,6 +558,489 @@ class QueueStore extends BaseStore<QueueStoreState> {
             this.state.isPlaying,
             time
         );
+    }
+
+    primePlaybackHandoff(snapshot: PlaybackHandoffSnapshot): Promise<
+        | { status: 'ready' }
+        | { status: 'rejected'; error: PlaybackHandoffError }
+    > {
+        const validationError = this.validatePlaybackHandoffTarget(snapshot);
+        if (validationError) {
+            return Promise.resolve({ status: 'rejected', error: validationError });
+        }
+
+        this.handoffAudioGeneration += 1;
+        this.handoffAudioMode = 'target-warmup';
+        this.applyPlaybackHandoffSnapshot(snapshot, false);
+        if (snapshot.state === 'paused') {
+            return Promise.resolve({ status: 'ready' });
+        }
+
+        let warmup: Promise<void>;
+        try {
+            // This call intentionally happens before the first await so the browser
+            // can consume the Play Here click as the autoplay gesture.
+            warmup = this.audioChannel.beginMutedPlayback();
+        } catch (error) {
+            this.abortPlaybackHandoffTarget();
+            return Promise.resolve({
+                status: 'rejected',
+                error: this.playbackHandoffMediaError(error)
+            });
+        }
+
+        return warmup.then(() => ({ status: 'ready' as const }), (error) => {
+            this.abortPlaybackHandoffTarget();
+            return {
+                status: 'rejected' as const,
+                error: this.playbackHandoffMediaError(error)
+            };
+        });
+    }
+
+    preparePlaybackHandoffRelease(
+        dispatch: PlaybackHandoffReleaseDispatch
+    ): PlaybackHandoffError | null {
+        if (this.handoffAudioMode) {
+            return playbackHandoffError(
+                'SOURCE_STATE_MISMATCH',
+                'This player is already participating in another playback handoff.',
+                true
+            );
+        }
+
+        if (
+            playbackSessionStore.hasPendingReport
+            || playbackQueueStore.hasPendingSave
+            || this.serverQueueSaveTimer
+        ) {
+            return playbackHandoffError(
+                'SOURCE_STATE_MISMATCH',
+                'The source has a playback snapshot write in progress.',
+                true
+            );
+        }
+
+        const session = playbackSessionStore.state.snapshot;
+        if (
+            !session
+            || session.revision !== dispatch.snapshot.sessionRevision
+            || session.activeDeviceId !== dispatch.sourceEndpointId
+            || !playbackHandoffStateMatchesSource(
+                session.state,
+                dispatch.snapshot.state
+            )
+            || session.currentMusicId !== dispatch.snapshot.currentMusicId
+        ) {
+            return playbackHandoffError(
+                'SOURCE_STATE_MISMATCH',
+                'The local source no longer matches the handoff session snapshot.',
+                true
+            );
+        }
+
+        if (!this.playbackQueueMatchesHandoff(dispatch.snapshot)) {
+            return playbackHandoffError(
+                'STALE_QUEUE_REVISION',
+                'The local source queue no longer matches the handoff snapshot.',
+                true
+            );
+        }
+
+        const localState = this.state.isPlaying ? 'playing' : 'paused';
+        if (
+            localState !== dispatch.snapshot.state
+            || this.state.currentTrackId !== dispatch.snapshot.currentMusicId
+            || this.state.selected !== dispatch.snapshot.currentIndex
+        ) {
+            return playbackHandoffError(
+                'SOURCE_STATE_MISMATCH',
+                'The source audio state no longer matches the handoff snapshot.',
+                true
+            );
+        }
+
+        return null;
+    }
+
+    async releasePlaybackHandoff(
+        dispatch: PlaybackHandoffReleaseDispatch
+    ): Promise<
+        | { status: 'released'; endpointSequence: number; positionMs: number }
+        | { status: 'rejected'; error: PlaybackHandoffError }
+    > {
+        if (this.handoffAudioMode) {
+            return {
+                status: 'rejected',
+                error: playbackHandoffError(
+                    'SOURCE_STATE_MISMATCH',
+                    'The source handoff state changed before release.',
+                    true
+                )
+            };
+        }
+
+        this.handoffAudioGeneration += 1;
+        this.handoffAudioMode = 'source-released';
+        const positionMs = this.currentAudioPositionMs(dispatch.snapshot.positionMs);
+        const now = Date.now();
+        this.playbackSessionTracker.pause(now);
+        void this.persistPlaybackCheckpoint('queue-handoff-release', true, now).persisted;
+        if (this.state.isPlaying) {
+            this.audioChannel.pause();
+        }
+        this.set({
+            isPlaying: false,
+            currentTime: convertToSecond(positionMs),
+            progress: getProgress(
+                convertToSecond(positionMs),
+                getMusic(dispatch.snapshot.currentMusicId)?.duration
+            )
+        });
+
+        return {
+            status: 'released',
+            endpointSequence: nextPlaybackEndpointSequence(),
+            positionMs
+        };
+    }
+
+    async settlePlaybackHandoffSource(
+        dispatch: PlaybackHandoffSourceSettleDispatch
+    ): Promise<
+        | { status: 'settled'; endpointSequence: number; positionMs: number }
+        | { status: 'rejected'; error: PlaybackHandoffError }
+    > {
+        if (this.handoffAudioMode !== 'source-released') {
+            return {
+                status: 'rejected',
+                error: playbackHandoffError(
+                    'SOURCE_STATE_MISMATCH',
+                    'The released source context is no longer available.',
+                    true
+                )
+            };
+        }
+
+        if (dispatch.action === 'complete') {
+            const positionMs = this.currentAudioPositionMs(dispatch.snapshot.positionMs);
+            this.audioChannel.pause();
+            this.handoffAudioMode = null;
+            this.set({ isPlaying: false });
+            return {
+                status: 'settled',
+                endpointSequence: nextPlaybackEndpointSequence(),
+                positionMs
+            };
+        }
+
+        if (playbackSessionStore.endpointId !== dispatch.sourceEndpointId) {
+            this.audioChannel.pause();
+            this.set({ isPlaying: false });
+            this.handoffAudioMode = null;
+            return {
+                status: 'rejected',
+                error: playbackHandoffError(
+                    'UNAUTHORIZED_HANDOFF',
+                    'The source endpoint registration changed before settlement.',
+                    true
+                )
+            };
+        }
+
+        const positionMs = dispatch.action === 'cancel'
+            ? this.currentAudioPositionMs(dispatch.snapshot.positionMs)
+            : dispatch.snapshot.positionMs;
+
+        try {
+            this.applyPlaybackHandoffSnapshot({
+                ...dispatch.snapshot,
+                positionMs
+            }, true);
+            if (dispatch.snapshot.state === 'playing') {
+                await this.audioChannel.playWithResult();
+                if (playbackSessionStore.endpointId !== dispatch.sourceEndpointId) {
+                    this.audioChannel.pause();
+                    this.set({ isPlaying: false });
+                    this.handoffAudioMode = null;
+                    return {
+                        status: 'rejected',
+                        error: playbackHandoffError(
+                            'UNAUTHORIZED_HANDOFF',
+                            'The source endpoint registration changed during settlement.',
+                            true
+                        )
+                    };
+                }
+                this.set({ isPlaying: true });
+                this.startPlaybackTracker(dispatch.snapshot.currentMusicId);
+            } else {
+                this.set({ isPlaying: false });
+            }
+            this.handoffAudioMode = null;
+            return {
+                status: 'settled',
+                endpointSequence: nextPlaybackEndpointSequence(),
+                positionMs: this.currentAudioPositionMs(positionMs)
+            };
+        } catch (error) {
+            this.audioChannel.pause();
+            this.set({ isPlaying: false });
+            this.handoffAudioMode = null;
+            return {
+                status: 'rejected',
+                error: this.playbackHandoffMediaError(error)
+            };
+        }
+    }
+
+    async recoverPlaybackHandoffSource(
+        dispatch: PlaybackHandoffReleaseDispatch
+    ) {
+        if (this.handoffAudioMode !== 'source-released') {
+            return;
+        }
+        if (playbackSessionStore.endpointId !== dispatch.sourceEndpointId) {
+            throw new Error('Playback handoff recovery requires the source registration.');
+        }
+
+        const sessionReady = playbackSessionStore.quiesceForPlaybackCommandRecovery();
+        const queueReady = playbackQueueStore.quiesceForPlaybackCommandRecovery();
+        if (!sessionReady || !queueReady) {
+            throw new Error('Playback handoff recovery is waiting for snapshot writes.');
+        }
+
+        const [sessionResult, queueResult] = await Promise.all([
+            playbackSessionStore.refresh(PLAYBACK_COMMAND_RECOVERY_REQUEST_TIMEOUT_MS),
+            playbackQueueStore.refresh(PLAYBACK_COMMAND_RECOVERY_REQUEST_TIMEOUT_MS)
+        ]);
+        if (
+            sessionResult.type !== 'success'
+            || queueResult.type !== 'success'
+        ) {
+            throw new Error('Playback handoff recovery could not refresh server state.');
+        }
+
+        const session = sessionResult.snapshot;
+        const queue = queueResult.snapshot;
+        if (playbackSessionStore.endpointId !== dispatch.sourceEndpointId) {
+            this.audioChannel.pause();
+            this.set({ isPlaying: false });
+            throw new Error('The source registration changed during handoff recovery.');
+        }
+        if (
+            !session
+            || session.activeDeviceId !== dispatch.sourceEndpointId
+            || !session.currentMusicId
+            || !queue
+        ) {
+            this.audioChannel.pause();
+            this.set({ isPlaying: false });
+            this.handoffAudioMode = null;
+            return;
+        }
+
+        const music = getMusic(session.currentMusicId);
+        if (!music) {
+            this.audioChannel.pause();
+            this.set({ isPlaying: false });
+            this.handoffAudioMode = null;
+            return;
+        }
+
+        const positionMs = resolveSharedPlaybackPositionMs({
+            snapshot: session,
+            receivedAtMs: playbackSessionStore.state.receivedAtMs,
+            nowMs: Date.now(),
+            durationMs: convertToMillisecond(music.duration)
+        });
+        this.applyPlaybackHandoffSnapshot({
+            ...dispatch.snapshot,
+            sessionRevision: session.revision,
+            queueRevision: queue.revision,
+            currentMusicId: session.currentMusicId,
+            currentIndex: queue.currentIndex ?? dispatch.snapshot.currentIndex,
+            positionMs,
+            queue: {
+                ...queue,
+                currentIndex: queue.currentIndex ?? dispatch.snapshot.currentIndex
+            }
+        }, true);
+
+        if (dispatch.snapshot.state === 'playing') {
+            await this.audioChannel.playWithResult();
+            if (playbackSessionStore.endpointId !== dispatch.sourceEndpointId) {
+                this.audioChannel.pause();
+                this.set({ isPlaying: false });
+                throw new Error('The source registration changed during audio recovery.');
+            }
+            this.set({ isPlaying: true });
+            this.startPlaybackTracker(session.currentMusicId);
+        } else {
+            this.set({ isPlaying: false });
+        }
+        this.handoffAudioMode = null;
+    }
+
+    abandonPlaybackHandoffSource() {
+        if (this.handoffAudioMode !== 'source-released') {
+            return;
+        }
+
+        this.audioChannel.pause();
+        this.set({ isPlaying: false });
+        this.handoffAudioMode = null;
+    }
+
+    async activatePlaybackHandoff(
+        dispatch: PlaybackHandoffActivationDispatch
+    ): Promise<
+        | { status: 'completed'; endpointSequence: number; positionMs: number }
+        | { status: 'rejected'; error: PlaybackHandoffError }
+    > {
+        if (
+            this.handoffAudioMode !== 'target-warmup'
+            || dispatch.snapshot.sessionRevision !== dispatch.claimSessionRevision
+        ) {
+            return {
+                status: 'rejected',
+                error: playbackHandoffError(
+                    'TARGET_STATE_MISMATCH',
+                    'The local handoff warm-up no longer matches the server claim.',
+                    true
+                )
+            };
+        }
+
+        const validationError = this.validatePlaybackHandoffMedia(dispatch.snapshot);
+        if (validationError) {
+            this.abortPlaybackHandoffTarget();
+            return { status: 'rejected', error: validationError };
+        }
+
+        try {
+            this.applyPlaybackHandoffSnapshot(dispatch.snapshot, true);
+            if (dispatch.snapshot.state === 'playing') {
+                await this.audioChannel.commitMutedPlayback();
+                this.set({ isPlaying: true });
+            } else {
+                this.audioChannel.cancelMutedPlayback();
+                this.set({ isPlaying: false });
+            }
+            this.handoffAudioMode = 'target-active';
+            return {
+                status: 'completed',
+                endpointSequence: nextPlaybackEndpointSequence(),
+                positionMs: dispatch.snapshot.positionMs
+            };
+        } catch (error) {
+            this.abortPlaybackHandoffTarget();
+            return {
+                status: 'rejected',
+                error: this.playbackHandoffMediaError(error)
+            };
+        }
+    }
+
+    finishPlaybackHandoffTarget(completed: boolean) {
+        if (
+            this.handoffAudioMode !== 'target-warmup'
+            && this.handoffAudioMode !== 'target-active'
+        ) {
+            return;
+        }
+
+        if (!completed) {
+            this.abortPlaybackHandoffTarget();
+            return;
+        }
+
+        this.handoffAudioMode = null;
+        if (this.state.isPlaying && this.state.currentTrackId) {
+            this.startPlaybackTracker(this.state.currentTrackId);
+        }
+    }
+
+    abortPlaybackHandoffTarget(force = false) {
+        if (
+            this.handoffAudioMode !== 'target-warmup'
+            && this.handoffAudioMode !== 'target-active'
+            && !force
+        ) {
+            return;
+        }
+
+        this.handoffAudioMode ??= 'target-active';
+        this.audioChannel.cancelMutedPlayback();
+        this.set({ isPlaying: false });
+        this.handoffAudioMode = null;
+    }
+
+    silencePlaybackForSocketDisconnect(
+        possibleOwnerEndpointId: string | null = null
+    ) {
+        const currentMusicId = this.state.currentTrackId;
+        const positionMs = this.currentAudioPositionMs(
+            convertToMillisecond(this.state.currentTime)
+        );
+
+        if (
+            this.handoffAudioMode === 'target-warmup'
+            || this.handoffAudioMode === 'target-active'
+        ) {
+            this.abortPlaybackHandoffTarget(true);
+        } else {
+            this.audioChannel.pause();
+            this.set({ isPlaying: false });
+        }
+
+        if (currentMusicId) {
+            playbackSessionStore.bufferSocketDisconnectPause({
+                currentMusicId,
+                positionMs
+            }, possibleOwnerEndpointId);
+        }
+    }
+
+    async resumePlaybackHandoffHere() {
+        const session = playbackSessionStore.state.snapshot;
+        const endpointId = playbackSessionStore.endpointId;
+        const currentTrackId = this.state.currentTrackId;
+        const handoffAudioGeneration = this.handoffAudioGeneration;
+        if (
+            !session
+            || !endpointId
+            || this.handoffAudioMode
+            || isLocalPlaybackMutationBarrierActive()
+            || session.activeDeviceId !== endpointId
+            || session.state !== 'paused'
+            || session.currentMusicId !== currentTrackId
+        ) {
+            return false;
+        }
+
+        try {
+            await this.audioChannel.playWithResult();
+            const currentSession = playbackSessionStore.state.snapshot;
+            if (
+                this.handoffAudioMode
+                || this.handoffAudioGeneration !== handoffAudioGeneration
+                || isLocalPlaybackMutationBarrierActive()
+                || playbackSessionStore.endpointId !== endpointId
+                || currentSession?.activeDeviceId !== endpointId
+                || currentSession.currentMusicId !== currentTrackId
+                || currentSession.state === 'stopped'
+            ) {
+                this.audioChannel.pause();
+                this.set({ isPlaying: false });
+                return false;
+            }
+            return true;
+        } catch {
+            this.audioChannel.pause();
+            this.set({ isPlaying: false });
+            return false;
+        }
     }
 
     preparePlaybackCommand(dispatch: PlaybackCommandDispatch): PlaybackCommandError | null {
@@ -1032,7 +1559,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         if (
             this.musicLoaded
             && !this.applyingQueueSnapshot
-            && !isPlaybackCommandBarrierActive()
+            && !isLocalPlaybackMutationBarrierActive()
             && this.hasServerQueueChange(state, previousState)
         ) {
             this.scheduleServerQueueSave();
@@ -1070,6 +1597,195 @@ class QueueStore extends BaseStore<QueueStoreState> {
         window.removeEventListener('pagehide', this.handlePageHide);
         document.removeEventListener('visibilitychange', this.handleVisibilityChange);
         this.audioChannel.dispose();
+    }
+
+    private validatePlaybackHandoffTarget(
+        snapshot: PlaybackHandoffSnapshot
+    ): PlaybackHandoffError | null {
+        if (this.handoffAudioMode || isPlaybackCommandBarrierActive()) {
+            return playbackHandoffError(
+                'HANDOFF_IN_PROGRESS',
+                'This browser is already executing another playback transition.',
+                true
+            );
+        }
+
+        if (
+            !this.musicLoaded
+            || playbackSessionStore.hasPendingReport
+            || playbackQueueStore.hasPendingSave
+            || this.serverQueueSaveTimer
+        ) {
+            return playbackHandoffError(
+                'MEDIA_NOT_READY',
+                'This browser is still synchronizing its playback state.',
+                true
+            );
+        }
+
+        const session = playbackSessionStore.state.snapshot;
+        const queue = playbackQueueStore.state.snapshot;
+        if (
+            !session
+            || session.revision !== snapshot.sessionRevision
+            || session.activeDeviceId === playbackSessionStore.endpointId
+            || session.currentMusicId !== snapshot.currentMusicId
+            || !playbackHandoffStateMatchesSource(session.state, snapshot.state)
+        ) {
+            return playbackHandoffError(
+                'STALE_SESSION_REVISION',
+                'The shared playback session changed before Play Here started.',
+                true
+            );
+        }
+
+        if (
+            !queue
+            || queue.revision !== snapshot.queueRevision
+            || queue.currentIndex !== snapshot.currentIndex
+        ) {
+            return playbackHandoffError(
+                'STALE_QUEUE_REVISION',
+                'The shared playback queue changed before Play Here started.',
+                true
+            );
+        }
+
+        return this.validatePlaybackHandoffMedia(snapshot);
+    }
+
+    private validatePlaybackHandoffMedia(
+        snapshot: PlaybackHandoffSnapshot
+    ): PlaybackHandoffError | null {
+        if (
+            snapshot.currentIndex < 0
+            || snapshot.currentIndex >= snapshot.queue.musicIds.length
+            || snapshot.queue.musicIds[snapshot.currentIndex]
+                !== snapshot.currentMusicId
+        ) {
+            return playbackHandoffError(
+                'QUEUE_UNAVAILABLE',
+                'The transferred queue does not contain the current playback item.',
+                true
+            );
+        }
+
+        if (snapshot.queue.musicIds.some(id => !getMusic(id))) {
+            return playbackHandoffError(
+                'MEDIA_UNAVAILABLE',
+                'One or more transferred playback items are unavailable here.'
+            );
+        }
+
+        return null;
+    }
+
+    private playbackQueueMatchesHandoff(snapshot: PlaybackHandoffSnapshot) {
+        const queue = playbackQueueStore.state.snapshot;
+        return Boolean(
+            queue
+            && queue.revision === snapshot.queueRevision
+            && queue.currentIndex === snapshot.currentIndex
+            && queue.shuffle === snapshot.queue.shuffle
+            && queue.repeatMode === snapshot.queue.repeatMode
+            && queue.musicIds.length === snapshot.queue.musicIds.length
+            && queue.musicIds.every(
+                (id, index) => id === snapshot.queue.musicIds[index]
+            )
+            && queue.sourceMusicIds.length === snapshot.queue.sourceMusicIds.length
+            && queue.sourceMusicIds.every(
+                (id, index) => id === snapshot.queue.sourceMusicIds[index]
+            )
+            && this.state.items.length === snapshot.queue.musicIds.length
+            && this.state.items.every(
+                (id, index) => id === snapshot.queue.musicIds[index]
+            )
+            && this.state.sourceItems.length === snapshot.queue.sourceMusicIds.length
+            && this.state.sourceItems.every(
+                (id, index) => id === snapshot.queue.sourceMusicIds[index]
+            )
+            && this.state.shuffle === snapshot.queue.shuffle
+            && this.state.repeatMode === snapshot.queue.repeatMode
+        );
+    }
+
+    private applyPlaybackHandoffSnapshot(
+        snapshot: PlaybackHandoffSnapshot,
+        preserveCurrentAudio: boolean
+    ) {
+        const music = getMusic(snapshot.currentMusicId);
+        if (!music) {
+            throw new Error('The transferred playback item is unavailable.');
+        }
+
+        const previousTrackId = this.state.currentTrackId;
+        const position = convertToSecond(snapshot.positionMs);
+        this.applyingQueueSnapshot = true;
+        try {
+            this.set({
+                ...createQueueState(snapshot.queue.musicIds, snapshot.currentIndex),
+                items: [...snapshot.queue.musicIds],
+                sourceItems: snapshot.queue.shuffle
+                    ? [...snapshot.queue.sourceMusicIds]
+                    : [],
+                shuffle: snapshot.queue.shuffle,
+                repeatMode: snapshot.queue.repeatMode,
+                currentTime: position,
+                progress: getProgress(position, music.duration),
+                isPlaying: false
+            });
+
+            document.title = `${music.name} - ${music.artist.name}`;
+            if (!preserveCurrentAudio || previousTrackId !== snapshot.currentMusicId) {
+                this.audioChannel.load(music);
+            }
+            this.audioChannel.seek(position);
+        } finally {
+            this.applyingQueueSnapshot = false;
+        }
+    }
+
+    private currentAudioPositionMs(fallback: number) {
+        const positionMs = convertToMillisecond(this.audioChannel.getCurrentTime());
+        return Number.isFinite(positionMs)
+            && positionMs >= 0
+            && (positionMs > 0 || fallback <= 0)
+            ? Math.round(positionMs)
+            : Math.max(Math.round(fallback), 0);
+    }
+
+    private playbackHandoffMediaError(error: unknown): PlaybackHandoffError {
+        const name = error instanceof DOMException ? error.name : '';
+        if (name === 'NotAllowedError') {
+            return playbackHandoffError(
+                'AUTOPLAY_BLOCKED',
+                'Browser autoplay policy blocked Play Here. Try again from this button.'
+            );
+        }
+        if (name === 'NotSupportedError') {
+            return playbackHandoffError(
+                'MEDIA_UNAVAILABLE',
+                'The transferred playback item cannot be played in this browser.'
+            );
+        }
+
+        return playbackHandoffError(
+            'MEDIA_NOT_READY',
+            'This browser could not prepare the transferred playback item.',
+            true
+        );
+    }
+
+    private startPlaybackTracker(musicId: string) {
+        const music = getMusic(musicId);
+        if (!music) {
+            return;
+        }
+
+        this.playbackSessionTracker.play({
+            id: music.id,
+            durationMs: convertToMillisecond(music.duration)
+        });
     }
 
     private persistQueueState() {

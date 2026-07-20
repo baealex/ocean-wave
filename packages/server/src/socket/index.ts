@@ -9,6 +9,10 @@ import {
     playbackCommandCoordinator,
     playbackCommandListener
 } from './playback-command';
+import {
+    playbackHandoffCoordinator,
+    playbackHandoffListener
+} from './playback-handoff';
 import { syncListener } from './sync';
 
 export const socketManager = (socket: Socket) => {
@@ -26,6 +30,7 @@ export const socketManager = (socket: Socket) => {
     syncListener(socket);
     playbackEndpointListener(socket);
     playbackCommandListener(socket);
+    playbackHandoffListener(socket);
 
     socket.on('get-connectors', () => {
         socket.emit('get-connectors', connectors.get().map((c) => ({
@@ -47,6 +52,7 @@ export const socketManager = (socket: Socket) => {
     socket.on('disconnect', () => {
         console.log(`${socket.id} : user disconnected`);
         playbackCommandCoordinator.handleSocketDisconnected(socket.id);
+        playbackHandoffCoordinator.handleSocketDisconnected(socket.id);
         void playbackEndpointRegistry.unregisterSocket(socket.id);
         connectors.remove(socket.id);
         connectors.notify('get-connectors', connectors.get().map((c) => ({
