@@ -8,6 +8,7 @@ import { albumStore } from '~/store/album';
 import { artistStore } from '~/store/artist';
 import { musicStore } from '~/store/music';
 import { playbackDevicesStore } from '~/store/playback-devices';
+import { playbackHandoffStore } from '~/store/playback-handoff';
 import { playbackSessionStore } from '~/store/playback-session';
 import { playbackQueueStore } from '~/store/playback-queue';
 import { remotePlaybackControlStore } from '~/store/remote-playback-control';
@@ -62,6 +63,7 @@ export default function AuthenticatedAppRuntime({
         playbackQueueStore.connect();
         playbackCommandController.connect();
         remotePlaybackControlStore.connect();
+        playbackHandoffStore.connect();
         playbackCommandTarget.connect({
             prepare: dispatch => queueStore.preparePlaybackCommand(dispatch),
             execute: dispatch => queueStore.executePlaybackCommand(dispatch),
@@ -72,6 +74,7 @@ export default function AuthenticatedAppRuntime({
 
         return () => {
             playbackCommandTarget.disconnect();
+            playbackHandoffStore.disconnect();
             remotePlaybackControlStore.disconnect();
             playbackCommandController.disconnect();
             playbackDevicesStore.disconnect();

@@ -6,7 +6,10 @@ import * as Icon from '~/icon';
 
 const cx = classNames;
 
-export type RemotePlaybackButtonCommand = Exclude<PlaybackCapability, 'seek'>;
+export type RemotePlaybackButtonCommand = Exclude<
+    PlaybackCapability,
+    'seek' | 'handoff'
+>;
 
 export interface RemotePlaybackControlsProps {
     canSend: (command: RemotePlaybackButtonCommand) => boolean;

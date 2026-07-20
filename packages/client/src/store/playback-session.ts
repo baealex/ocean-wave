@@ -19,6 +19,7 @@ import { socket } from '~/socket/socket';
 import { BaseStore } from './base-store';
 
 const PLAYBACK_REPORT_INTERVAL_MS = 10_000;
+const PLAYBACK_REPORT_FLUSH_POLL_MS = 25;
 
 interface PlaybackSessionStoreState {
     snapshot: PlaybackSessionSnapshot | null;
@@ -229,6 +230,69 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
         this.lastReportAtMs = now;
         this.pendingIntent = intent;
         void this.flushPending();
+    }
+
+    bufferSocketDisconnectPause(
+        local: Pick<LocalPlaybackReport, 'currentMusicId' | 'positionMs'>,
+        possibleOwnerEndpointId: string | null = null
+    ) {
+        const registeredEndpointId = this.registration?.endpointId
+            ?? this.registrationGapEndpointId;
+        if (
+            registeredEndpointId
+            && possibleOwnerEndpointId
+            && registeredEndpointId !== possibleOwnerEndpointId
+        ) {
+            return false;
+        }
+
+        const endpointId = registeredEndpointId ?? possibleOwnerEndpointId;
+        if (
+            !endpointId
+            || (
+                this.state.snapshot?.activeDeviceId !== endpointId
+                && possibleOwnerEndpointId !== endpointId
+            )
+        ) {
+            return false;
+        }
+
+        this.registrationGapEndpointId ??= endpointId;
+        this.claimRequired = false;
+        this.claimVersion += 1;
+        this.lastReportAtMs = Date.now();
+        this.pendingIntent = {
+            local: {
+                state: 'paused',
+                currentMusicId: local.currentMusicId,
+                positionMs: Math.max(Math.round(local.positionMs), 0)
+            }
+        };
+        void this.flushPending();
+        return true;
+    }
+
+    async flushBufferedReport(
+        timeoutMs = PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS
+    ) {
+        const deadlineMs = Date.now() + Math.max(timeoutMs, 0);
+
+        while (true) {
+            await this.flushPending();
+            if (!this.hasPendingReport) {
+                return true;
+            }
+
+            const remainingMs = deadlineMs - Date.now();
+            if (remainingMs <= 0) {
+                return false;
+            }
+
+            await new Promise(resolve => setTimeout(
+                resolve,
+                Math.min(PLAYBACK_REPORT_FLUSH_POLL_MS, remainingMs)
+            ));
+        }
     }
 
     private applySnapshot(snapshot: PlaybackSessionSnapshot, acceptSameRevision = false) {

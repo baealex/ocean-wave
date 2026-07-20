@@ -10,11 +10,28 @@ const clientContract = new URL(
     '../../packages/client/src/socket/playback-command-contract.ts',
     import.meta.url
 );
+const serverHandoffContract = new URL(
+    '../../packages/server/src/socket/playback-handoff-contract.ts',
+    import.meta.url
+);
+const clientHandoffContract = new URL(
+    '../../packages/client/src/socket/playback-handoff-contract.ts',
+    import.meta.url
+);
 
 test('server and client playback command contracts stay byte-identical', async () => {
     const [serverSource, clientSource] = await Promise.all([
         readFile(serverContract, 'utf8'),
         readFile(clientContract, 'utf8')
+    ]);
+
+    assert.equal(clientSource, serverSource);
+});
+
+test('server and client playback handoff contracts stay byte-identical', async () => {
+    const [serverSource, clientSource] = await Promise.all([
+        readFile(serverHandoffContract, 'utf8'),
+        readFile(clientHandoffContract, 'utf8')
     ]);
 
     assert.equal(clientSource, serverSource);

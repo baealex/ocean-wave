@@ -148,7 +148,7 @@ describe('PlaybackEndpointRegistrationManager', () => {
             endpointInstanceId: 'document-1',
             name: 'Ocean Wave Desktop Web',
             type: 'desktop-web',
-            capabilities: ['play', 'pause', 'seek', 'next', 'previous'],
+            capabilities: ['play', 'pause', 'seek', 'next', 'previous', 'handoff'],
             lastEndpointSequence: 4
         });
 
@@ -295,9 +295,11 @@ describe('PlaybackEndpointRegistrationManager', () => {
         manager.disconnect();
     });
 
-    it('registers again after the server expires its endpoint lease', () => {
+    it('notifies registration loss before renewing an expired endpoint lease', () => {
         const manager = new PlaybackEndpointRegistrationManager();
+        const subscriber = vi.fn();
 
+        manager.subscribe(subscriber);
         manager.connect();
         getRegistration().acknowledge(null, {
             protocolVersion: 1,
@@ -307,6 +309,7 @@ describe('PlaybackEndpointRegistrationManager', () => {
             commandEpoch: 'epoch-1',
             registrationProof: 'proof-3'
         });
+        subscriber.mockClear();
         const leaseExpiredHandler = mocks.socketOn.mock.calls.find(
             ([event]) => event === PLAYBACK_ENDPOINT_LEASE_EXPIRED
         )?.[1] as ((lease: {
@@ -321,7 +324,25 @@ describe('PlaybackEndpointRegistrationManager', () => {
             registrationGeneration: 3
         });
         expect(manager.current).toBeNull();
+        expect(subscriber).toHaveBeenCalledOnce();
+        expect(subscriber).toHaveBeenLastCalledWith(null);
         expect(mocks.registrationEmit).toHaveBeenCalledTimes(2);
+
+        getRegistration(1).acknowledge(null, {
+            protocolVersion: 1,
+            status: 'registered',
+            endpointId: 'tab-1',
+            registrationGeneration: 4,
+            commandEpoch: 'epoch-1',
+            registrationProof: 'proof-4'
+        });
+        expect(subscriber).toHaveBeenLastCalledWith({
+            endpointId: 'tab-1',
+            registrationGeneration: 4,
+            commandEpoch: 'epoch-1',
+            registrationProof: 'proof-4'
+        });
+        expect(subscriber).toHaveBeenCalledTimes(2);
 
         leaseExpiredHandler?.({
             protocolVersion: 1,

@@ -22,7 +22,8 @@ const PLAYBACK_CAPABILITIES = [
     'pause',
     'seek',
     'next',
-    'previous'
+    'previous',
+    'handoff'
 ] as const;
 
 export type PlaybackEndpointRegistrationAck =
