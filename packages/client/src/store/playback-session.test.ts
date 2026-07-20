@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     },
     registrationSubscriber: null as null | ((registration: unknown) => void),
     registrationUnsubscribe: vi.fn(),
+    ensureSequence: vi.fn(),
     sequence: 0
 }));
 
@@ -30,6 +31,7 @@ vi.mock('~/api/playback-session', () => ({
 }));
 
 vi.mock('~/modules/playback-device', () => ({
+    ensurePlaybackEndpointSequenceAtLeast: mocks.ensureSequence,
     nextPlaybackEndpointSequence: () => {
         mocks.sequence += 1;
         return mocks.sequence;
@@ -83,6 +85,7 @@ const createSnapshot = (
     id: '1',
     state: 'playing',
     activeDeviceId: 'web-tab-remote',
+    activeDeviceSequence: 3,
     currentMusicId: '42',
     positionMs: 1_000,
     positionUpdatedAt: '2026-07-14T00:00:00.000Z',
@@ -101,6 +104,7 @@ describe('PlaybackSessionStore', () => {
         mocks.socketOn.mockReset();
         mocks.socketOff.mockReset();
         mocks.registrationUnsubscribe.mockReset();
+        mocks.ensureSequence.mockReset();
         mocks.registrationCurrent = createRegistration();
         mocks.registrationSubscriber = null;
         mocks.sequence = 0;
@@ -137,6 +141,44 @@ describe('PlaybackSessionStore', () => {
         expect(mocks.listenerDisconnect).toHaveBeenCalledOnce();
         expect(mocks.registrationUnsubscribe).toHaveBeenCalledOnce();
         expect(mocks.socketOff).toHaveBeenCalledWith('connect', expect.any(Function));
+    });
+
+    it('does not let a delayed null refresh clear a newer realtime snapshot', async () => {
+        const initial = createSnapshot({ revision: 2 });
+        const realtime = createSnapshot({
+            activeDeviceId: 'web-tab-local',
+            activeDeviceSequence: 7,
+            revision: 3
+        });
+        mocks.fetchPlaybackSession.mockResolvedValue({
+            type: 'success',
+            playbackSession: initial
+        });
+        const store = new PlaybackSessionStore();
+        store.connect();
+        await vi.waitFor(() => expect(store.state.snapshot).toEqual(initial));
+
+        let resolveRefresh: ((value: unknown) => void) | undefined;
+        mocks.fetchPlaybackSession.mockReturnValueOnce(new Promise((resolve) => {
+            resolveRefresh = resolve;
+        }));
+        const refresh = store.refresh();
+        const handler = mocks.listenerConnect.mock.calls[0]?.[0] as {
+            onStateUpdated: (snapshot: PlaybackSessionSnapshot) => void;
+        };
+        handler.onStateUpdated(realtime);
+        resolveRefresh?.({
+            type: 'success',
+            playbackSession: null
+        });
+
+        await expect(refresh).resolves.toEqual({
+            type: 'success',
+            snapshot: realtime
+        });
+        expect(store.state.snapshot).toEqual(realtime);
+        expect(mocks.ensureSequence).toHaveBeenCalledWith(7);
+        store.disconnect();
     });
 
     it('reports a bounded recovery read failure without reusing it as success', async () => {
@@ -189,6 +231,7 @@ describe('PlaybackSessionStore', () => {
             registrationGeneration: 1,
             registrationProof: 'proof-web-tab-local-1',
             sequence: 1,
+            expectedRevision: 0,
             claimActive: true,
             state: 'playing',
             currentMusicId: '42',
@@ -620,10 +663,65 @@ describe('PlaybackSessionStore', () => {
         await vi.waitFor(() => expect(mocks.reportPlaybackState).toHaveBeenCalledTimes(2));
         expect(mocks.reportPlaybackState.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
             registrationGeneration: 2,
+            expectedRevision: 0,
             claimActive: true,
             state: 'playing',
             positionMs: 3_000
         }));
+        store.disconnect();
+    });
+
+    it('cannot silently reclaim after reconnecting to a newer server revision', async () => {
+        const authoritative = createSnapshot({
+            activeDeviceId: 'other-tab',
+            activeDeviceSequence: 9,
+            positionMs: 9_000,
+            revision: 4
+        });
+        mocks.reportPlaybackState
+            .mockResolvedValueOnce({
+                type: 'error',
+                category: 'network',
+                errors: [{ code: 'NETWORK_ERROR', message: 'Offline' }]
+            })
+            .mockResolvedValueOnce({
+                type: 'success',
+                reportPlaybackState: {
+                    type: 'conflict',
+                    session: authoritative,
+                    conflict: {
+                        reason: 'stale-revision',
+                        session: authoritative
+                    }
+                }
+            });
+        const store = new PlaybackSessionStore();
+        store.connect();
+        store.report({
+            state: 'playing',
+            currentMusicId: '42',
+            positionMs: 3_000
+        }, { claimActive: true });
+        await vi.waitFor(() => expect(mocks.reportPlaybackState).toHaveBeenCalledOnce());
+
+        mocks.registrationSubscriber?.(null);
+        mocks.fetchPlaybackSession.mockResolvedValue({
+            type: 'success',
+            playbackSession: authoritative
+        });
+        mocks.registrationSubscriber?.(createRegistration('web-tab-local', 2));
+
+        await vi.waitFor(() => expect(mocks.reportPlaybackState).toHaveBeenCalledTimes(2));
+        expect(mocks.reportPlaybackState.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+            deviceId: 'web-tab-local',
+            registrationGeneration: 2,
+            expectedRevision: 0,
+            claimActive: true,
+            positionMs: 3_000
+        }));
+        await vi.waitFor(() => expect(store.state.snapshot).toEqual(authoritative));
+        expect(store.state.error).toContain('changed while this browser was reconnecting');
+        expect(store.hasPendingReport).toBe(false);
         store.disconnect();
     });
 });

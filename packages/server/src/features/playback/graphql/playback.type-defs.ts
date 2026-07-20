@@ -17,6 +17,7 @@ export const playbackType = gql`
         id: ID!
         state: PlaybackState!
         activeDeviceId: String
+        activeDeviceSequence: Int!
         currentMusicId: ID
         positionMs: Float!
         positionUpdatedAt: String!
@@ -94,6 +95,7 @@ export const playbackType = gql`
         registrationGeneration: Int!
         registrationProof: String!
         sequence: Int!
+        expectedRevision: Int!
         claimActive: Boolean!
         state: PlaybackState!
         currentMusicId: ID

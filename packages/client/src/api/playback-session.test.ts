@@ -29,7 +29,8 @@ describe('playback session API', () => {
         await fetchPlaybackSession();
 
         expect(post).toHaveBeenCalledWith('/graphql', expect.objectContaining({
-            operationName: 'PlaybackSession'
+            operationName: 'PlaybackSession',
+            query: expect.stringContaining('activeDeviceSequence')
         }));
     });
 
@@ -64,6 +65,7 @@ describe('playback session API', () => {
             registrationGeneration: 3,
             registrationProof: 'proof-3',
             sequence: 3,
+            expectedRevision: 2,
             claimActive: true,
             state: 'playing' as const,
             currentMusicId: '42',
@@ -83,6 +85,7 @@ describe('playback session API', () => {
             originClientId: 'origin-client-1'
         });
         expect(payload.query).toContain('input: $input');
+        expect(payload.query).toContain('activeDeviceSequence');
         expect(payload.query).not.toContain('web-tab-7');
         expect(payload.query).not.toContain('42');
     });

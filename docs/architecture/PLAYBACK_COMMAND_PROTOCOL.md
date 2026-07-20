@@ -1,6 +1,6 @@
 # Remote Playback Command Protocol
 
-Updated: 2026-07-20
+Updated: 2026-07-21
 
 Status: architecture contract for the web-only, single-output remote playback phase.
 
@@ -8,7 +8,7 @@ Related foundation: [Playback Session Architecture](./PLAYBACK_SESSION.md)
 
 ## 1. Scope
 
-This protocol lets one authenticated web client control the web tab that currently owns Ocean Wave audio. It defines the contract before the device registry, command transport, controller UI, handoff, and multi-browser recovery work begins.
+This protocol lets one authenticated web client control the web tab that currently owns Ocean Wave audio. It records the implemented device registry, command transport, controller UI, handoff, and multi-browser recovery contract.
 
 The first command set is:
 
@@ -29,7 +29,7 @@ The following remain outside this protocol:
 - automatic playback ownership transfer;
 - durable command history or replay after a server restart.
 
-`Play Here` is a later handoff transaction. It must release the previous endpoint and claim the new endpoint atomically instead of pretending to be a normal remote command.
+`Play Here` is a separate handoff transaction. It releases the previous endpoint and claims the new endpoint atomically instead of pretending to be a normal remote command.
 
 ## 2. Authority and Roles
 
@@ -657,6 +657,18 @@ Reconnect recovery follows this order:
 6. Re-enable controls only when the active endpoint is online and the local snapshots match.
 7. Ignore command status events that are older than the controller's known terminal result.
 
+Registration readiness may race the session, queue, and registry stores' own reconnect reads. A superseded or concurrently replaced readiness read is accepted only when the current snapshots prove the exact registration generation and command epoch; otherwise the controller performs one bounded fresh read. Controls remain disabled until that fence is satisfied.
+
+Ordinary playback reconciliation uses the same registration boundary:
+
+- The active endpoint stores only its latest unsent media snapshot and latest unsent queue snapshot, not an event log.
+- Each snapshot retains the session or queue revision observed when its local action occurred. A reconnect read does not rewrite that expected revision.
+- Session reports hold their matching endpoint generation and proof authorization through the database transaction, so disconnect or registration rotation cannot interleave after authorization but before commit.
+- Queue writers atomically claim the expected revision before replacing items; concurrent and initial-create losers receive the authoritative queue as a conflict.
+- A stale media report applies the authoritative session and cannot restore ownership to the old endpoint.
+- A stale queue save leaves current playback untouched and retains both snapshots until the user chooses the server queue or intentionally retries the local queue against the latest revision.
+- Socket loss pauses a possible active source before any force handoff can claim a different endpoint.
+
 A target endpoint never resumes or re-executes a pending command after reconnect. A controller may retrieve a cached terminal result with the same id only when the command epoch is unchanged and its local recovery window is still open. Otherwise it treats the outcome as unknown and uses snapshots without transmitting the old request.
 
 A previously active endpoint that reconnects after ownership changed may register as online, but it cannot report state or accept commands as active. Endpoint presence never grants playback ownership.
@@ -684,7 +696,7 @@ playback_command_in_flight
 playback_endpoint_online
 ```
 
-## 14. Implementation Sequence
+## 14. Implementation Sequence (completed)
 
 The P0 work follows this dependency order:
 
@@ -710,7 +722,7 @@ The protocol-and-state-machine task is complete when:
 - stable error codes cover validation, stale state, offline target, unsupported command, target failure, timeout, and commit failure;
 - the remaining P0 implementation tasks can proceed in dependency order without redefining this contract.
 
-## 16. P0 End-State Acceptance
+## 16. P0 End-State Acceptance (completed)
 
 The complete P0 command program is not finished until automated tests prove:
 
@@ -727,7 +739,7 @@ The complete P0 command program is not finished until automated tests prove:
 - controller and target display the same committed track, state, position, and queue after recovery;
 - native mobile behavior remains unchanged.
 
-Manual verification uses two independent browser profiles, not two tabs that accidentally share all test state. The verification record includes normal completion, rejection, timeout, reconnect, and concurrent-command scenarios.
+Automated browser verification uses two independent Playwright contexts, not two pages that share browser storage. It covers normal playback and remote commands, an offline source, force handoff, stale session and queue recovery, reconnect, and final authoritative convergence. Unit and server integration suites retain the rejection, timeout, duplicate, and concurrent-command coverage that does not require real media contexts.
 
 ## 17. References
 

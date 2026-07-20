@@ -18,8 +18,25 @@ export interface LocalPlaybackQueueSnapshot {
     repeatMode: PlaybackQueueRepeatMode;
 }
 
+export interface PlaybackQueueConflictState {
+    authoritative: PlaybackQueueSnapshot;
+    local: LocalPlaybackQueueSnapshot;
+}
+
+interface PendingPlaybackQueueSave {
+    local: LocalPlaybackQueueSnapshot;
+    expectedRevision: number;
+    followsSaveToken: symbol | null;
+}
+
+interface InFlightPlaybackQueueSave {
+    token: symbol;
+    request: PendingPlaybackQueueSave;
+}
+
 interface PlaybackQueueStoreState {
     snapshot: PlaybackQueueSnapshot | null;
+    conflict: PlaybackQueueConflictState | null;
     restoreVersion: number;
     initialized: boolean;
     loading: boolean;
@@ -32,14 +49,16 @@ export type PlaybackQueueRefreshResult =
 
 export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
     private connected = false;
-    private sending = false;
-    private pending: LocalPlaybackQueueSnapshot | null = null;
+    private inFlight: InFlightPlaybackQueueSave | null = null;
+    private pending: PendingPlaybackQueueSave | null = null;
     private refreshSequence = 0;
+    private snapshotVersion = 0;
 
     constructor() {
         super();
         this.state = {
             snapshot: null,
+            conflict: null,
             restoreVersion: 0,
             initialized: false,
             loading: false,
@@ -48,12 +67,14 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
     }
 
     get hasPendingSave() {
-        return this.pending !== null || this.sending;
+        return this.pending !== null
+            || this.inFlight !== null
+            || this.state.conflict !== null;
     }
 
     quiesceForPlaybackCommandRecovery() {
         this.pending = null;
-        return !this.sending;
+        return this.inFlight === null && this.state.conflict === null;
     }
 
     connect() {
@@ -80,6 +101,8 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
         requestTimeoutMs = PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS
     ): Promise<PlaybackQueueRefreshResult> {
         const refreshSequence = ++this.refreshSequence;
+        const snapshotVersion = this.snapshotVersion;
+        const snapshotAtStart = this.state.snapshot;
         this.set({ loading: true });
         const response = await fetchPlaybackQueue(requestTimeoutMs);
 
@@ -96,13 +119,38 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
             return { type: 'error' };
         }
 
-        this.set((state) => ({
-            snapshot: response.playbackQueue,
-            restoreVersion: state.restoreVersion + 1,
-            initialized: true,
-            loading: false,
-            error: null
-        }));
+        const refreshed = response.playbackQueue;
+        const current = this.state.snapshot;
+        const shouldApplySnapshot = Boolean(
+            refreshed
+            && (!current || refreshed.revision > current.revision)
+        );
+        const shouldApplyNull = !refreshed
+            && snapshotVersion === this.snapshotVersion
+            && this.state.snapshot === snapshotAtStart;
+
+        if (shouldApplySnapshot || shouldApplyNull) {
+            this.snapshotVersion += 1;
+            this.set((state) => ({
+                snapshot: refreshed,
+                conflict: state.conflict && refreshed
+                    ? {
+                        ...state.conflict,
+                        authoritative: refreshed
+                    }
+                    : state.conflict,
+                restoreVersion: state.restoreVersion + 1,
+                initialized: true,
+                loading: false,
+                error: state.conflict ? state.error : null
+            }));
+        } else {
+            this.set((state) => ({
+                initialized: true,
+                loading: false,
+                error: state.conflict ? state.error : null
+            }));
+        }
         void this.flushPending();
         return { type: 'success', snapshot: this.state.snapshot };
     }
@@ -112,17 +160,66 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
             return;
         }
 
-        this.pending = snapshot;
+        if (this.state.conflict) {
+            this.set({
+                conflict: {
+                    ...this.state.conflict,
+                    local: snapshot
+                }
+            });
+            return;
+        }
+
+        const lineage = this.pending ?? this.inFlight?.request ?? null;
+        this.pending = {
+            local: snapshot,
+            expectedRevision: lineage?.expectedRevision
+                ?? this.state.snapshot?.revision
+                ?? 0,
+            followsSaveToken: this.pending?.followsSaveToken
+                ?? this.inFlight?.token
+                ?? null
+        };
 
         if (this.state.initialized) {
             void this.flushPending();
         }
     }
 
+    retryConflict() {
+        const conflict = this.state.conflict;
+        if (!conflict || this.inFlight) {
+            return false;
+        }
+
+        this.pending = {
+            local: conflict.local,
+            expectedRevision: conflict.authoritative.revision,
+            followsSaveToken: null
+        };
+        this.set({ conflict: null, error: null });
+        void this.flushPending();
+        return true;
+    }
+
+    acceptServerConflict() {
+        if (!this.state.conflict) {
+            return false;
+        }
+
+        this.pending = null;
+        this.set((state) => ({
+            conflict: null,
+            error: null,
+            restoreVersion: state.restoreVersion + 1
+        }));
+        return true;
+    }
+
     private async flushPending() {
         if (
             isPlaybackCommandBarrierActive()
-            || this.sending
+            || this.inFlight
             || !this.pending
             || !this.state.initialized
         ) {
@@ -131,13 +228,14 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
 
         const pending = this.pending;
         this.pending = null;
-        this.sending = true;
+        const token = Symbol('playback-queue-save');
+        this.inFlight = { token, request: pending };
         let continueFlushing = true;
 
         try {
             const response = await savePlaybackQueue({
-                ...pending,
-                expectedRevision: this.state.snapshot?.revision ?? 0
+                ...pending.local,
+                expectedRevision: pending.expectedRevision
             });
 
             if (response.type === 'error') {
@@ -146,25 +244,77 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
                 });
 
                 if (response.category === 'network') {
-                    this.pending ??= pending;
+                    const queued = this.pending as PendingPlaybackQueueSave | null;
+                    if (!queued) {
+                        this.pending = {
+                            ...pending,
+                            followsSaveToken: null
+                        };
+                    } else if (queued.followsSaveToken === token) {
+                        this.pending = {
+                            ...queued,
+                            followsSaveToken: null
+                        };
+                    }
                     continueFlushing = false;
                 }
                 return;
             }
 
-            this.set({
-                snapshot: response.savePlaybackQueue.queue,
-                error: response.savePlaybackQueue.type === 'conflict'
-                    ? 'The server queue changed in another web player.'
-                    : null
-            });
-
-            if (response.savePlaybackQueue.type === 'conflict') {
-                this.pending = null;
+            const result = response.savePlaybackQueue;
+            if (result.type === 'conflict') {
+                const queued = this.pending as PendingPlaybackQueueSave | null;
+                const latestLocal = queued?.followsSaveToken === token
+                    ? queued.local
+                    : pending.local;
+                const authoritative = this.state.snapshot
+                    && this.state.snapshot.revision >= result.queue.revision
+                    ? this.state.snapshot
+                    : result.queue;
+                if (queued?.followsSaveToken === token) {
+                    this.pending = null;
+                }
+                if (authoritative !== this.state.snapshot) {
+                    this.snapshotVersion += 1;
+                }
+                this.set({
+                    snapshot: authoritative,
+                    conflict: {
+                        authoritative,
+                        local: latestLocal
+                    },
+                    error: 'The server queue changed in another web player.'
+                });
                 continueFlushing = false;
+                return;
             }
+
+            const queued = this.pending as PendingPlaybackQueueSave | null;
+            if (queued?.followsSaveToken === token) {
+                this.pending = {
+                    ...queued,
+                    expectedRevision: result.queue.revision,
+                    followsSaveToken: null
+                };
+            }
+
+            const authoritative = this.state.snapshot
+                && this.state.snapshot.revision >= result.queue.revision
+                ? this.state.snapshot
+                : result.queue;
+            if (authoritative !== this.state.snapshot) {
+                this.snapshotVersion += 1;
+            }
+
+            this.set({
+                snapshot: authoritative,
+                conflict: null,
+                error: null
+            });
         } finally {
-            this.sending = false;
+            if (this.inFlight?.token === token) {
+                this.inFlight = null;
+            }
 
             if (continueFlushing && this.pending) {
                 void this.flushPending();

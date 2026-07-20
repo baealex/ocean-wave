@@ -1024,6 +1024,92 @@ describe('RemotePlaybackControlStore', () => {
         store.disconnect();
     });
 
+    it('accepts exact current snapshots when competing registration reads supersede readiness', async () => {
+        mocks.registrationState = null;
+        mocks.sessionRefresh.mockResolvedValueOnce({ type: 'superseded' });
+        mocks.queueRefresh.mockResolvedValueOnce({ type: 'superseded' });
+        mocks.devicesRefresh.mockResolvedValueOnce({ type: 'superseded' });
+        const store = new RemotePlaybackControlStore();
+
+        store.connect();
+        mocks.registrationState = {
+            endpointId: 'local-tab',
+            registrationGeneration: 3,
+            commandEpoch: 'epoch-1',
+            registrationProof: 'proof-1'
+        };
+        mocks.registrationSubscriber?.(mocks.registrationState);
+
+        await vi.waitFor(() => expect(store.controllerReady).toBe(true));
+        expect(store.state).toMatchObject({
+            controllerReady: true,
+            controllerRefreshing: false,
+            controllerError: null
+        });
+
+        mocks.devicesState.loading = true;
+        mocks.devicesSubscriber?.();
+        expect(store.controllerReady).toBe(false);
+        mocks.devicesState.loading = false;
+        mocks.devicesSubscriber?.();
+        expect(store.controllerReady).toBe(true);
+        store.disconnect();
+    });
+
+    it('retries a superseded registration read once when competing snapshots are still loading', async () => {
+        mocks.registrationState = null;
+        mocks.sessionState.loading = true;
+        mocks.sessionRefresh
+            .mockResolvedValueOnce({ type: 'superseded' })
+            .mockImplementationOnce(async () => {
+                mocks.sessionState.loading = false;
+                return {
+                    type: 'success',
+                    snapshot: mocks.sessionState.snapshot
+                };
+            });
+        mocks.queueRefresh.mockResolvedValueOnce({ type: 'superseded' });
+        mocks.devicesRefresh.mockResolvedValueOnce({ type: 'superseded' });
+        const store = new RemotePlaybackControlStore();
+
+        store.connect();
+        mocks.registrationState = {
+            endpointId: 'local-tab',
+            registrationGeneration: 3,
+            commandEpoch: 'epoch-1',
+            registrationProof: 'proof-1'
+        };
+        mocks.registrationSubscriber?.(mocks.registrationState);
+
+        await vi.waitFor(() => expect(store.controllerReady).toBe(true));
+        expect(mocks.sessionRefresh).toHaveBeenCalledTimes(2);
+        expect(mocks.queueRefresh).toHaveBeenCalledTimes(2);
+        expect(mocks.devicesRefresh).toHaveBeenCalledTimes(2);
+        store.disconnect();
+    });
+
+    it('accepts exact current snapshots when concurrent reads replace successful readiness results', async () => {
+        mocks.registrationState = null;
+        mocks.sessionRefresh.mockResolvedValueOnce({
+            type: 'success',
+            snapshot: { ...mocks.sessionState.snapshot }
+        });
+        const store = new RemotePlaybackControlStore();
+
+        store.connect();
+        mocks.registrationState = {
+            endpointId: 'local-tab',
+            registrationGeneration: 3,
+            commandEpoch: 'epoch-1',
+            registrationProof: 'proof-1'
+        };
+        mocks.registrationSubscriber?.(mocks.registrationState);
+
+        await vi.waitFor(() => expect(store.controllerReady).toBe(true));
+        expect(store.state.controllerError).toBeNull();
+        store.disconnect();
+    });
+
     it('rejects exact readiness when a completed leg receives an error-only update', async () => {
         let resolveDevicesRefresh!: (value: {
             type: 'success';

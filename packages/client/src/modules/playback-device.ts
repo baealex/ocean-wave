@@ -113,6 +113,25 @@ export const getPlaybackEndpointInstanceId = () => {
 
 export const getPlaybackEndpointSequence = () => readSequence();
 
+export const ensurePlaybackEndpointSequenceAtLeast = (minimum: number) => {
+    if (!Number.isSafeInteger(minimum) || minimum < 0) {
+        return readSequence();
+    }
+
+    const current = readSequence();
+    if (current >= minimum) {
+        return current;
+    }
+
+    memorySequence = minimum;
+    writeStorage(
+        'session',
+        PLAYBACK_ENDPOINT_SEQUENCE_KEY,
+        minimum.toString()
+    );
+    return minimum;
+};
+
 export const nextPlaybackEndpointSequence = () => {
     const next = readSequence() + 1;
 

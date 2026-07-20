@@ -73,6 +73,34 @@ describe('playback queue service', () => {
         await expect(getPlaybackQueueSnapshot()).resolves.toEqual(result.queue);
     });
 
+    it('turns a concurrent initial create into one accepted write and one conflict', async () => {
+        const music = await createMusic();
+        const results = await Promise.all([
+            savePlaybackQueue({
+                musicIds: [music.id.toString()],
+                sourceMusicIds: [],
+                currentIndex: 0,
+                shuffle: false,
+                repeatMode: 'one',
+                expectedRevision: 0
+            }),
+            savePlaybackQueue({
+                musicIds: [],
+                sourceMusicIds: [],
+                currentIndex: null,
+                shuffle: false,
+                repeatMode: 'all',
+                expectedRevision: 0
+            })
+        ]);
+        const accepted = results.find(result => result.type === 'accepted');
+        const conflict = results.find(result => result.type === 'conflict');
+
+        expect(accepted?.queue.revision).toBe(1);
+        expect(conflict?.queue).toEqual(accepted?.queue);
+        await expect(getPlaybackQueueSnapshot()).resolves.toEqual(accepted?.queue);
+    });
+
     it('increments revision and returns the server queue for a stale write', async () => {
         const music = await createMusic();
         const initial = await savePlaybackQueue({
@@ -110,6 +138,51 @@ describe('playback queue service', () => {
                 queue: { revision: 2 }
             }
         });
+    });
+
+    it('allows only one concurrent writer to claim an expected revision', async () => {
+        const music = await createMusic();
+        const initial = await savePlaybackQueue({
+            musicIds: [music.id.toString()],
+            sourceMusicIds: [],
+            currentIndex: 0,
+            shuffle: false,
+            repeatMode: 'none',
+            expectedRevision: 0
+        });
+
+        const results = await Promise.all([
+            savePlaybackQueue({
+                musicIds: [music.id.toString()],
+                sourceMusicIds: [],
+                currentIndex: 0,
+                shuffle: false,
+                repeatMode: 'one',
+                expectedRevision: initial.queue.revision
+            }),
+            savePlaybackQueue({
+                musicIds: [],
+                sourceMusicIds: [],
+                currentIndex: null,
+                shuffle: false,
+                repeatMode: 'all',
+                expectedRevision: initial.queue.revision
+            })
+        ]);
+        const accepted = results.find(result => result.type === 'accepted');
+        const conflict = results.find(result => result.type === 'conflict');
+
+        expect(accepted).toBeDefined();
+        expect(conflict).toMatchObject({
+            changed: false,
+            queue: { revision: 2 },
+            conflict: {
+                reason: 'stale-revision',
+                queue: { revision: 2 }
+            }
+        });
+        expect(conflict?.queue).toEqual(accepted?.queue);
+        await expect(getPlaybackQueueSnapshot()).resolves.toEqual(accepted?.queue);
     });
 
     it('requires shuffled source order to be a permutation of queue items', async () => {

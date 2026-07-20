@@ -6,6 +6,7 @@ import { PLAYBACK_STATE_UPDATED } from '~/socket/playback';
 import {
     PLAYBACK_ENDPOINTS_INVALIDATED,
     playbackEndpointRegistry,
+    type PlaybackEndpointAuthorizedReportResult,
     type PlaybackEndpointReportAuthorization
 } from '~/socket/playback-endpoints';
 
@@ -15,6 +16,7 @@ import {
 } from '../services/playback-device';
 import {
     isPlaybackSessionServiceError,
+    type PlaybackSessionReportResult,
     reportPlaybackState,
     type ReportPlaybackStateInput
 } from '../services/playback-session';
@@ -58,10 +60,15 @@ const notifySafely = (callback: () => void) => {
     }
 };
 
+type RunAuthorizedPlaybackReport = (
+    authorization: PlaybackEndpointReportAuthorization,
+    report: () => Promise<PlaybackSessionReportResult>
+) => Promise<PlaybackEndpointAuthorizedReportResult<PlaybackSessionReportResult>>;
+
 export const createReportPlaybackStateMutationResolver = (
     report = reportPlaybackState,
-    isAuthorized = (authorization: PlaybackEndpointReportAuthorization) => (
-        playbackEndpointRegistry.isReportAuthorized(authorization)
+    runAuthorized: RunAuthorizedPlaybackReport = (authorization, operation) => (
+        playbackEndpointRegistry.runAuthorizedReport(authorization, operation)
     )
 ) => {
     return async (_: unknown, {
@@ -81,18 +88,20 @@ export const createReportPlaybackStateMutationResolver = (
                 ...reportInput
             } = input;
 
-            if (!isAuthorized({
+            const authorized = await runAuthorized({
                 endpointId: reportInput.deviceId.trim(),
                 registrationGeneration,
                 registrationProof
-            })) {
+            }, () => report(reportInput));
+
+            if (!authorized.authorized) {
                 throw new PlaybackGraphQLError(
                     'A current playback endpoint registration is required.',
                     'PLAYBACK_ENDPOINT_REGISTRATION_REQUIRED'
                 );
             }
 
-            const result = await report(reportInput);
+            const result = authorized.result;
 
             if (result.type === 'accepted' && result.changed) {
                 notifySafely(() => {

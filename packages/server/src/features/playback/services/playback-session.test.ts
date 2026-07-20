@@ -49,6 +49,7 @@ describe('playback session service', () => {
         const result = await reportPlaybackState({
             deviceId: 'web-tab-1',
             sequence: 1,
+            expectedRevision: 0,
             claimActive: true,
             state: 'playing',
             currentMusicId: music.id.toString(),
@@ -80,6 +81,7 @@ describe('playback session service', () => {
         const firstInput = {
             deviceId: 'web-tab-1',
             sequence: 4,
+            expectedRevision: 0,
             claimActive: true,
             state: 'playing' as const,
             currentMusicId: music.id.toString(),
@@ -113,6 +115,7 @@ describe('playback session service', () => {
         await reportPlaybackState({
             deviceId: 'web-tab-1',
             sequence: 1,
+            expectedRevision: 0,
             claimActive: true,
             state: 'playing',
             currentMusicId: music.id.toString(),
@@ -121,6 +124,7 @@ describe('playback session service', () => {
         const rejected = await reportPlaybackState({
             deviceId: 'web-tab-2',
             sequence: 1,
+            expectedRevision: 1,
             claimActive: false,
             state: 'paused',
             currentMusicId: music.id.toString(),
@@ -129,6 +133,7 @@ describe('playback session service', () => {
         const claimed = await reportPlaybackState({
             deviceId: 'web-tab-2',
             sequence: 2,
+            expectedRevision: 1,
             claimActive: true,
             state: 'playing',
             currentMusicId: music.id.toString(),
@@ -146,11 +151,61 @@ describe('playback session service', () => {
         });
     });
 
+    it('rejects a delayed reconnect claim after another endpoint advanced the revision', async () => {
+        const music = await createMusic();
+        const first = await reportPlaybackState({
+            deviceId: 'web-tab-1',
+            sequence: 1,
+            expectedRevision: 0,
+            claimActive: true,
+            state: 'playing',
+            currentMusicId: music.id.toString(),
+            positionMs: 1_000
+        });
+        const takeover = await reportPlaybackState({
+            deviceId: 'web-tab-2',
+            sequence: 1,
+            expectedRevision: first.session.revision,
+            claimActive: true,
+            state: 'playing',
+            currentMusicId: music.id.toString(),
+            positionMs: 2_000
+        });
+
+        const delayed = await reportPlaybackState({
+            deviceId: 'web-tab-1',
+            sequence: 2,
+            expectedRevision: first.session.revision,
+            claimActive: true,
+            state: 'playing',
+            currentMusicId: music.id.toString(),
+            positionMs: 3_000
+        });
+
+        expect(delayed).toMatchObject({
+            type: 'conflict',
+            changed: false,
+            conflict: { reason: 'stale-revision' },
+            session: {
+                activeDeviceId: 'web-tab-2',
+                activeDeviceSequence: 1,
+                revision: takeover.session.revision,
+                positionMs: 2_000
+            }
+        });
+        await expect(getPlaybackSessionSnapshot()).resolves.toMatchObject({
+            activeDeviceId: 'web-tab-2',
+            revision: takeover.session.revision,
+            positionMs: 2_000
+        });
+    });
+
     it('clamps position to duration and rejects unavailable music', async () => {
         const music = await createMusic(30);
         const accepted = await reportPlaybackState({
             deviceId: 'web-tab-1',
             sequence: 1,
+            expectedRevision: 0,
             claimActive: true,
             state: 'paused',
             currentMusicId: music.id.toString(),
@@ -161,6 +216,7 @@ describe('playback session service', () => {
         await expect(reportPlaybackState({
             deviceId: 'web-tab-1',
             sequence: 2,
+            expectedRevision: 1,
             claimActive: false,
             state: 'playing',
             currentMusicId: '999999999',

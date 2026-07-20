@@ -190,6 +190,80 @@ describe('playback endpoint registry', () => {
         });
     });
 
+    it('holds registration authority through an accepted report commit', async () => {
+        const socket = createSocket('socket-1');
+        const registration = await registry.register(socket, createRegistration());
+        expect(registration.status).toBe('registered');
+        if (registration.status !== 'registered') {
+            throw new Error('Expected endpoint registration to succeed.');
+        }
+
+        let commitReport: ((value: string) => void) | undefined;
+        const report = registry.runAuthorizedReport({
+            endpointId: registration.endpointId,
+            registrationGeneration: registration.registrationGeneration,
+            registrationProof: registration.registrationProof
+        }, () => new Promise<string>((resolve) => {
+            commitReport = resolve;
+        }));
+        const unregister = registry.unregisterSocket(socket.id);
+        let unregisterCompleted = false;
+        void unregister.then(() => {
+            unregisterCompleted = true;
+        });
+
+        await Promise.resolve();
+        expect(unregisterCompleted).toBe(false);
+        expect(registry.getRoute('tab-1')).not.toBeNull();
+        await expect(registry.runAuthorizedReport({
+            endpointId: registration.endpointId,
+            registrationGeneration: registration.registrationGeneration,
+            registrationProof: registration.registrationProof
+        }, async () => 'late')).resolves.toEqual({ authorized: false });
+
+        commitReport?.('committed');
+        await expect(report).resolves.toEqual({
+            authorized: true,
+            result: 'committed'
+        });
+        await expect(unregister).resolves.toBe(true);
+        expect(registry.getRoute('tab-1')).toBeNull();
+    });
+
+    it('does not rotate a socket endpoint while its authorized report is committing', async () => {
+        const socket = createSocket('socket-1');
+        const registration = await registry.register(socket, createRegistration());
+        expect(registration.status).toBe('registered');
+        if (registration.status !== 'registered') {
+            throw new Error('Expected endpoint registration to succeed.');
+        }
+
+        let commitReport: (() => void) | undefined;
+        const report = registry.runAuthorizedReport({
+            endpointId: registration.endpointId,
+            registrationGeneration: registration.registrationGeneration,
+            registrationProof: registration.registrationProof
+        }, () => new Promise<void>((resolve) => {
+            commitReport = resolve;
+        }));
+
+        await expect(registry.register(socket, createRegistration({
+            endpointId: 'tab-2',
+            endpointInstanceId: 'document-2'
+        }))).resolves.toMatchObject({
+            status: 'rejected',
+            code: 'ENDPOINT_REGISTRATION_FAILED'
+        });
+        expect(registry.getRoute('tab-1')).not.toBeNull();
+        expect(registry.getRoute('tab-2')).toBeNull();
+
+        commitReport?.();
+        await expect(report).resolves.toEqual({
+            authorized: true,
+            result: undefined
+        });
+    });
+
     it('keeps registration successful when the notification channel fails', async () => {
         const error = new Error('notification failed');
         const consoleError = jest.spyOn(console, 'error').mockImplementation();

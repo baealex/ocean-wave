@@ -75,6 +75,7 @@ const createSession = (
     id: '1',
     state: 'paused',
     activeDeviceId: 'target-tab',
+    activeDeviceSequence: 4,
     currentMusicId: '1',
     positionMs: 1_000,
     positionUpdatedAt: '2026-07-20T00:00:00.000Z',

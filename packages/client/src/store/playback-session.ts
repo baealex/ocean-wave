@@ -7,7 +7,10 @@ import {
 } from '~/api/playback-session';
 import { isPlaybackCommandBarrierActive } from '~/modules/playback-command-barrier';
 import { PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS } from '~/modules/playback-controller';
-import { nextPlaybackEndpointSequence } from '~/modules/playback-device';
+import {
+    ensurePlaybackEndpointSequenceAtLeast,
+    nextPlaybackEndpointSequence
+} from '~/modules/playback-device';
 import { isNewerPlaybackSnapshot } from '~/modules/shared-playback';
 import { PlaybackListener } from '~/socket';
 import {
@@ -46,6 +49,8 @@ interface ReportOptions {
 
 interface PendingPlaybackIntent {
     local: LocalPlaybackReport;
+    expectedRevision: number;
+    followsReportToken: symbol | null;
 }
 
 interface InFlightPlaybackReport {
@@ -70,6 +75,7 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
     private listener = new PlaybackListener();
     private connected = false;
     private registration: PlaybackEndpointRegistrationState | null = null;
+    private registrationReadyForReports = false;
     private unsubscribeRegistration: (() => void) | null = null;
     private pendingIntent: PendingPlaybackIntent | null = null;
     private inFlight: InFlightPlaybackReport | null = null;
@@ -79,6 +85,7 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
     private registrationGapEndpointId: string | null = null;
     private lastReportAtMs = 0;
     private refreshSequence = 0;
+    private snapshotVersion = 0;
 
     constructor() {
         super();
@@ -147,6 +154,7 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
         this.unsubscribeRegistration?.();
         this.unsubscribeRegistration = null;
         this.registration = null;
+        this.registrationReadyForReports = false;
         this.pendingIntent = null;
         this.inFlight = null;
         this.claimRequired = false;
@@ -160,6 +168,11 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
         requestTimeoutMs = PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS
     ): Promise<PlaybackSessionRefreshResult> {
         const refreshSequence = ++this.refreshSequence;
+        const snapshotVersion = this.snapshotVersion;
+        const snapshotAtStart = this.state.snapshot;
+        const registrationKey = this.registration
+            ? registrationIdentityKey(this.registration)
+            : null;
         this.set({ loading: true });
         const response = await fetchPlaybackSession(requestTimeoutMs);
 
@@ -177,13 +190,27 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
 
         if (response.playbackSession) {
             this.applySnapshot(response.playbackSession, true);
-        } else {
+        } else if (
+            snapshotVersion === this.snapshotVersion
+            && this.state.snapshot === snapshotAtStart
+        ) {
+            this.snapshotVersion += 1;
             this.set({
                 snapshot: null,
                 receivedAtMs: Date.now()
             });
         }
         this.set({ loading: false, error: null });
+
+        if (
+            registrationKey
+            && this.registration
+            && registrationIdentityKey(this.registration) === registrationKey
+        ) {
+            this.registrationReadyForReports = true;
+            this.alignEndpointSequence(this.state.snapshot);
+            void this.flushPending();
+        }
         return { type: 'success', snapshot: this.state.snapshot };
     }
 
@@ -215,12 +242,19 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
             return;
         }
 
+        const lineage = this.pendingIntent ?? this.inFlight?.intent ?? null;
         const intent: PendingPlaybackIntent = {
             local: {
                 state: local.state,
                 currentMusicId: local.currentMusicId,
                 positionMs: Math.max(Math.round(local.positionMs), 0)
-            }
+            },
+            expectedRevision: lineage?.expectedRevision
+                ?? this.state.snapshot?.revision
+                ?? 0,
+            followsReportToken: this.pendingIntent?.followsReportToken
+                ?? this.inFlight?.token
+                ?? null
         };
 
         if (claimActive) {
@@ -261,12 +295,19 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
         this.claimRequired = false;
         this.claimVersion += 1;
         this.lastReportAtMs = Date.now();
+        const lineage = this.pendingIntent ?? this.inFlight?.intent ?? null;
         this.pendingIntent = {
             local: {
                 state: 'paused',
                 currentMusicId: local.currentMusicId,
                 positionMs: Math.max(Math.round(local.positionMs), 0)
-            }
+            },
+            expectedRevision: lineage?.expectedRevision
+                ?? this.state.snapshot?.revision
+                ?? 0,
+            followsReportToken: this.pendingIntent?.followsReportToken
+                ?? this.inFlight?.token
+                ?? null
         };
         void this.flushPending();
         return true;
@@ -306,11 +347,22 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
             return;
         }
 
+        this.snapshotVersion += 1;
         this.set({
             snapshot,
             receivedAtMs: Date.now(),
             error: null
         });
+        this.alignEndpointSequence(snapshot);
+    }
+
+    private alignEndpointSequence(snapshot: PlaybackSessionSnapshot | null) {
+        if (
+            snapshot
+            && this.registration?.endpointId === snapshot.activeDeviceId
+        ) {
+            ensurePlaybackEndpointSequenceAtLeast(snapshot.activeDeviceSequence);
+        }
     }
 
     private async flushPending() {
@@ -321,6 +373,7 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
             || this.inFlight
             || !this.pendingIntent
             || !registration
+            || !this.registrationReadyForReports
         ) {
             return;
         }
@@ -345,6 +398,7 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
             registrationGeneration: registration.registrationGeneration,
             registrationProof: registration.registrationProof,
             sequence: nextPlaybackEndpointSequence(),
+            expectedRevision: intent.expectedRevision,
             claimActive: claimRequired,
             state: intent.local.state,
             currentMusicId: intent.local.currentMusicId,
@@ -371,15 +425,51 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
                 ));
 
                 if (response.category === 'network' || registrationRequired) {
-                    if (!this.pendingIntent) {
-                        this.pendingIntent = intent;
+                    const queued = this.pendingIntent as PendingPlaybackIntent | null;
+                    if (!queued) {
+                        this.pendingIntent = {
+                            ...intent,
+                            followsReportToken: null
+                        };
+                    } else if (queued.followsReportToken === token) {
+                        this.pendingIntent = {
+                            ...queued,
+                            followsReportToken: null
+                        };
                     }
                     continueFlushing = false;
                 }
                 return;
             }
 
-            this.applySnapshot(response.reportPlaybackState.session, true);
+            const result = response.reportPlaybackState;
+            this.applySnapshot(result.session, true);
+
+            if (result.type === 'conflict') {
+                const queued = this.pendingIntent as PendingPlaybackIntent | null;
+                if (queued?.followsReportToken === token) {
+                    this.pendingIntent = null;
+                }
+                if (this.claimVersion === claimVersion) {
+                    this.claimRequired = false;
+                }
+                continueFlushing = false;
+                this.set({
+                    error: result.conflict?.reason === 'active-device'
+                        ? 'Another browser owns the latest playback session.'
+                        : 'The playback session changed while this browser was reconnecting.'
+                });
+                return;
+            }
+
+            const queued = this.pendingIntent as PendingPlaybackIntent | null;
+            if (queued?.followsReportToken === token) {
+                this.pendingIntent = {
+                    ...queued,
+                    expectedRevision: result.session.revision,
+                    followsReportToken: null
+                };
+            }
 
             if (
                 claimRequired
@@ -427,19 +517,18 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
         }
 
         this.registration = registration;
+        this.registrationReadyForReports = false;
         this.pendingIntent = latestIntent;
         this.inFlight = null;
         this.set({ endpointId: registration?.endpointId ?? null });
 
         if (registration) {
-            void this.flushPending();
+            void this.refresh();
         }
     };
 
     private handleSocketConnect = () => {
-        void this.refresh().finally(() => {
-            void this.flushPending();
-        });
+        void this.refresh();
     };
 }
 

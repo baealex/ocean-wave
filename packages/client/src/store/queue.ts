@@ -544,6 +544,19 @@ class QueueStore extends BaseStore<QueueStoreState> {
         this.audioChannel.pause();
     }
 
+    acceptServerQueueConflict() {
+        if (!playbackQueueStore.state.conflict) {
+            return false;
+        }
+
+        if (this.state.isPlaying) {
+            this.audioChannel.pause();
+            this.set({ isPlaying: false });
+        }
+
+        return playbackQueueStore.acceptServerConflict();
+    }
+
     stop() {
         if (isLocalPlaybackMutationBarrierActive()) return;
         this.commitPlaybackEvent('queue-stop');

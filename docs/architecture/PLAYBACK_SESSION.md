@@ -1,20 +1,21 @@
 # Playback Session Architecture
 
-Updated: 2026-07-20
+Updated: 2026-07-21
 
 ## 1. Product Boundary
 
 Ocean Wave should remember a listener's current flow across web tabs and devices without becoming a Spotify Connect clone.
 
-The implemented foundation is intentionally web-only:
+The implemented shared-playback program is intentionally web-only:
 
 - One web player reports the current track, playback state, and position snapshot.
 - Other web clients can display that snapshot read-only.
 - GraphQL reads and persists the authoritative snapshot.
 - Socket.IO announces committed snapshot changes.
-- Local playback continues when the server or realtime channel is unavailable.
+- The local queue remains available when server synchronization fails, while an active player pauses fail-closed when its realtime control route disconnects.
+- Acknowledged remote commands and atomic `Play Here` handoff operate only between registered web endpoints.
 
-The next web phase adds acknowledged remote control for one active playback endpoint. Native mobile realtime participation, multi-room playback, and simultaneous players remain out of scope.
+Native mobile realtime participation, multi-room playback, and simultaneous players remain out of scope.
 
 ## 2. Current State
 
@@ -76,17 +77,20 @@ The current playback-state API fields named `deviceId` and `activeDeviceId` cont
 
 Only a currently registered active playback endpoint may advance the shared snapshot.
 
-A report currently contains `deviceId`, a per-endpoint monotonic `sequence`, `claimActive`, and the current `registrationGeneration` plus unpredictable `registrationProof`. The explicit endpoint contract will rename the input to `endpointId`. The server first verifies the process-local registration proof and then applies these rules transactionally:
+A report currently contains `deviceId`, a per-endpoint monotonic `sequence`, `expectedRevision`, `claimActive`, and the current `registrationGeneration` plus unpredictable `registrationProof`. The explicit endpoint contract will rename the input to `endpointId`. The server first verifies the process-local registration proof and then applies these rules transactionally:
 
 1. If no active endpoint exists, a user-initiated playback report may claim the session.
-2. A report from the active endpoint is accepted when its sequence is newer than the last accepted sequence for that endpoint.
+2. A report from the active endpoint is accepted only when its session revision fence still matches and its sequence is newer than the last accepted sequence for that endpoint.
 3. A different endpoint is rejected with the current authoritative snapshot unless `claimActive` is true.
 4. `claimActive` is sent only after a local user action that starts or takes over playback. Page load, passive restore, and notification handling never claim it.
 5. An accepted claim replaces the previous active endpoint and increments the session revision.
 6. Disconnecting a socket does not immediately clear the active endpoint because reloads and brief network loss are normal. Presence is advisory; persisted state remains readable.
 7. A tab without an acknowledged registration buffers only its latest local media snapshot. Unresolved takeover authority is tracked separately: an explicit user claim remains sticky across later checkpoints and network failures until an authoritative accepted or conflict response. A formerly active endpoint may also buffer pause or stop during a registration gap. Registration loss or endpoint rotation fences any old in-flight response and rebuilds exactly one report from the newest local values with the new endpoint identity, sequence, generation, proof, and claim when required; it never reports as an incumbent copied through `sessionStorage`.
+8. After registration or reconnect, the client completes a fresh session read before flushing that one buffered snapshot. The buffered report keeps the revision against which the user action occurred; a newer reconnect read never silently rebases it.
+9. The server fences the final update by session id, revision, active endpoint, and endpoint sequence. A concurrent winner returns the latest authoritative snapshot instead of allowing a late write to replace it.
+10. The endpoint registry holds the matching generation and proof authority through the report transaction. Disconnect, lease expiry, and endpoint rotation cannot invalidate that registration in the middle of its commit; they serialize after it, while new reports fail closed once invalidation begins.
 
-The read-only foundation has no remote command that can force another player to pause. The command phase may control only the current active endpoint. Moving playback to the requesting endpoint is a separate atomic handoff flow.
+The original read-only foundation had no remote command that could force another player to pause. The implemented command layer controls only the current active endpoint. Moving playback to the requesting endpoint remains a separate atomic handoff flow.
 
 ## 6. Playback Snapshot
 
@@ -139,6 +143,7 @@ query PlaybackSession {
     id
     state
     activeDeviceId
+    activeDeviceSequence
     currentMusicId
     positionMs
     positionUpdatedAt
@@ -156,7 +161,7 @@ mutation ReportPlaybackState($input: ReportPlaybackStateInput!) {
 }
 ```
 
-The input contains `deviceId`, `registrationGeneration`, `registrationProof`, `sequence`, `claimActive`, `state`, `currentMusicId`, `positionMs`, and the client observation time used only for validation and diagnostics. The proof is a live authorization secret, not persisted domain data. The server writes its own `positionUpdatedAt` and validates that the endpoint registration is current, the music exists, and the position is finite and non-negative.
+The input contains `deviceId`, `registrationGeneration`, `registrationProof`, `sequence`, `expectedRevision`, `claimActive`, `state`, `currentMusicId`, `positionMs`, and the client observation time used only for validation and diagnostics. The proof is a live authorization secret, not persisted domain data. The server writes its own `positionUpdatedAt` and validates that the endpoint registration is current, the revision and endpoint sequence are current, the music exists, and the position is finite and non-negative.
 
 After commit, the server emits:
 
@@ -213,6 +218,7 @@ On startup or reconnect:
 3. If this tab is not actively playing, show the server snapshot as shared read-only state without replacing its local queue in the playback-state phase.
 4. If this tab is already playing because of a user action, report with `claimActive` and let the server decide ownership.
 5. Apply only snapshots with a newer revision.
+6. Do not flush buffered state or queue writes until the new endpoint registration has completed its authoritative reads.
 
 If reporting fails, keep the latest unsent snapshot in memory and retry only the newest state after reconnect. Do not replay an unbounded event log. Existing IndexedDB playback checkpoints continue to handle play-count delivery independently.
 
@@ -224,7 +230,8 @@ For the implemented server queue:
 - Web clients debounce only structural queue changes; playback position updates do not write the queue.
 - A server read repairs unavailable items and advances the queue revision once for the repaired snapshot.
 - An explicit user playback or queue action may claim the active session and submit a mutation using the last observed revision.
-- On conflict, preserve local playback, display or log the conflict, and refresh the shared snapshot. Automatic multi-way merge is out of scope.
+- The server atomically claims the expected queue revision before replacing queue items. Exactly one concurrent writer can advance a revision, and an initial-create race becomes an explicit conflict instead of a raw uniqueness error.
+- On conflict, preserve local playback and keep both the latest local queue and the authoritative server queue. The queue page offers explicit **Keep newer queue** and **Replace with this queue** actions; it never silently rebases or multi-way merges.
 
 ## 10. Failure and Security Rules
 
@@ -232,7 +239,9 @@ For the implemented server queue:
 - Unknown music ids, invalid states, negative or non-finite positions, stale sequences, and stale revisions are rejected.
 - Repeated reports with the same endpoint sequence are idempotent and return the current snapshot.
 - Database commit is authoritative even when Socket.IO notification fails.
-- Socket reconnect always triggers a GraphQL snapshot read before deltas are trusted.
+- Socket reconnect always triggers GraphQL session, queue, and endpoint-registry reads before buffered writes or later realtime assumptions are trusted.
+- A stale playback report returns the authoritative session, clears any chained local report, and cannot reclaim the active endpoint.
+- A stale queue write returns both the authoritative and latest local snapshots for explicit recovery without interrupting current playback.
 - Server restart may lose connector presence but not the persisted session or queue.
 - A disappeared active endpoint leaves a stale readable snapshot; it does not block an explicit local claim from another web player.
 - Logs should include session revision, endpoint id, and rejection reason, but no audio file paths, authentication secrets, or registration proofs.
@@ -297,15 +306,23 @@ Acceptance evidence:
 - A missed presence notification is repaired by the GraphQL registry query.
 - A missed lease-expiry event is repaired by an acknowledged heartbeat response.
 
-### Phase E2: remote command delivery
+### Phase E2: remote command delivery (completed)
 
 - Implement acknowledged command dispatch, completion, timeout, and idempotency against the Phase D contract.
 - Add web controller UI without changing native mobile behavior.
 
-### Phase F: handoff and recovery
+### Phase F: handoff and recovery (completed)
 
 - Add atomic `Play Here` ownership transfer.
 - Verify stale state, offline, reconnect, simultaneous claim, and missed-event recovery with independent browser contexts.
+
+Acceptance evidence:
+
+- An active source pauses fail-closed when its socket route disappears, and an offline source can be replaced only through the explicit force-handoff flow.
+- Reconnecting the old endpoint submits its buffered pause against the original revision, receives an authoritative conflict, and does not reclaim ownership.
+- A stale offline queue write preserves local playback and requires an explicit server-queue or retry choice.
+- A Playwright suite uses two independent browser contexts to exercise playback, remote pause/resume, offline queue divergence, force handoff, reconnect conflict recovery, and final session/queue convergence.
+- Client store tests and server integration tests cover stale revision and endpoint-sequence rejection in addition to the multi-context browser flow.
 
 ### Deferred phases
 

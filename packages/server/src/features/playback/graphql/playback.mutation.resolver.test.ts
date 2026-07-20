@@ -1,6 +1,11 @@
 import { connectors } from '~/socket/connectors';
 import { PLAYBACK_STATE_UPDATED } from '~/socket/playback';
-import { PLAYBACK_ENDPOINTS_INVALIDATED } from '~/socket/playback-endpoints';
+import {
+    PLAYBACK_ENDPOINTS_INVALIDATED,
+    type PlaybackEndpointAuthorizedReportResult,
+    type PlaybackEndpointReportAuthorization
+} from '~/socket/playback-endpoints';
+import type { PlaybackSessionReportResult } from '../services/playback-session';
 import {
     createRenamePlaybackDeviceMutationResolver,
     createReportPlaybackStateMutationResolver
@@ -10,6 +15,7 @@ const snapshot = {
     id: '1',
     state: 'playing' as const,
     activeDeviceId: 'web-tab-1',
+    activeDeviceSequence: 1,
     currentMusicId: '42',
     positionMs: 1_000,
     positionUpdatedAt: '2026-07-14T00:00:00.000Z',
@@ -17,6 +23,22 @@ const snapshot = {
     revision: 1,
     serverTime: '2026-07-14T00:00:00.000Z'
 };
+
+const authorizeReports = (authorized = true) => jest.fn(
+    async (
+        _authorization: PlaybackEndpointReportAuthorization,
+        report: () => Promise<PlaybackSessionReportResult>
+    ): Promise<PlaybackEndpointAuthorizedReportResult<PlaybackSessionReportResult>> => {
+        if (!authorized) {
+            return { authorized: false };
+        }
+
+        return {
+            authorized: true,
+            result: await report()
+        };
+    }
+);
 
 describe('playback state mutation resolver', () => {
     beforeEach(() => {
@@ -31,8 +53,8 @@ describe('playback state mutation resolver', () => {
             conflict: null,
             changed: true
         });
-        const isAuthorized = jest.fn().mockReturnValue(true);
-        const resolver = createReportPlaybackStateMutationResolver(report, isAuthorized);
+        const runAuthorized = authorizeReports();
+        const resolver = createReportPlaybackStateMutationResolver(report, runAuthorized);
 
         await resolver(null, {
             input: {
@@ -40,6 +62,7 @@ describe('playback state mutation resolver', () => {
                 registrationGeneration: 3,
                 registrationProof: 'proof-3',
                 sequence: 1,
+                expectedRevision: 0,
                 claimActive: true,
                 state: 'playing',
                 currentMusicId: '42',
@@ -58,11 +81,14 @@ describe('playback state mutation resolver', () => {
             endpointId: 'web-tab-1',
             originClientId: 'origin-1'
         });
-        expect(isAuthorized).toHaveBeenCalledWith({
-            endpointId: 'web-tab-1',
-            registrationGeneration: 3,
-            registrationProof: 'proof-3'
-        });
+        expect(runAuthorized).toHaveBeenCalledWith(
+            {
+                endpointId: 'web-tab-1',
+                registrationGeneration: 3,
+                registrationProof: 'proof-3'
+            },
+            expect.any(Function)
+        );
     });
 
     it('keeps an accepted mutation successful when notification fails', async () => {
@@ -78,7 +104,7 @@ describe('playback state mutation resolver', () => {
                 conflict: null,
                 changed: true
             }),
-            jest.fn().mockReturnValue(true)
+            authorizeReports()
         );
 
         await expect(resolver(null, {
@@ -87,6 +113,7 @@ describe('playback state mutation resolver', () => {
                 registrationGeneration: 1,
                 registrationProof: 'proof-1',
                 sequence: 1,
+                expectedRevision: 0,
                 claimActive: true,
                 state: 'playing',
                 currentMusicId: '42',
@@ -105,7 +132,7 @@ describe('playback state mutation resolver', () => {
                 conflict: { reason: 'active-device', session: snapshot },
                 changed: false
             }),
-            jest.fn().mockReturnValue(true)
+            authorizeReports()
         );
 
         await resolver(null, {
@@ -114,6 +141,7 @@ describe('playback state mutation resolver', () => {
                 registrationGeneration: 1,
                 registrationProof: 'proof-2',
                 sequence: 1,
+                expectedRevision: 1,
                 claimActive: false,
                 state: 'paused',
                 currentMusicId: '42',
@@ -133,7 +161,7 @@ describe('playback state mutation resolver', () => {
                 conflict: null,
                 changed: true
             }),
-            jest.fn().mockReturnValue(true)
+            authorizeReports()
         );
 
         await resolver(null, {
@@ -142,6 +170,7 @@ describe('playback state mutation resolver', () => {
                 registrationGeneration: 1,
                 registrationProof: 'proof-1',
                 sequence: 2,
+                expectedRevision: 1,
                 claimActive: false,
                 state: 'playing',
                 currentMusicId: '42',
@@ -163,7 +192,7 @@ describe('playback state mutation resolver', () => {
         const report = jest.fn();
         const resolver = createReportPlaybackStateMutationResolver(
             report,
-            jest.fn().mockReturnValue(false)
+            authorizeReports(false)
         );
 
         await expect(resolver(null, {
@@ -172,6 +201,7 @@ describe('playback state mutation resolver', () => {
                 registrationGeneration: 1,
                 registrationProof: 'challenger-proof',
                 sequence: 1,
+                expectedRevision: 0,
                 claimActive: true,
                 state: 'playing',
                 currentMusicId: '42',

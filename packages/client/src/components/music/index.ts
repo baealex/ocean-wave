@@ -7,6 +7,7 @@ export { default as MusicTagFilterPanelContent } from './MusicTagFilterPanelCont
 export { default as MusicTagPanelContent } from './MusicTagPanelContent';
 export { default as PlaybackCommandFeedback } from './PlaybackCommandFeedback';
 export { default as PlaybackDeviceMenu } from './PlaybackDeviceMenu';
+export { default as PlaybackQueueConflictNotice } from './PlaybackQueueConflictNotice';
 export { default as RemotePlaybackControls } from './RemotePlaybackControls';
 export { default as RemotePlaybackOwnershipNotice } from './RemotePlaybackOwnershipNotice';
 export { default as RemotePlaybackUnavailable } from './RemotePlaybackUnavailable';

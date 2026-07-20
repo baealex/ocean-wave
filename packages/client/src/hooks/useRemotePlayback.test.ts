@@ -15,6 +15,7 @@ const createSession = (
     id: 'session-1',
     state: 'playing',
     activeDeviceId: 'remote-tab',
+    activeDeviceSequence: 3,
     currentMusicId: 'track-1',
     positionMs: 1_000,
     positionUpdatedAt: '2026-07-20T00:00:00.000Z',
