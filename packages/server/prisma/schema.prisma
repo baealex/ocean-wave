@@ -214,6 +214,30 @@ model PlaybackSession {
     @@index([currentMusicId])
 }
 
+model PlaybackDevice {
+    id         String             @id
+    name       String
+    type       String
+    lastSeenAt DateTime
+    createdAt  DateTime           @default(now())
+    updatedAt  DateTime           @updatedAt
+    Endpoint   PlaybackEndpoint[]
+
+    @@index([lastSeenAt])
+}
+
+model PlaybackEndpoint {
+    id           String         @id
+    deviceId     String
+    capabilities String         @default("[]")
+    lastSeenAt   DateTime
+    createdAt    DateTime       @default(now())
+    updatedAt    DateTime       @updatedAt
+    Device       PlaybackDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+    @@index([deviceId, lastSeenAt])
+}
+
 model PlaybackQueue {
     id           Int                 @id @default(autoincrement())
     sessionId    Int                 @unique

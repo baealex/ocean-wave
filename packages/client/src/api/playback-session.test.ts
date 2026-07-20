@@ -47,6 +47,8 @@ describe('playback session API', () => {
         });
         const input = {
             deviceId: 'web-tab-7',
+            registrationGeneration: 3,
+            registrationProof: 'proof-3',
             sequence: 3,
             claimActive: true,
             state: 'playing' as const,

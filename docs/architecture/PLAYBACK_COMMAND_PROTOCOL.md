@@ -85,7 +85,7 @@ lastEndpointSequence
 
 The server derives requester identity from the registered socket. It never trusts a requester endpoint id supplied as ordinary command data.
 
-Registration returns a server-owned `registrationGeneration` and `commandEpoch`. The generation increments whenever an endpoint is rebound, while the command epoch is a random identifier created once per command-coordinator process.
+Registration returns a server-owned `registrationGeneration`, `commandEpoch`, and unpredictable `registrationProof`. The generation increments whenever an endpoint is rebound, while the command epoch is a random identifier created once per command-coordinator process. The proof exists only for that live registration, is never persisted or exposed by the registry query, and authorizes compatibility GraphQL playback-state reports from that exact generation.
 
 Endpoint registration is fenced as follows:
 
@@ -94,6 +94,7 @@ Endpoint registration is fenced as follows:
 - A different live `endpointInstanceId` attempting to bind the same `endpointId` receives `ENDPOINT_ID_CONFLICT`; the existing binding is not replaced. On the first conflict, the server records the challenger and returns `retry-same-endpoint` rather than rotating immediately.
 - The challenger retries the same endpoint after the returned relative delay. The server must observe this conflict for at least one full endpoint lease TTL plus its disconnect grace. If the incumbent disconnects or its lease expires during that window, the challenger binds the original `endpointId` and advances the generation. This is the normal reload-race path.
 - Only when the incumbent remains responsive and renews its lease throughout that entire grace may the server return `rotate-endpoint`. That proves two live documents exist; the challenger then generates a new `endpointId` in its own `sessionStorage` and registers again.
+- A persisted endpoint that belongs to a different installation id is an identity collision, not a reload race. The server never reparents that row; it returns `rotate-endpoint` immediately so the challenger creates a new tab identity.
 - Every dispatch is bound to the exact target socket and registration generation. Rebinding terminalizes or times out commands from the fenced generation; the new registration never resumes or re-executes them.
 
 These rules make a duplicated tab safe without allowing it to steal the active command route silently.
@@ -106,6 +107,7 @@ type PlaybackEndpointRegistrationAck =
         endpointId: string;
         registrationGeneration: number;
         commandEpoch: string;
+        registrationProof: string;
       }
     | {
         protocolVersion: 1;
@@ -114,10 +116,75 @@ type PlaybackEndpointRegistrationAck =
         code: 'ENDPOINT_ID_CONFLICT';
         resolution: 'retry-same-endpoint' | 'rotate-endpoint';
         retryAfterMs: number;
+      }
+    | {
+        protocolVersion: 1;
+        status: 'rejected';
+        endpointId: string | null;
+        code: 'INVALID_ENDPOINT_REGISTRATION';
+        resolution: 'none';
+        retryAfterMs: null;
+      }
+    | {
+        protocolVersion: 1;
+        status: 'rejected';
+        endpointId: string | null;
+        code: 'ENDPOINT_REGISTRATION_FAILED';
+        resolution: 'retry-same-endpoint';
+        retryAfterMs: number;
+      }
+    | {
+        protocolVersion: 1;
+        status: 'rejected';
+        endpointId: string | null;
+        code: 'PLAYBACK_ENDPOINT_CAPACITY_REACHED';
+        resolution: 'none';
+        retryAfterMs: null;
       };
 ```
 
-Collision grace is measured and decided by the server. The registration acknowledgement supplies only a relative retry delay, so page reload recovery does not depend on synchronized clocks. A client never rotates while the server says `retry-same-endpoint`.
+Collision grace is measured and decided by the server. The registration acknowledgement supplies only a relative retry delay, so page reload recovery does not depend on synchronized clocks. A client never rotates while the server says `retry-same-endpoint`. Invalid payloads are terminal for that registration attempt, transient persistence failures return a bounded relative delay for retrying the same endpoint, and genuine all-live registry capacity returns a terminal response that tells the user to close another playback tab instead of retrying forever.
+
+### Implemented endpoint registry baseline
+
+The web registry persists browser installations and tab endpoints separately:
+
+```text
+PlaybackDevice
+- id (localStorage installation id)
+- name
+- type: desktop-web | mobile-web
+- lastSeenAt
+
+PlaybackEndpoint
+- id (sessionStorage tab id)
+- deviceId
+- capabilities
+- lastSeenAt
+```
+
+Online presence, socket routing, `endpointInstanceId`, `registrationGeneration`, and `registrationProof` remain process-local lease state. They are never reconstructed from a stale database row. A reconnect registers again, advances the generation, rotates the proof, and refreshes the persisted observation time. Generations come from one bounded process-local counter rather than an endpoint-keyed history, so identity churn does not create unbounded memory; the exact socket and unpredictable proof remain the authorization fences if that GraphQL-Int counter eventually wraps. A user rename updates the device row, and later registrations preserve that friendly name instead of restoring the browser default.
+
+The registry exposes a route lookup containing the exact Socket.IO socket, device and endpoint ids, registration generation, capabilities, and last endpoint sequence. Command delivery must snapshot that route and fence every later acknowledgement against its socket id and generation; `socket.data` is cleared with the generation when a route is removed and is never sufficient authority by itself.
+
+The initial registry timing is fixed as follows:
+
+```text
+heartbeat interval = 15 seconds
+endpoint lease TTL = 45 seconds
+presence sweep interval = 5 seconds
+collision retry delay = 1 second
+registration persistence retry delay = 5 seconds
+duplicated-tab collision grace = 50 seconds (TTL + 5-second disconnect grace)
+```
+
+A normal Socket.IO disconnect removes its route immediately. A missed disconnect is repaired by the TTL sweep, which fences the route and sends `playback:endpoint-lease-expired` to a still-connected document. That event is only a fast path: every heartbeat is also acknowledged, and a missing or expired generation receives `PLAYBACK_ENDPOINT_LEASE_EXPIRED` with `register-again`, so the next delivered heartbeat repairs a lost lease-expiry event. The document registers the same endpoint again to obtain a new generation and proof; a dead document remains offline. A heartbeat received after expiry cannot resurrect the old generation. The last observation is persisted on registration, when the route becomes offline, and at most once per 24 hours for a continuously live route. The coarse write keeps live metadata ahead of retention without writing every 15 seconds.
+
+Registration intake counts every event, including malformed and in-flight duplicates, before validation. It is bounded per socket and globally, runs through an eight-slot concurrency pool, and rejects overlapping contenders for the same endpoint so one stalled persistence call cannot block unrelated endpoints. A socket may have one coalesced registration in flight, at most four retained acknowledgement waiters, and at most 70 attempts per minute; the global pending cap is 128. Admitted endpoint and device identities remain provisional capacity reservations until their persistence operation settles. Those reservations join live routes in every persistence-protection snapshot, and near a device or global capacity boundary only one provisional candidate proceeds at a time. Collision memory expires abandoned records after 100 seconds, removes resolved rotations, and is capped at 16 challengers per endpoint and 256 globally.
+
+Persistence retains at most 128 browser devices and 32 endpoints per device, while recovery queries use the same finite limits. Devices unseen for 90 days and individual endpoints unseen for 30 days are pruned on registration. At either limit, the oldest device or endpoint that is neither protected by a current live route nor responsible for the active session is recycled before the new identity is stored. Capacity is terminal only when every relevant slot is protected as live or by the current active endpoint, and the client surfaces that state without automatic retry.
+
+`playbackDeviceRegistry` is the GraphQL recovery query for devices, endpoints, online state, the active endpoint, registration generations, `commandEpoch`, and server time. `renamePlaybackDevice` is the user-facing metadata mutation and returns only the committed `{ deviceId, name }` patch, so a later recovery read cannot turn a successful rename into a failed mutation. After applying that patch, the origin starts a new recovery read that fences every pre-mutation request; a failed recovery keeps the committed name. The best-effort `playback:endpoints-invalidated` notification prompts other clients to refetch the complete registry snapshot after registration, offline detection, or rename; it is not itself authoritative. An accepted user claim also emits `active-changed`: origin and remote clients patch the active endpoint and device flags immediately, then start one fenced recovery read only when the active endpoint actually differs. Ordinary checkpoints do not invalidate the device registry.
 
 `endpointSequence` is the explicit name for the existing playback report sequence. The endpoint owns this counter, stores it in `sessionStorage`, and increments it once for every state report or completed remote-command transition submitted for authoritative commit. Reload and reconnect preserve it. Heartbeats report `lastEndpointSequence` for diagnostics but never increment it. The server-owned `commandSequence` is a separate dispatch-order counter and never substitutes for `endpointSequence`.
 
@@ -138,7 +205,9 @@ Protocol event names are fixed as follows:
 | Event | Direction | Purpose |
 | --- | --- | --- |
 | `playback:endpoint-register` | Endpoint -> server, acknowledged | Bind device and endpoint identity to the current socket |
-| `playback:endpoint-heartbeat` | Endpoint -> server, volatile | Refresh endpoint presence without changing endpoint sequence |
+| `playback:endpoint-heartbeat` | Endpoint -> server, periodically acknowledged | Refresh endpoint presence or return a stale-generation recovery instruction without changing endpoint sequence |
+| `playback:endpoint-lease-expired` | Server -> endpoint, best effort | Fence an expired generation and prompt a still-connected document to register again |
+| `playback:endpoints-invalidated` | Server -> clients, best effort | Prompt a GraphQL registry refetch after presence or metadata changes |
 | `playback:command-request` | Controller -> server, acknowledged | Submit one user intent |
 | `playback:command-execute` | Server -> target, acknowledged | Deliver a validated command for target readiness checks |
 | `playback:command-start` | Target -> server, acknowledged | Obtain the execution grant that permits local media work |

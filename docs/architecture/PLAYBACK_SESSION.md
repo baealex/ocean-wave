@@ -19,7 +19,7 @@ The next web phase adds acknowledged remote control for one active playback endp
 ## 2. Current State
 
 The web client currently owns playback through `queueStore`, `WebAudioChannel`, and `localStorage`.
-It also keeps recoverable play-count checkpoints in IndexedDB. The server stores completed `PlaybackEvent` records, while the Socket.IO connector list represents live connections rather than playback devices.
+It also keeps recoverable play-count checkpoints in IndexedDB. The server stores completed `PlaybackEvent` records and persistent playback-device metadata. The legacy Socket.IO connector list still represents raw connections, while the playback endpoint registry separately represents browser devices and tab leases.
 
 These responsibilities remain separate:
 
@@ -30,7 +30,9 @@ These responsibilities remain separate:
 | Recoverable play-count delivery | Existing IndexedDB playback checkpoints |
 | Cross-client playback snapshot | Server `PlaybackSession` |
 | Cross-client queue snapshot | Server `PlaybackQueue` |
-| Connection presence | Existing Socket.IO connector registry |
+| Playback device metadata | Server `PlaybackDevice` and `PlaybackEndpoint` records |
+| Live endpoint presence | Server endpoint lease registry |
+| Raw connection presence | Existing Socket.IO connector registry |
 | Realtime change notification | Socket.IO |
 | Acknowledged live playback commands | Socket.IO command channel |
 
@@ -68,13 +70,13 @@ A playback endpoint is the exact web tab that owns an audio element, not a Socke
 
 Each document lifetime also creates an in-memory `endpointInstanceId` used only to fence registrations. If another document inherits the same `endpointId`, the registry keeps the existing live binding and gives a normal reload one full lease-expiry grace to reclaim that id. Only a challenger that remains concurrent with a responsive incumbent rotates its endpoint id, so a duplicated tab cannot silently replace the command target. Reconnects advance a server-owned registration generation and fence the previous socket.
 
-The current API fields named `deviceId` and `activeDeviceId` contain the tab-scoped endpoint id. The device-registry phase must introduce the explicit `endpointId` terminology without reinterpreting existing persisted values as installation ids.
+The current playback-state API fields named `deviceId` and `activeDeviceId` contain the tab-scoped endpoint id. The registry uses explicit installation `deviceId` and tab `endpointId` fields, while the playback-state API keeps its compatibility field until a dedicated migration. Existing persisted active ids are never reinterpreted as installation ids.
 
 ## 5. Active Playback Endpoint
 
-Only the active playback endpoint may advance the shared snapshot.
+Only a currently registered active playback endpoint may advance the shared snapshot.
 
-A report currently contains `deviceId`, a per-endpoint monotonic `sequence`, and `claimActive`. The explicit endpoint contract will rename the input to `endpointId`. The server applies these rules transactionally:
+A report currently contains `deviceId`, a per-endpoint monotonic `sequence`, `claimActive`, and the current `registrationGeneration` plus unpredictable `registrationProof`. The explicit endpoint contract will rename the input to `endpointId`. The server first verifies the process-local registration proof and then applies these rules transactionally:
 
 1. If no active endpoint exists, a user-initiated playback report may claim the session.
 2. A report from the active endpoint is accepted when its sequence is newer than the last accepted sequence for that endpoint.
@@ -82,6 +84,7 @@ A report currently contains `deviceId`, a per-endpoint monotonic `sequence`, and
 4. `claimActive` is sent only after a local user action that starts or takes over playback. Page load, passive restore, and notification handling never claim it.
 5. An accepted claim replaces the previous active endpoint and increments the session revision.
 6. Disconnecting a socket does not immediately clear the active endpoint because reloads and brief network loss are normal. Presence is advisory; persisted state remains readable.
+7. A tab without an acknowledged registration buffers only its latest local media snapshot. Unresolved takeover authority is tracked separately: an explicit user claim remains sticky across later checkpoints and network failures until an authoritative accepted or conflict response. A formerly active endpoint may also buffer pause or stop during a registration gap. Registration loss or endpoint rotation fences any old in-flight response and rebuilds exactly one report from the newest local values with the new endpoint identity, sequence, generation, proof, and claim when required; it never reports as an incumbent copied through `sessionStorage`.
 
 The read-only foundation has no remote command that can force another player to pause. The command phase may control only the current active endpoint. Moving playback to the requesting endpoint is a separate atomic handoff flow.
 
@@ -105,7 +108,7 @@ PlaybackSession
 - updatedAt
 ```
 
-The queue is related to the session through `PlaybackQueue.sessionId` and is queried separately. The device-registry implementation may rename the active endpoint fields, but it must preserve their existing tab-scoped values during migration.
+The queue is related to the session through `PlaybackQueue.sessionId` and is queried separately. The registry exposes `activeEndpointId` by reading the existing tab-scoped `activeDeviceId`; it preserves that value rather than changing its meaning during the identity migration.
 
 Every accepted report increments `revision`. Queries and notifications return the complete public snapshot, including the committed revision. Clients ignore a notification whose revision is not newer than the snapshot they already hold.
 
@@ -153,7 +156,7 @@ mutation ReportPlaybackState($input: ReportPlaybackStateInput!) {
 }
 ```
 
-The input contains `deviceId`, `sequence`, `claimActive`, `state`, `currentMusicId`, `positionMs`, and the client observation time used only for validation and diagnostics. The server writes its own `positionUpdatedAt` and validates that the music exists and the position is finite and non-negative.
+The input contains `deviceId`, `registrationGeneration`, `registrationProof`, `sequence`, `claimActive`, `state`, `currentMusicId`, `positionMs`, and the client observation time used only for validation and diagnostics. The proof is a live authorization secret, not persisted domain data. The server writes its own `positionUpdatedAt` and validates that the endpoint registration is current, the music exists, and the position is finite and non-negative.
 
 After commit, the server emits:
 
@@ -232,7 +235,7 @@ For the implemented server queue:
 - Socket reconnect always triggers a GraphQL snapshot read before deltas are trusted.
 - Server restart may lose connector presence but not the persisted session or queue.
 - A disappeared active endpoint leaves a stale readable snapshot; it does not block an explicit local claim from another web player.
-- Logs should include session revision, endpoint id, and rejection reason, but no audio file paths or authentication secrets.
+- Logs should include session revision, endpoint id, and rejection reason, but no audio file paths, authentication secrets, or registration proofs.
 
 ## 11. Delivery Sequence
 
@@ -270,17 +273,32 @@ Acceptance evidence:
 - Server failure leaves local web playback usable.
 - Missing tracks and invalid current indexes are repaired safely.
 
-### Phase D: remote command contract
+### Phase D: remote command contract (completed)
 
 - Use the [Remote Playback Command Protocol](./PLAYBACK_COMMAND_PROTOCOL.md) for web-to-web play, pause, next, previous, and seek commands.
 - Separate stable device identity, tab-scoped playback endpoints, and ephemeral Socket.IO connections.
 - Fence commands with session and queue revisions, command ids, endpoint sequence, separate deadlines, and acknowledgements.
 - Keep one active output endpoint and one in-flight command per playback session.
 
-### Phase E: endpoint registry and remote command delivery
+### Phase E1: endpoint registry (completed)
 
 - Add persistent browser-device identity and tab-scoped endpoint registration.
 - Track capabilities, heartbeat, TTL, and current endpoint-to-socket routing.
+- Expose the complete registry and active endpoint through GraphQL.
+- Show registered desktop and mobile web devices with online, offline, active, and rename states.
+
+Acceptance evidence:
+
+- One `localStorage` installation owns multiple `sessionStorage` tab endpoints without duplicate device rows.
+- Reconnect advances the registration generation and fences the previous socket.
+- A heartbeat miss becomes offline through a finite TTL sweep.
+- A duplicated tab cannot replace a responsive endpoint silently and rotates only after the server proves a live collision.
+- A duplicated challenger cannot report playback state with the incumbent endpoint id before registration succeeds.
+- A missed presence notification is repaired by the GraphQL registry query.
+- A missed lease-expiry event is repaired by an acknowledged heartbeat response.
+
+### Phase E2: remote command delivery
+
 - Implement acknowledged command dispatch, completion, timeout, and idempotency against the Phase D contract.
 - Add web controller UI without changing native mobile behavior.
 

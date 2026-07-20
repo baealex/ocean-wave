@@ -1,6 +1,10 @@
 import { connectors } from '~/socket/connectors';
 import { PLAYBACK_STATE_UPDATED } from '~/socket/playback';
-import { createReportPlaybackStateMutationResolver } from './playback.mutation.resolver';
+import { PLAYBACK_ENDPOINTS_INVALIDATED } from '~/socket/playback-endpoints';
+import {
+    createRenamePlaybackDeviceMutationResolver,
+    createReportPlaybackStateMutationResolver
+} from './playback.mutation.resolver';
 
 const snapshot = {
     id: '1',
@@ -27,11 +31,14 @@ describe('playback state mutation resolver', () => {
             conflict: null,
             changed: true
         });
-        const resolver = createReportPlaybackStateMutationResolver(report);
+        const isAuthorized = jest.fn().mockReturnValue(true);
+        const resolver = createReportPlaybackStateMutationResolver(report, isAuthorized);
 
         await resolver(null, {
             input: {
                 deviceId: 'web-tab-1',
+                registrationGeneration: 3,
+                registrationProof: 'proof-3',
                 sequence: 1,
                 claimActive: true,
                 state: 'playing',
@@ -44,6 +51,17 @@ describe('playback state mutation resolver', () => {
         expect(notifySpy).toHaveBeenCalledWith(PLAYBACK_STATE_UPDATED, {
             ...snapshot,
             originClientId: 'origin-1'
+        });
+        expect(notifySpy).toHaveBeenCalledWith(PLAYBACK_ENDPOINTS_INVALIDATED, {
+            reason: 'active-changed',
+            deviceId: null,
+            endpointId: 'web-tab-1',
+            originClientId: 'origin-1'
+        });
+        expect(isAuthorized).toHaveBeenCalledWith({
+            endpointId: 'web-tab-1',
+            registrationGeneration: 3,
+            registrationProof: 'proof-3'
         });
     });
 
@@ -59,12 +77,15 @@ describe('playback state mutation resolver', () => {
                 session: snapshot,
                 conflict: null,
                 changed: true
-            })
+            }),
+            jest.fn().mockReturnValue(true)
         );
 
         await expect(resolver(null, {
             input: {
                 deviceId: 'web-tab-1',
+                registrationGeneration: 1,
+                registrationProof: 'proof-1',
                 sequence: 1,
                 claimActive: true,
                 state: 'playing',
@@ -75,7 +96,7 @@ describe('playback state mutation resolver', () => {
         expect(consoleErrorSpy).toHaveBeenCalledWith(error);
     });
 
-    it('does not notify for conflicts or idempotent reports', async () => {
+    it('does not notify for conflicts', async () => {
         const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
         const resolver = createReportPlaybackStateMutationResolver(
             jest.fn().mockResolvedValue({
@@ -83,12 +104,15 @@ describe('playback state mutation resolver', () => {
                 session: snapshot,
                 conflict: { reason: 'active-device', session: snapshot },
                 changed: false
-            })
+            }),
+            jest.fn().mockReturnValue(true)
         );
 
         await resolver(null, {
             input: {
                 deviceId: 'web-tab-2',
+                registrationGeneration: 1,
+                registrationProof: 'proof-2',
                 sequence: 1,
                 claimActive: false,
                 state: 'paused',
@@ -98,5 +122,120 @@ describe('playback state mutation resolver', () => {
         });
 
         expect(notifySpy).not.toHaveBeenCalled();
+    });
+
+    it('does not invalidate the device registry for an ordinary checkpoint', async () => {
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
+        const resolver = createReportPlaybackStateMutationResolver(
+            jest.fn().mockResolvedValue({
+                type: 'accepted',
+                session: { ...snapshot, positionMs: 2_000, revision: 2 },
+                conflict: null,
+                changed: true
+            }),
+            jest.fn().mockReturnValue(true)
+        );
+
+        await resolver(null, {
+            input: {
+                deviceId: 'web-tab-1',
+                registrationGeneration: 1,
+                registrationProof: 'proof-1',
+                sequence: 2,
+                claimActive: false,
+                state: 'playing',
+                currentMusicId: '42',
+                positionMs: 2_000
+            }
+        });
+
+        expect(notifySpy).toHaveBeenCalledWith(
+            PLAYBACK_STATE_UPDATED,
+            expect.objectContaining({ positionMs: 2_000 })
+        );
+        expect(notifySpy).not.toHaveBeenCalledWith(
+            PLAYBACK_ENDPOINTS_INVALIDATED,
+            expect.anything()
+        );
+    });
+
+    it('rejects reports without current registration authority', async () => {
+        const report = jest.fn();
+        const resolver = createReportPlaybackStateMutationResolver(
+            report,
+            jest.fn().mockReturnValue(false)
+        );
+
+        await expect(resolver(null, {
+            input: {
+                deviceId: 'web-tab-duplicate',
+                registrationGeneration: 1,
+                registrationProof: 'challenger-proof',
+                sequence: 1,
+                claimActive: true,
+                state: 'playing',
+                currentMusicId: '42',
+                positionMs: 1_000
+            }
+        })).rejects.toMatchObject({
+            extensions: { code: 'PLAYBACK_ENDPOINT_REGISTRATION_REQUIRED' }
+        });
+        expect(report).not.toHaveBeenCalled();
+    });
+});
+
+describe('playback device mutation resolver', () => {
+    beforeEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it('returns the committed rename result and notifies other clients', async () => {
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
+        const rename = jest.fn().mockResolvedValue({
+            id: 'browser-1',
+            name: 'Listening Room',
+            type: 'desktop-web'
+        });
+        const resolver = createRenamePlaybackDeviceMutationResolver(rename);
+
+        await expect(resolver(null, {
+            input: {
+                deviceId: ' browser-1 ',
+                name: 'Listening Room'
+            },
+            originClientId: 'origin-1'
+        })).resolves.toEqual({
+            deviceId: 'browser-1',
+            name: 'Listening Room'
+        });
+        expect(rename).toHaveBeenCalledWith(' browser-1 ', 'Listening Room');
+        expect(notifySpy).toHaveBeenCalledWith(PLAYBACK_ENDPOINTS_INVALIDATED, {
+            reason: 'renamed',
+            deviceId: 'browser-1',
+            endpointId: null,
+            originClientId: 'origin-1'
+        });
+    });
+
+    it('keeps a committed rename successful when invalidation delivery fails', async () => {
+        const error = new Error('notification failed');
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+        jest.spyOn(connectors, 'notify').mockImplementation(() => {
+            throw error;
+        });
+        const resolver = createRenamePlaybackDeviceMutationResolver(
+            jest.fn().mockResolvedValue({
+                id: 'browser-1',
+                name: 'Listening Room'
+            })
+        );
+
+        await expect(resolver(null, {
+            input: { deviceId: 'browser-1', name: 'Listening Room' }
+        })).resolves.toEqual({
+            deviceId: 'browser-1',
+            name: 'Listening Room'
+        });
+        expect(consoleErrorSpy).toHaveBeenCalledWith(error);
     });
 });

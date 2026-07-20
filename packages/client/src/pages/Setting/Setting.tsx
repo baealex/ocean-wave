@@ -6,7 +6,7 @@ import { socket } from '~/socket';
 
 import {
     AudioSettingsSection,
-    ConnectorsSection,
+    PlaybackDevicesSection,
     PlayModeSection,
     SynchronizationSection,
     TroubleshootingSection
@@ -46,7 +46,7 @@ export default function Setting() {
                 <SynchronizationSection onSyncMusic={handleClickSyncMusic} />
                 <PlayModeSection />
                 <AudioSettingsSection />
-                <ConnectorsSection />
+                <PlaybackDevicesSection />
                 <TroubleshootingSection />
             </div>
 

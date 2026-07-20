@@ -58,8 +58,41 @@ export const playbackType = gql`
         conflict: PlaybackQueueConflict
     }
 
+    type PlaybackEndpoint {
+        id: ID!
+        capabilities: [String!]!
+        lastSeenAt: String!
+        online: Boolean!
+        active: Boolean!
+        registrationGeneration: Int
+    }
+
+    type PlaybackDevice {
+        id: ID!
+        name: String!
+        type: String!
+        lastSeenAt: String!
+        online: Boolean!
+        active: Boolean!
+        endpoints: [PlaybackEndpoint!]!
+    }
+
+    type PlaybackDeviceRegistry {
+        commandEpoch: String!
+        activeEndpointId: ID
+        serverTime: String!
+        devices: [PlaybackDevice!]!
+    }
+
+    type PlaybackDeviceRenameResult {
+        deviceId: ID!
+        name: String!
+    }
+
     input ReportPlaybackStateInput {
         deviceId: String!
+        registrationGeneration: Int!
+        registrationProof: String!
         sequence: Int!
         claimActive: Boolean!
         state: PlaybackState!
@@ -76,12 +109,18 @@ export const playbackType = gql`
         repeatMode: PlaybackQueueRepeatMode!
         expectedRevision: Int!
     }
+
+    input RenamePlaybackDeviceInput {
+        deviceId: ID!
+        name: String!
+    }
 `;
 
 export const playbackQuery = gql`
     type Query {
         playbackSession: PlaybackSession
         playbackQueue: PlaybackQueue
+        playbackDeviceRegistry: PlaybackDeviceRegistry!
     }
 `;
 
@@ -92,6 +131,10 @@ export const playbackMutation = gql`
             originClientId: String
         ): PlaybackSessionReportResult!
         savePlaybackQueue(input: SavePlaybackQueueInput!): PlaybackQueueSaveResult!
+        renamePlaybackDevice(
+            input: RenamePlaybackDeviceInput!
+            originClientId: String
+        ): PlaybackDeviceRenameResult!
     }
 `;
 
