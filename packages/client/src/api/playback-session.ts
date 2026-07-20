@@ -20,6 +20,8 @@ export interface PlaybackSessionSnapshot {
 
 export interface ReportPlaybackStateInput {
     deviceId: string;
+    registrationGeneration: number;
+    registrationProof: string;
     sequence: number;
     claimActive: boolean;
     state: SharedPlaybackState;

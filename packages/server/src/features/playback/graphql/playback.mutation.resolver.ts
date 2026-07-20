@@ -3,7 +3,16 @@ import type { IResolvers } from '@graphql-tools/utils';
 import { connectors } from '~/socket/connectors';
 import { withOriginClientId } from '~/socket/origin-client';
 import { PLAYBACK_STATE_UPDATED } from '~/socket/playback';
+import {
+    PLAYBACK_ENDPOINTS_INVALIDATED,
+    playbackEndpointRegistry,
+    type PlaybackEndpointReportAuthorization
+} from '~/socket/playback-endpoints';
 
+import {
+    isPlaybackDeviceServiceError,
+    renamePlaybackDevice
+} from '../services/playback-device';
 import {
     isPlaybackSessionServiceError,
     reportPlaybackState,
@@ -26,6 +35,10 @@ class PlaybackGraphQLError extends Error {
 }
 
 const toGraphQLError = (error: unknown) => {
+    if (isPlaybackDeviceServiceError(error)) {
+        return new PlaybackGraphQLError(error.message, error.code);
+    }
+
     if (isPlaybackQueueServiceError(error)) {
         return new PlaybackGraphQLError(error.message, error.code);
     }
@@ -46,23 +59,58 @@ const notifySafely = (callback: () => void) => {
 };
 
 export const createReportPlaybackStateMutationResolver = (
-    report = reportPlaybackState
+    report = reportPlaybackState,
+    isAuthorized = (authorization: PlaybackEndpointReportAuthorization) => (
+        playbackEndpointRegistry.isReportAuthorized(authorization)
+    )
 ) => {
     return async (_: unknown, {
         input,
         originClientId
     }: {
-        input: ReportPlaybackStateInput;
+        input: ReportPlaybackStateInput & {
+            registrationGeneration: number;
+            registrationProof: string;
+        };
         originClientId?: string | null;
     }) => {
         try {
-            const result = await report(input);
+            const {
+                registrationGeneration,
+                registrationProof,
+                ...reportInput
+            } = input;
+
+            if (!isAuthorized({
+                endpointId: reportInput.deviceId.trim(),
+                registrationGeneration,
+                registrationProof
+            })) {
+                throw new PlaybackGraphQLError(
+                    'A current playback endpoint registration is required.',
+                    'PLAYBACK_ENDPOINT_REGISTRATION_REQUIRED'
+                );
+            }
+
+            const result = await report(reportInput);
 
             if (result.type === 'accepted' && result.changed) {
                 notifySafely(() => {
                     connectors.notify(
                         PLAYBACK_STATE_UPDATED,
                         withOriginClientId(result.session, originClientId)
+                    );
+                });
+            }
+            if (result.type === 'accepted' && reportInput.claimActive) {
+                notifySafely(() => {
+                    connectors.notify(
+                        PLAYBACK_ENDPOINTS_INVALIDATED,
+                        withOriginClientId({
+                            reason: 'active-changed' as const,
+                            deviceId: null,
+                            endpointId: result.session.activeDeviceId
+                        }, originClientId)
                     );
                 });
             }
@@ -96,9 +144,43 @@ export const createSavePlaybackQueueMutationResolver = (
     };
 };
 
+export const createRenamePlaybackDeviceMutationResolver = (
+    rename = renamePlaybackDevice
+) => {
+    return async (_: unknown, {
+        input,
+        originClientId
+    }: {
+        input: { deviceId: string; name: string };
+        originClientId?: string | null;
+    }) => {
+        try {
+            const device = await rename(input.deviceId, input.name);
+
+            notifySafely(() => {
+                connectors.notify(
+                    PLAYBACK_ENDPOINTS_INVALIDATED,
+                    withOriginClientId({
+                        reason: 'renamed' as const,
+                        deviceId: device.id,
+                        endpointId: null
+                    }, originClientId)
+                );
+            });
+            return {
+                deviceId: device.id,
+                name: device.name
+            };
+        } catch (error) {
+            throw toGraphQLError(error);
+        }
+    };
+};
+
 type PlaybackMutationResolvers = NonNullable<IResolvers['Mutation']>;
 
 export const playbackMutationResolvers: PlaybackMutationResolvers = {
     reportPlaybackState: createReportPlaybackStateMutationResolver(),
-    savePlaybackQueue: createSavePlaybackQueueMutationResolver()
+    savePlaybackQueue: createSavePlaybackQueueMutationResolver(),
+    renamePlaybackDevice: createRenamePlaybackDeviceMutationResolver()
 };

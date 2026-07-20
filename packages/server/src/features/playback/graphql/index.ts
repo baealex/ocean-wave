@@ -1,4 +1,5 @@
 export {
+    createRenamePlaybackDeviceMutationResolver,
     createReportPlaybackStateMutationResolver,
     createSavePlaybackQueueMutationResolver,
     playbackMutationResolvers

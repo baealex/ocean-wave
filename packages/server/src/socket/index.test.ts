@@ -1,12 +1,19 @@
 import type { Socket } from 'socket.io';
 
 import { connectors } from './connectors';
+import {
+    PLAYBACK_ENDPOINT_HEARTBEAT,
+    PLAYBACK_ENDPOINT_REGISTER,
+    playbackEndpointRegistry
+} from './playback-endpoints';
 import { SYNC_EVENT } from './sync';
 import { socketManager } from './index';
 
 describe('socket manager', () => {
     const allowedCommandEvents = [
         SYNC_EVENT,
+        PLAYBACK_ENDPOINT_REGISTER,
+        PLAYBACK_ENDPOINT_HEARTBEAT,
         'get-connectors',
         'remove-connector',
         'disconnect'
@@ -15,15 +22,18 @@ describe('socket manager', () => {
     beforeEach(() => {
         jest.restoreAllMocks();
         connectors.set([]);
+        playbackEndpointRegistry.clear();
     });
 
     afterEach(() => {
         connectors.set([]);
+        playbackEndpointRegistry.clear();
     });
 
     it('does not register ordinary data write events as Socket.IO commands', () => {
         const socket = {
             id: 'socket-1',
+            data: {},
             handshake: {
                 headers: {
                     'user-agent': 'test'

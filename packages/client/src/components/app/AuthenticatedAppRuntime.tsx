@@ -7,6 +7,7 @@ import { redirectToLogin } from '~/modules/auth-redirect';
 import { albumStore } from '~/store/album';
 import { artistStore } from '~/store/artist';
 import { musicStore } from '~/store/music';
+import { playbackDevicesStore } from '~/store/playback-devices';
 import { playbackSessionStore } from '~/store/playback-session';
 import { playbackQueueStore } from '~/store/playback-queue';
 import {
@@ -52,10 +53,12 @@ export default function AuthenticatedAppRuntime({
     }, [queryClient]);
 
     useEffect(() => {
+        playbackDevicesStore.connect();
         playbackSessionStore.connect();
         playbackQueueStore.connect();
 
         return () => {
+            playbackDevicesStore.disconnect();
             playbackSessionStore.disconnect();
             playbackQueueStore.disconnect();
         };

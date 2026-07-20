@@ -7,5 +7,5 @@ export const appCopy = {
         title: 'Settings',
         description: 'Manage sync, playback, audio, and devices.'
     },
-    connectors: { description: `Devices connected to this ${APP_BRAND_NAME} session.` }
+    playbackDevices: { description: `Browsers registered for playback in this ${APP_BRAND_NAME} library.` }
 } as const;

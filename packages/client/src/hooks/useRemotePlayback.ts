@@ -15,14 +15,15 @@ export interface RemotePlaybackSummary {
 }
 
 export default function useRemotePlayback(): RemotePlaybackSummary | null {
-    const [{ snapshot, receivedAtMs }] = useStore(playbackSessionStore);
+    const [{ snapshot, receivedAtMs, endpointId }] = useStore(playbackSessionStore);
     const [{ musicMap }] = useStore(musicStore);
     const [nowMs, setNowMs] = useState(Date.now());
     const isRemotePlayback = Boolean(
         snapshot
+        && endpointId
         && snapshot.state !== 'stopped'
         && snapshot.activeDeviceId
-        && snapshot.activeDeviceId !== playbackSessionStore.deviceId
+        && snapshot.activeDeviceId !== endpointId
         && snapshot.currentMusicId
     );
 

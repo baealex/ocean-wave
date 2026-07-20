@@ -16,6 +16,12 @@ import {
 } from './playlist';
 import { PLAYBACK_STATE_UPDATED } from './playback';
 import {
+    PLAYBACK_ENDPOINT_HEARTBEAT,
+    PLAYBACK_ENDPOINT_LEASE_EXPIRED,
+    PLAYBACK_ENDPOINT_REGISTER,
+    PLAYBACK_ENDPOINTS_INVALIDATED
+} from './playback-endpoints';
+import {
     TAG_CREATED,
     TAG_LIST_INVALIDATED,
     TAG_RENAMED
@@ -37,6 +43,10 @@ describe('socket event names', () => {
             PLAYLIST_REMOVE_MUSIC,
             PLAYLIST_CHANGE_MUSIC_ORDER,
             PLAYBACK_STATE_UPDATED,
+            PLAYBACK_ENDPOINT_REGISTER,
+            PLAYBACK_ENDPOINT_HEARTBEAT,
+            PLAYBACK_ENDPOINT_LEASE_EXPIRED,
+            PLAYBACK_ENDPOINTS_INVALIDATED,
             TAG_CREATED,
             TAG_RENAMED,
             TAG_LIST_INVALIDATED
@@ -54,6 +64,10 @@ describe('socket event names', () => {
             PLAYLIST_REMOVE_MUSIC: 'playlist:music-removed',
             PLAYLIST_CHANGE_MUSIC_ORDER: 'playlist:music-order-updated',
             PLAYBACK_STATE_UPDATED: 'playback:state-updated',
+            PLAYBACK_ENDPOINT_REGISTER: 'playback:endpoint-register',
+            PLAYBACK_ENDPOINT_HEARTBEAT: 'playback:endpoint-heartbeat',
+            PLAYBACK_ENDPOINT_LEASE_EXPIRED: 'playback:endpoint-lease-expired',
+            PLAYBACK_ENDPOINTS_INVALIDATED: 'playback:endpoints-invalidated',
             TAG_CREATED: 'tag:created',
             TAG_RENAMED: 'tag:renamed',
             TAG_LIST_INVALIDATED: 'tag:list-invalidated'
