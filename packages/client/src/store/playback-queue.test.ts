@@ -90,6 +90,78 @@ describe('PlaybackQueueStore', () => {
         expect(mocks.socketOff).toHaveBeenCalledWith('connect', expect.any(Function));
     });
 
+    it('does not let a delayed refresh regress a newly accepted save', async () => {
+        const initial = createSnapshot({ revision: 2 });
+        const accepted = createSnapshot({ revision: 3, repeatMode: 'all' });
+        mocks.fetchPlaybackQueue.mockResolvedValue({
+            type: 'success',
+            playbackQueue: initial
+        });
+        mocks.savePlaybackQueue.mockResolvedValue({
+            type: 'success',
+            savePlaybackQueue: {
+                type: 'accepted',
+                queue: accepted,
+                conflict: null
+            }
+        });
+        const store = new PlaybackQueueStore();
+        await store.refresh();
+
+        let resolveRefresh: ((value: unknown) => void) | undefined;
+        mocks.fetchPlaybackQueue.mockReturnValueOnce(new Promise((resolve) => {
+            resolveRefresh = resolve;
+        }));
+        const refresh = store.refresh();
+        store.save({ ...localSnapshot, repeatMode: 'all' });
+        await vi.waitFor(() => expect(store.state.snapshot).toEqual(accepted));
+        resolveRefresh?.({ type: 'success', playbackQueue: initial });
+
+        await expect(refresh).resolves.toEqual({
+            type: 'success',
+            snapshot: accepted
+        });
+        expect(store.state.snapshot).toEqual(accepted);
+    });
+
+    it('does not let a delayed refresh regress conflict recovery authority', async () => {
+        const initial = createSnapshot({ revision: 2 });
+        const authoritative = createSnapshot({
+            musicIds: ['7'],
+            revision: 4
+        });
+        mocks.fetchPlaybackQueue.mockResolvedValue({
+            type: 'success',
+            playbackQueue: initial
+        });
+        mocks.savePlaybackQueue.mockResolvedValue({
+            type: 'success',
+            savePlaybackQueue: {
+                type: 'conflict',
+                queue: authoritative,
+                conflict: { reason: 'stale-revision', queue: authoritative }
+            }
+        });
+        const store = new PlaybackQueueStore();
+        await store.refresh();
+
+        let resolveRefresh: ((value: unknown) => void) | undefined;
+        mocks.fetchPlaybackQueue.mockReturnValueOnce(new Promise((resolve) => {
+            resolveRefresh = resolve;
+        }));
+        const refresh = store.refresh();
+        store.save(localSnapshot);
+        await vi.waitFor(() => expect(store.state.conflict).not.toBeNull());
+        resolveRefresh?.({ type: 'success', playbackQueue: initial });
+
+        await refresh;
+        expect(store.state.snapshot).toEqual(authoritative);
+        expect(store.state.conflict).toEqual({
+            authoritative,
+            local: localSnapshot
+        });
+    });
+
     it('reports a bounded recovery read failure without reusing it as success', async () => {
         const snapshot = createSnapshot({ revision: 4 });
         mocks.fetchPlaybackQueue.mockResolvedValueOnce({
@@ -112,9 +184,8 @@ describe('PlaybackQueueStore', () => {
         expect(store.state.snapshot).toEqual(snapshot);
     });
 
-    it('holds a local change until the server revision is known', async () => {
+    it('does not rebase a pre-load local change over an existing server queue', async () => {
         const serverSnapshot = createSnapshot({ revision: 4 });
-        const accepted = createSnapshot({ revision: 5, repeatMode: 'all' });
         mocks.fetchPlaybackQueue.mockResolvedValue({
             type: 'success',
             playbackQueue: serverSnapshot
@@ -122,9 +193,9 @@ describe('PlaybackQueueStore', () => {
         mocks.savePlaybackQueue.mockResolvedValue({
             type: 'success',
             savePlaybackQueue: {
-                type: 'accepted',
-                queue: accepted,
-                conflict: null
+                type: 'conflict',
+                queue: serverSnapshot,
+                conflict: { reason: 'stale-revision', queue: serverSnapshot }
             }
         });
         const store = new PlaybackQueueStore();
@@ -137,9 +208,12 @@ describe('PlaybackQueueStore', () => {
         expect(mocks.savePlaybackQueue).toHaveBeenCalledWith({
             ...localSnapshot,
             repeatMode: 'all',
-            expectedRevision: 4
+            expectedRevision: 0
         });
-        await vi.waitFor(() => expect(store.state.snapshot).toEqual(accepted));
+        await vi.waitFor(() => expect(store.state.conflict).toEqual({
+            authoritative: serverSnapshot,
+            local: { ...localSnapshot, repeatMode: 'all' }
+        }));
     });
 
     it('drops command-originated queue saves while the barrier is active', () => {
@@ -253,6 +327,15 @@ describe('PlaybackQueueStore', () => {
 
         expect(store.state.restoreVersion).toBe(1);
         expect(store.state.error).toContain('another web player');
+        expect(store.hasPendingSave).toBe(true);
+        expect(store.state.conflict).toEqual({
+            authoritative,
+            local: localSnapshot
+        });
+
+        expect(store.acceptServerConflict()).toBe(true);
+        expect(store.state.restoreVersion).toBe(2);
+        expect(store.state.conflict).toBeNull();
         expect(store.hasPendingSave).toBe(false);
     });
 
@@ -268,6 +351,14 @@ describe('PlaybackQueueStore', () => {
                 type: 'error',
                 category: 'network',
                 errors: [{ code: 'NETWORK_ERROR', message: 'offline' }]
+            })
+            .mockResolvedValueOnce({
+                type: 'success',
+                savePlaybackQueue: {
+                    type: 'conflict',
+                    queue: reconnected,
+                    conflict: { reason: 'stale-revision', queue: reconnected }
+                }
             })
             .mockResolvedValueOnce({
                 type: 'success',
@@ -293,6 +384,15 @@ describe('PlaybackQueueStore', () => {
 
         await vi.waitFor(() => expect(mocks.savePlaybackQueue).toHaveBeenCalledTimes(2));
         expect(mocks.savePlaybackQueue.mock.calls[1]?.[0]).toEqual({
+            ...localSnapshot,
+            repeatMode: 'all',
+            expectedRevision: 2
+        });
+
+        await vi.waitFor(() => expect(store.state.conflict).not.toBeNull());
+        expect(store.retryConflict()).toBe(true);
+        await vi.waitFor(() => expect(mocks.savePlaybackQueue).toHaveBeenCalledTimes(3));
+        expect(mocks.savePlaybackQueue.mock.calls[2]?.[0]).toEqual({
             ...localSnapshot,
             repeatMode: 'all',
             expectedRevision: 4

@@ -16,6 +16,7 @@ const createSnapshot = (
     id: '1',
     state: 'playing',
     activeDeviceId: 'web-tab-1',
+    activeDeviceSequence: 3,
     currentMusicId: '42',
     positionMs: 10_000,
     positionUpdatedAt: '2026-07-14T00:00:00.000Z',

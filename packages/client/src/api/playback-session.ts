@@ -10,6 +10,7 @@ export interface PlaybackSessionSnapshot {
     id: string;
     state: SharedPlaybackState;
     activeDeviceId: string | null;
+    activeDeviceSequence: number;
     currentMusicId: string | null;
     positionMs: number;
     positionUpdatedAt: string;
@@ -23,6 +24,7 @@ export interface ReportPlaybackStateInput {
     registrationGeneration: number;
     registrationProof: string;
     sequence: number;
+    expectedRevision: number;
     claimActive: boolean;
     state: SharedPlaybackState;
     currentMusicId: string | null;
@@ -34,7 +36,7 @@ export interface PlaybackSessionReportResult {
     type: 'accepted' | 'conflict';
     session: PlaybackSessionSnapshot;
     conflict: {
-        reason: 'active-device' | 'stale-sequence';
+        reason: 'active-device' | 'stale-revision' | 'stale-sequence';
         session: PlaybackSessionSnapshot;
     } | null;
 }
@@ -50,6 +52,7 @@ export const fetchPlaybackSession = (requestTimeoutMs?: number) => {
                 id
                 state
                 activeDeviceId
+                activeDeviceSequence
                 currentMusicId
                 positionMs
                 positionUpdatedAt
@@ -81,6 +84,7 @@ export const reportPlaybackState = (input: ReportPlaybackStateInput) => {
                     id
                     state
                     activeDeviceId
+                    activeDeviceSequence
                     currentMusicId
                     positionMs
                     positionUpdatedAt
@@ -94,6 +98,7 @@ export const reportPlaybackState = (input: ReportPlaybackStateInput) => {
                         id
                         state
                         activeDeviceId
+                        activeDeviceSequence
                         currentMusicId
                         positionMs
                         positionUpdatedAt

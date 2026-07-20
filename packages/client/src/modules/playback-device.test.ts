@@ -91,6 +91,23 @@ describe('playback device identity', () => {
         expect(identity.nextPlaybackEndpointSequence()).toBe(1);
     });
 
+    it('advances a restored endpoint sequence to the authoritative server floor', async () => {
+        const session = createStorage({
+            [ENDPOINT_ID_KEY]: 'restored-tab',
+            [ENDPOINT_SEQUENCE_KEY]: '4'
+        });
+
+        installUuidGenerator();
+        vi.stubGlobal('localStorage', createStorage());
+        vi.stubGlobal('sessionStorage', session);
+        const identity = await import('./playback-device');
+
+        expect(identity.ensurePlaybackEndpointSequenceAtLeast(9)).toBe(9);
+        expect(session.getItem(ENDPOINT_SEQUENCE_KEY)).toBe('9');
+        expect(identity.ensurePlaybackEndpointSequenceAtLeast(6)).toBe(9);
+        expect(identity.nextPlaybackEndpointSequence()).toBe(10);
+    });
+
     it('repairs corrupted stored identities before registration', async () => {
         const local = createStorage({
             [INSTALLATION_ID_KEY]: ' invalid-device '

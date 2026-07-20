@@ -9,6 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate } from 'react-router-dom';
 import {
     MusicActionPanelContent,
+    PlaybackQueueConflictNotice,
     RemotePlaybackOwnershipNotice
 } from '~/components/music';
 import { PlaylistPanelContent } from '~/components/playlist';
@@ -587,6 +588,7 @@ export default function Queue() {
             </div>
 
             <PageContainer width="narrow" padding="focus" className="flex min-h-0 flex-col gap-4">
+                <PlaybackQueueConflictNotice />
                 {remotePlaybackOwnership && <RemotePlaybackOwnershipNotice />}
                 {items.length > 0 ? (
                     <>

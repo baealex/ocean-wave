@@ -86,6 +86,12 @@ interface AuthoritativePlaybackState {
     registry: PlaybackDeviceRegistrySnapshot;
 }
 
+type AuthoritativePlaybackRefreshResult =
+    | { type: 'success'; state: AuthoritativePlaybackState }
+    | { type: 'superseded' }
+    | { type: 'inconsistent' }
+    | { type: 'error' };
+
 interface TerminalCommandOutcome {
     phase: 'completed' | 'rejected' | 'timed_out';
     message: string;
@@ -993,8 +999,9 @@ export class RemotePlaybackControlStore extends BaseStore<RemotePlaybackControlS
     }
 
     private async synchronizeControllerRegistration(
-        registration: PlaybackEndpointRegistrationState
-    ) {
+        registration: PlaybackEndpointRegistrationState,
+        retryConcurrentRefresh = true
+    ): Promise<boolean> {
         const readinessSequence = ++this.readinessSequence;
         const registrationKey = playbackControllerRegistrationKey(registration);
         this.synchronizedRegistrationKey = null;
@@ -1005,7 +1012,10 @@ export class RemotePlaybackControlStore extends BaseStore<RemotePlaybackControlS
             controllerError: null
         });
 
-        const refreshed = await this.refreshAuthoritativeState();
+        const refreshResult = await this.refreshAuthoritativeStateWithDisposition();
+        const refreshed = refreshResult.type === 'success'
+            ? refreshResult.state
+            : null;
         const currentRegistration = playbackEndpointRegistration.current;
         if (
             readinessSequence !== this.readinessSequence
@@ -1016,7 +1026,11 @@ export class RemotePlaybackControlStore extends BaseStore<RemotePlaybackControlS
         }
 
         const concurrentlyRefreshed = (
-            this.synchronizedRegistrationKey === registrationKey
+            (
+                refreshResult.type === 'superseded'
+                || refreshResult.type === 'inconsistent'
+                || this.synchronizedRegistrationKey === registrationKey
+            )
             && playbackSnapshotsMatchRegistration(currentRegistration)
             && playbackDevicesStore.state.registry
         ) ? {
@@ -1027,6 +1041,19 @@ export class RemotePlaybackControlStore extends BaseStore<RemotePlaybackControlS
             : null;
         const synchronizedState = refreshed ?? concurrentlyRefreshed;
         if (!synchronizedState) {
+            if (
+                retryConcurrentRefresh
+                && (
+                    refreshResult.type === 'superseded'
+                    || refreshResult.type === 'inconsistent'
+                )
+            ) {
+                return this.synchronizeControllerRegistration(
+                    currentRegistration,
+                    false
+                );
+            }
+
             const error = localError(
                 'STATE_COMMIT_FAILED',
                 'Playback control state could not be refreshed. Retry before sending commands.'
@@ -1040,6 +1067,7 @@ export class RemotePlaybackControlStore extends BaseStore<RemotePlaybackControlS
             return false;
         }
 
+        this.synchronizedRegistrationKey = registrationKey;
         this.set({
             controllerReady: true,
             controllerRefreshing: false,
@@ -1065,9 +1093,16 @@ export class RemotePlaybackControlStore extends BaseStore<RemotePlaybackControlS
     }
 
     private async refreshAuthoritativeState(): Promise<AuthoritativePlaybackState | null> {
+        const result = await this.refreshAuthoritativeStateWithDisposition();
+        return result.type === 'success' ? result.state : null;
+    }
+
+    private async refreshAuthoritativeStateWithDisposition(): Promise<
+        AuthoritativePlaybackRefreshResult
+    > {
         const registration = playbackEndpointRegistration.current;
         if (!registration) {
-            return null;
+            return { type: 'error' };
         }
         const registrationKey = playbackControllerRegistrationKey(registration);
         const [sessionResult, queueResult, devicesResult] = await Promise.allSettled([
@@ -1078,13 +1113,32 @@ export class RemotePlaybackControlStore extends BaseStore<RemotePlaybackControlS
 
         if (
             sessionResult.status !== 'fulfilled'
-            || sessionResult.value.type !== 'success'
             || queueResult.status !== 'fulfilled'
-            || queueResult.value.type !== 'success'
             || devicesResult.status !== 'fulfilled'
+        ) {
+            return { type: 'error' };
+        }
+
+        if (
+            sessionResult.value.type === 'error'
+            || queueResult.value.type === 'error'
+            || devicesResult.value.type === 'error'
+        ) {
+            return { type: 'error' };
+        }
+        if (
+            sessionResult.value.type === 'superseded'
+            || queueResult.value.type === 'superseded'
+            || devicesResult.value.type === 'superseded'
+        ) {
+            return { type: 'superseded' };
+        }
+        if (
+            sessionResult.value.type !== 'success'
+            || queueResult.value.type !== 'success'
             || devicesResult.value.type !== 'success'
         ) {
-            return null;
+            return { type: 'error' };
         }
 
         const refreshed = {
@@ -1113,7 +1167,7 @@ export class RemotePlaybackControlStore extends BaseStore<RemotePlaybackControlS
                 && !resolveActivePlaybackTarget(refreshed.registry)
             )
         ) {
-            return null;
+            return { type: 'inconsistent' };
         }
 
         this.synchronizedRegistrationKey = registrationKey;
@@ -1125,7 +1179,7 @@ export class RemotePlaybackControlStore extends BaseStore<RemotePlaybackControlS
                 controllerError: null
             });
         }
-        return refreshed;
+        return { type: 'success', state: refreshed };
     }
 
     private authoritativeStateMeets(

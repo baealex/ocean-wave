@@ -15,6 +15,7 @@ export interface PlaybackSessionSnapshot {
     id: string;
     state: PlaybackState;
     activeDeviceId: string | null;
+    activeDeviceSequence: number;
     currentMusicId: string | null;
     positionMs: number;
     positionUpdatedAt: string;
@@ -26,6 +27,7 @@ export interface PlaybackSessionSnapshot {
 export interface ReportPlaybackStateInput {
     deviceId: string;
     sequence: number;
+    expectedRevision: number;
     claimActive: boolean;
     state: PlaybackState;
     currentMusicId?: string | null;
@@ -33,7 +35,10 @@ export interface ReportPlaybackStateInput {
     observedAt?: string | null;
 }
 
-export type PlaybackSessionConflictReason = 'active-device' | 'stale-sequence';
+export type PlaybackSessionConflictReason =
+    | 'active-device'
+    | 'stale-revision'
+    | 'stale-sequence';
 
 export interface PlaybackSessionReportResult {
     type: 'accepted' | 'conflict';
@@ -79,6 +84,7 @@ const toSnapshot = (
     id: session.id.toString(),
     state: toPlaybackState(session.state),
     activeDeviceId: session.activeDeviceId,
+    activeDeviceSequence: session.activeDeviceSequence,
     currentMusicId: session.currentMusicId?.toString() ?? null,
     positionMs: session.positionMs,
     positionUpdatedAt: session.positionUpdatedAt.toISOString(),
@@ -116,6 +122,13 @@ const validateInput = (input: ReportPlaybackStateInput) => {
         throw new PlaybackSessionServiceError(
             'Playback sequence must be a positive integer.',
             'INVALID_PLAYBACK_SEQUENCE'
+        );
+    }
+
+    if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 0) {
+        throw new PlaybackSessionServiceError(
+            'Expected playback session revision must be a non-negative integer.',
+            'INVALID_PLAYBACK_SESSION_REVISION'
         );
     }
 
@@ -160,6 +173,7 @@ const validateInput = (input: ReportPlaybackStateInput) => {
     return {
         deviceId,
         sequence: input.sequence,
+        expectedRevision: input.expectedRevision,
         claimActive: input.claimActive === true,
         state,
         currentMusicId,
@@ -209,6 +223,13 @@ export const reportPlaybackState = async (
         });
 
         if (!current) {
+            if (normalized.expectedRevision !== 0) {
+                throw new PlaybackSessionServiceError(
+                    'Playback session revision is stale because no session exists.',
+                    'STALE_PLAYBACK_SESSION_REVISION'
+                );
+            }
+
             if (!normalized.claimActive) {
                 throw new PlaybackSessionServiceError(
                     'The first playback report must claim the active device.',
@@ -260,6 +281,10 @@ export const reportPlaybackState = async (
             };
         }
 
+        if (current.revision !== normalized.expectedRevision) {
+            return conflictResult(current, 'stale-revision', serverTime);
+        }
+
         const continuesCurrentPlay = isActiveDevice
             && current.state === PLAYBACK_STATES.playing
             && normalized.state === PLAYBACK_STATES.playing
@@ -267,8 +292,13 @@ export const reportPlaybackState = async (
         const startedAt = normalized.state === PLAYBACK_STATES.playing
             ? (continuesCurrentPlay ? current.startedAt ?? serverTime : serverTime)
             : (normalized.state === PLAYBACK_STATES.paused ? current.startedAt : null);
-        const updated = await transaction.playbackSession.update({
-            where: { id: current.id },
+        const update = await transaction.playbackSession.updateMany({
+            where: {
+                id: current.id,
+                revision: normalized.expectedRevision,
+                activeDeviceId: current.activeDeviceId,
+                activeDeviceSequence: current.activeDeviceSequence
+            },
             data: {
                 state: normalized.state,
                 activeDeviceId: normalized.deviceId,
@@ -279,6 +309,17 @@ export const reportPlaybackState = async (
                 startedAt,
                 revision: { increment: 1 }
             }
+        });
+
+        if (update.count !== 1) {
+            const latest = await transaction.playbackSession.findUniqueOrThrow({
+                where: { id: current.id }
+            });
+            return conflictResult(latest, 'stale-revision', serverTime);
+        }
+
+        const updated = await transaction.playbackSession.findUniqueOrThrow({
+            where: { id: current.id }
         });
         const snapshot = toSnapshot(updated, serverTime);
 

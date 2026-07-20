@@ -161,6 +161,10 @@ export interface PlaybackEndpointReportAuthorization {
     registrationProof: string;
 }
 
+export type PlaybackEndpointAuthorizedReportResult<T> =
+    | { authorized: true; result: T }
+    | { authorized: false };
+
 interface PlaybackEndpointCollision {
     endpointId: string;
     endpointInstanceId: string;
@@ -264,6 +268,12 @@ export class PlaybackEndpointRegistry {
         waiterCount: number;
     }>();
     private readonly registrationQueuesByEndpointId = new Map<string, Promise<void>>();
+    private readonly reportOperationsByEndpointId = new Map<string, Set<symbol>>();
+    private readonly reportOperationWaitersByEndpointId = new Map<
+        string,
+        Array<() => void>
+    >();
+    private readonly invalidationsByEndpointId = new Map<string, Set<symbol>>();
     private readonly registrationRateBySocketId = new Map<string, PlaybackRegistrationRateWindow>();
     private readonly registrationSlotWaiters: Array<() => void> = [];
     private activeRegistrationSlots = 0;
@@ -333,7 +343,11 @@ export class PlaybackEndpointRegistry {
         }
 
         const endpointId = input.endpointId.trim();
-        if (this.registrationQueuesByEndpointId.has(endpointId)) {
+        if (
+            this.registrationQueuesByEndpointId.has(endpointId)
+            || this.reportOperationsByEndpointId.has(endpointId)
+            || this.invalidationsByEndpointId.has(endpointId)
+        ) {
             return Promise.resolve(this.registrationFailedAck(input));
         }
 
@@ -342,6 +356,23 @@ export class PlaybackEndpointRegistry {
         if (capacityAck) {
             return Promise.resolve(capacityAck);
         }
+
+        const previousEndpointId = this.endpointIdBySocketId.get(socket.id);
+        if (
+            previousEndpointId
+            && previousEndpointId !== endpointId
+            && (
+                this.registrationQueuesByEndpointId.has(previousEndpointId)
+                || this.reportOperationsByEndpointId.has(previousEndpointId)
+                || this.invalidationsByEndpointId.has(previousEndpointId)
+            )
+        ) {
+            return Promise.resolve(this.registrationFailedAck(input));
+        }
+        const previousEndpointInvalidation = previousEndpointId
+            && previousEndpointId !== endpointId
+            ? this.beginEndpointInvalidation(previousEndpointId)
+            : null;
 
         const reservation: PlaybackPendingRegistration = {
             token: Symbol('playback-endpoint-registration'),
@@ -379,6 +410,12 @@ export class PlaybackEndpointRegistry {
                 === reservation.token
             ) {
                 this.pendingRegistrationsByEndpointId.delete(endpointId);
+            }
+            if (previousEndpointId && previousEndpointInvalidation) {
+                this.endEndpointInvalidation(
+                    previousEndpointId,
+                    previousEndpointInvalidation
+                );
             }
         });
 
@@ -468,21 +505,28 @@ export class PlaybackEndpointRegistry {
             return false;
         }
 
-        const binding = this.bindingsByEndpointId.get(endpointId);
+        const invalidation = this.beginEndpointInvalidation(endpointId);
 
-        if (!binding || binding.socketId !== socketId) {
-            this.endpointIdBySocketId.delete(socketId);
-            return false;
+        try {
+            await this.waitForReportOperations(endpointId);
+            const binding = this.bindingsByEndpointId.get(endpointId);
+
+            if (!binding || binding.socketId !== socketId) {
+                this.endpointIdBySocketId.delete(socketId);
+                return false;
+            }
+
+            this.removeBinding(binding);
+            await this.persistLastSeenSafely(binding);
+            this.notifyChanged({
+                reason: 'offline',
+                deviceId: binding.deviceId,
+                endpointId: binding.endpointId
+            });
+            return true;
+        } finally {
+            this.endEndpointInvalidation(endpointId, invalidation);
         }
-
-        this.removeBinding(binding);
-        await this.persistLastSeenSafely(binding);
-        this.notifyChanged({
-            reason: 'offline',
-            deviceId: binding.deviceId,
-            endpointId: binding.endpointId
-        });
-        return true;
     }
 
     async sweep(now = this.now()) {
@@ -490,18 +534,37 @@ export class PlaybackEndpointRegistry {
             binding.leaseExpiresAtMs <= now
         ));
 
-        for (const binding of expired) {
-            this.removeBinding(binding);
-            this.notifyLeaseExpired(binding);
-            await this.persistLastSeenSafely(binding);
-            this.notifyChanged({
-                reason: 'offline',
-                deviceId: binding.deviceId,
-                endpointId: binding.endpointId
-            });
+        let removed = 0;
+
+        for (const candidate of expired) {
+            const invalidation = this.beginEndpointInvalidation(candidate.endpointId);
+
+            try {
+                await this.waitForReportOperations(candidate.endpointId);
+                const binding = this.bindingsByEndpointId.get(candidate.endpointId);
+
+                if (
+                    binding !== candidate
+                    || binding.leaseExpiresAtMs > now
+                ) {
+                    continue;
+                }
+
+                this.removeBinding(binding);
+                this.notifyLeaseExpired(binding);
+                await this.persistLastSeenSafely(binding);
+                this.notifyChanged({
+                    reason: 'offline',
+                    deviceId: binding.deviceId,
+                    endpointId: binding.endpointId
+                });
+                removed += 1;
+            } finally {
+                this.endEndpointInvalidation(candidate.endpointId, invalidation);
+            }
         }
 
-        return expired.length;
+        return removed;
     }
 
     getOnlineEndpoints(): OnlinePlaybackEndpoint[] {
@@ -553,6 +616,36 @@ export class PlaybackEndpointRegistry {
         );
     }
 
+    async runAuthorizedReport<T>(
+        authorization: PlaybackEndpointReportAuthorization,
+        report: () => Promise<T>
+    ): Promise<PlaybackEndpointAuthorizedReportResult<T>> {
+        const endpointId = authorization.endpointId;
+
+        if (
+            this.registrationQueuesByEndpointId.has(endpointId)
+            || this.invalidationsByEndpointId.has(endpointId)
+            || !this.isReportAuthorized(authorization)
+        ) {
+            return { authorized: false };
+        }
+
+        const token = Symbol('playback-endpoint-report');
+        const operations = this.reportOperationsByEndpointId.get(endpointId)
+            ?? new Set<symbol>();
+        operations.add(token);
+        this.reportOperationsByEndpointId.set(endpointId, operations);
+
+        try {
+            return {
+                authorized: true,
+                result: await report()
+            };
+        } finally {
+            this.endReportOperation(endpointId, token);
+        }
+    }
+
     clear() {
         this.stop();
         for (const binding of this.bindingsByEndpointId.values()) {
@@ -564,6 +657,14 @@ export class PlaybackEndpointRegistry {
         this.collisions.clear();
         this.registrationsBySocketId.clear();
         this.registrationQueuesByEndpointId.clear();
+        this.reportOperationsByEndpointId.clear();
+        for (const waiters of this.reportOperationWaitersByEndpointId.values()) {
+            for (const resolve of waiters) {
+                resolve();
+            }
+        }
+        this.reportOperationWaitersByEndpointId.clear();
+        this.invalidationsByEndpointId.clear();
         this.registrationRateBySocketId.clear();
         this.lastRegistrationGeneration = 0;
     }
@@ -611,6 +712,52 @@ export class PlaybackEndpointRegistry {
     private releaseRegistrationSlot() {
         this.activeRegistrationSlots = Math.max(this.activeRegistrationSlots - 1, 0);
         this.registrationSlotWaiters.shift()?.();
+    }
+
+    private waitForReportOperations(endpointId: string) {
+        if (!this.reportOperationsByEndpointId.has(endpointId)) {
+            return Promise.resolve();
+        }
+
+        return new Promise<void>((resolve) => {
+            const waiters = this.reportOperationWaitersByEndpointId.get(endpointId) ?? [];
+            waiters.push(resolve);
+            this.reportOperationWaitersByEndpointId.set(endpointId, waiters);
+        });
+    }
+
+    private endReportOperation(endpointId: string, token: symbol) {
+        const operations = this.reportOperationsByEndpointId.get(endpointId);
+        operations?.delete(token);
+
+        if (operations?.size) {
+            return;
+        }
+
+        this.reportOperationsByEndpointId.delete(endpointId);
+        const waiters = this.reportOperationWaitersByEndpointId.get(endpointId) ?? [];
+        this.reportOperationWaitersByEndpointId.delete(endpointId);
+        for (const resolve of waiters) {
+            resolve();
+        }
+    }
+
+    private beginEndpointInvalidation(endpointId: string) {
+        const token = Symbol('playback-endpoint-invalidation');
+        const invalidations = this.invalidationsByEndpointId.get(endpointId)
+            ?? new Set<symbol>();
+        invalidations.add(token);
+        this.invalidationsByEndpointId.set(endpointId, invalidations);
+        return token;
+    }
+
+    private endEndpointInvalidation(endpointId: string, token: symbol) {
+        const invalidations = this.invalidationsByEndpointId.get(endpointId);
+        invalidations?.delete(token);
+
+        if (!invalidations?.size) {
+            this.invalidationsByEndpointId.delete(endpointId);
+        }
     }
 
     private async registerSerial(
