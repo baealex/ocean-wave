@@ -32,6 +32,7 @@ export function getMusics() {
             'lastSkippedAt',
             'completionCount',
             'lastCompletedAt',
+            'discNumber',
             'trackNumber',
             'isLiked',
             'isHated',
@@ -47,7 +48,9 @@ export function getMusics() {
                 'name',
                 'cover',
                 'isCoverCustom',
-                'publishedYear'
+                'publishedYear',
+                'releaseType',
+                'totalDiscs'
             ]),
             createQuery('tags', [
                 'id',
@@ -78,6 +81,7 @@ export function getMusic(id: string) {
             'bitrate',
             'sampleRate',
             'duration',
+            'discNumber',
             'trackNumber',
             'hasMetadataOverride',
             'artistDisplayName',
@@ -92,6 +96,8 @@ export function getMusic(id: string) {
                 'cover',
                 'isCoverCustom',
                 'publishedYear',
+                'releaseType',
+                'totalDiscs',
                 'artistDisplayName',
                 createQuery('artistCredits', artistCreditFields),
                 createQuery<Artist>('artist', [
@@ -114,6 +120,7 @@ export function getArtists() {
             'name',
             'createdAt',
             'albumCount',
+            'appearsOnCount',
             'musicCount',
             createQuery<Album>('latestAlbum', [
                 'cover'
@@ -130,6 +137,7 @@ export function getArtist(id: string) {
             'id',
             'name',
             'albumCount',
+            'appearsOnCount',
             'musicCount',
             'createdAt',
             createQuery<Album>('latestAlbum', [
@@ -140,6 +148,18 @@ export function getArtist(id: string) {
                 'name',
                 'cover',
                 'publishedYear',
+                'releaseType',
+                'totalDiscs',
+                'artistDisplayName',
+                createQuery('artistCredits', artistCreditFields)
+            ]),
+            createQuery<Album>('appearsOn', [
+                'id',
+                'name',
+                'cover',
+                'publishedYear',
+                'releaseType',
+                'totalDiscs',
                 'artistDisplayName',
                 createQuery('artistCredits', artistCreditFields)
             ]),
@@ -159,6 +179,8 @@ export function getAlbums() {
             'cover',
             'isCoverCustom',
             'publishedYear',
+            'releaseType',
+            'totalDiscs',
             'createdAt',
             'artistDisplayName',
             createQuery('artistCredits', artistCreditFields),
@@ -180,6 +202,8 @@ export function getAlbum(id: string) {
             'cover',
             'isCoverCustom',
             'publishedYear',
+            'releaseType',
+            'totalDiscs',
             'artistDisplayName',
             createQuery('artistCredits', artistCreditFields),
             createQuery<Artist>('artist', [

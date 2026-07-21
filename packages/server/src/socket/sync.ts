@@ -105,11 +105,17 @@ const toTrackIdentityRecord = (music: Music): TrackIdentityRecord => {
 const findOrCreateAlbum = async ({
     name,
     publishedYear,
-    artistCredits
+    artistCredits,
+    releaseType,
+    totalDiscs,
+    preferredReleaseId
 }: {
     name: string;
     publishedYear: string;
     artistCredits: ArtistCreditValue[];
+    releaseType: ParsedTrackMetadata['releaseType'];
+    totalDiscs: number | null;
+    preferredReleaseId?: number;
 }): Promise<Album> => {
     return models.$transaction(async (transaction) => {
         const artists = await resolveArtistCreditArtists(transaction, artistCredits);
@@ -125,26 +131,54 @@ const findOrCreateAlbum = async ({
                 }
             }
         });
-        const existingRelease = releases.find((release) => (
+        const creditMatches = releases.filter((release) => (
             release.ArtistCredit.length === artists.length
             && release.ArtistCredit.every((credit, index) => (
                 credit.artistId === artists[index].id
             ))
         ));
+        const preferredRelease = creditMatches.find(({ id }) => id === preferredReleaseId);
+        const exactTypeRelease = creditMatches.find(candidate => (
+            candidate.releaseType === releaseType
+        ));
+        const unknownTypeRelease = creditMatches.find(candidate => (
+            candidate.releaseType === 'unknown'
+        ));
+        const existingRelease = preferredRelease ?? (
+            releaseType === 'unknown'
+                ? unknownTypeRelease ?? (creditMatches.length === 1 ? creditMatches[0] : undefined)
+                : exactTypeRelease ?? unknownTypeRelease
+        );
         const resolvedCredits = existingRelease
             ? preserveArtistCreditPresentation(artistCredits, existingRelease.ArtistCredit)
             : artistCredits;
+        const canSeedMissingReleaseMetadata = preferredReleaseId === undefined;
+        const nextTotalDiscs = existingRelease
+            ? canSeedMissingReleaseMetadata && totalDiscs
+                ? Math.max(existingRelease.totalDiscs ?? 0, totalDiscs)
+                : existingRelease.totalDiscs
+            : totalDiscs;
         const release = existingRelease
             ? await transaction.release.update({
                 where: { id: existingRelease.id },
-                data: { releaseDate: publishedYear }
+                data: {
+                    releaseDate: publishedYear,
+                    ...(canSeedMissingReleaseMetadata
+                        && existingRelease.releaseType === 'unknown'
+                        && releaseType !== 'unknown'
+                        ? { releaseType }
+                        : {}),
+                    ...(nextTotalDiscs !== existingRelease.totalDiscs
+                        ? { totalDiscs: nextTotalDiscs }
+                        : {})
+                }
             })
             : await transaction.release.create({
                 data: {
                     title: name,
                     releaseDate: publishedYear,
-                    releaseType: 'unknown',
-                    totalDiscs: 1,
+                    releaseType,
+                    totalDiscs,
                     cover: ''
                 }
             });
@@ -204,7 +238,10 @@ const upsertMusicFromMetadata = async ({
     const album = await findOrCreateAlbum({
         name: resolvedMetadata.album,
         publishedYear: resolvedMetadata.year,
-        artistCredits: albumArtistCredits
+        artistCredits: albumArtistCredits,
+        releaseType: resolvedMetadata.releaseType,
+        totalDiscs: resolvedMetadata.totalDiscs,
+        preferredReleaseId: existingMusic?.albumId
     });
     const genres = await findOrCreateGenres(resolvedMetadata.genres);
 
@@ -244,6 +281,7 @@ const upsertMusicFromMetadata = async ({
                     sampleRate: metadata.sampleRate,
                     name: resolvedMetadata.title,
                     duration: metadata.duration,
+                    discNumber: resolvedMetadata.discNumber,
                     trackNumber: resolvedMetadata.trackNumber,
                     filePath,
                     contentHash,
@@ -275,6 +313,7 @@ const upsertMusicFromMetadata = async ({
             sampleRate: metadata.sampleRate,
             name: resolvedMetadata.title,
             duration: metadata.duration,
+            discNumber: resolvedMetadata.discNumber,
             trackNumber: resolvedMetadata.trackNumber,
             filePath,
             contentHash,

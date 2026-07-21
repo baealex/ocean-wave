@@ -5,6 +5,7 @@ import { parseBuffer } from '../modules/music-metadata';
 
 import models from '~/models';
 import { musicResolvers } from '~/features/music/graphql';
+import { albumResolvers } from '~/schema/album';
 import { artistResolvers } from '~/schema/artist';
 
 jest.mock('../modules/file', () => ({ walk: jest.fn() }));
@@ -48,6 +49,10 @@ const createTrackFixture = (overrides?: {
     albumArtists?: string[];
     year?: string;
     trackNumber?: number;
+    discNumber?: number;
+    totalDiscs?: number;
+    releaseTypes?: string[];
+    compilation?: boolean;
     fingerprint?: string;
     picture?: string;
 }) => {
@@ -59,10 +64,14 @@ const createTrackFixture = (overrides?: {
     const albumArtists = overrides?.albumArtists?.join('~') ?? '';
     const year = overrides?.year ?? '2026';
     const trackNumber = overrides?.trackNumber ?? 1;
+    const discNumber = overrides?.discNumber?.toString() ?? '';
+    const totalDiscs = overrides?.totalDiscs?.toString() ?? '';
+    const releaseTypes = overrides?.releaseTypes?.join('~') ?? '';
+    const compilation = overrides?.compilation ? 'true' : 'false';
     const fingerprint = overrides?.fingerprint ?? 'fingerprint-a';
     const picture = overrides?.picture ?? '';
 
-    return `title=${title}|artist=${artist}|artists=${artists}|album=${album}|albumArtist=${albumArtist}|albumArtists=${albumArtists}|year=${year}|track=${trackNumber}|fingerprint=${fingerprint}|picture=${picture}`;
+    return `title=${title}|artist=${artist}|artists=${artists}|album=${album}|albumArtist=${albumArtist}|albumArtists=${albumArtists}|year=${year}|track=${trackNumber}|disc=${discNumber}|totalDiscs=${totalDiscs}|releaseTypes=${releaseTypes}|compilation=${compilation}|fingerprint=${fingerprint}|picture=${picture}`;
 };
 
 const createTempTrackFile = ({
@@ -162,7 +171,13 @@ describe('sync music identity', () => {
                         : [],
                     genre: [],
                     year: Number(entries.year),
-                    track: { no: Number(entries.track) }
+                    track: { no: entries.track ? Number(entries.track) : null },
+                    disk: {
+                        no: entries.disc ? Number(entries.disc) : null,
+                        of: entries.totalDiscs ? Number(entries.totalDiscs) : null
+                    },
+                    releasetype: entries.releaseTypes?.split('~').filter(Boolean),
+                    compilation: entries.compilation === 'true'
                 }
             } as never;
         });
@@ -184,7 +199,19 @@ describe('sync music identity', () => {
         await models.genre.deleteMany();
     });
 
-    afterEach(() => {
+    afterEach(async () => {
+        await models.playbackEvent.deleteMany();
+        await models.syncReportItem.deleteMany();
+        await models.syncReport.deleteMany();
+        await models.playlistMusic.deleteMany();
+        await models.playlist.deleteMany();
+        await models.musicLike.deleteMany();
+        await models.musicHate.deleteMany();
+        await models.music.deleteMany();
+        await models.album.deleteMany();
+        await models.artist.deleteMany();
+        await models.genre.deleteMany();
+
         restoreEnvValue('OCEAN_WAVE_CACHE_PATH', originalCachePath);
         restoreEnvValue('OCEAN_WAVE_MUSIC_PATH', originalMusicPath);
 
@@ -446,6 +473,79 @@ describe('sync music identity', () => {
             .map(({ Genre: genre }) => genre.name)).toEqual(['Ambient']);
     });
 
+    it('imports release type and orders duplicate track numbers across discs', async () => {
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-discs-'));
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+        const discTwoPath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/disc-2-track-1.mp3',
+            contents: createTrackFixture({
+                title: 'Second Disc Opener',
+                discNumber: 2,
+                totalDiscs: 2,
+                releaseTypes: ['Album', 'Live'],
+                fingerprint: 'disc-two'
+            })
+        });
+        const discOnePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/disc-1-track-1.mp3',
+            contents: createTrackFixture({
+                title: 'First Disc Opener',
+                discNumber: 1,
+                totalDiscs: 2,
+                releaseTypes: ['Album', 'Live'],
+                fingerprint: 'disc-one'
+            })
+        });
+        walkMock.mockResolvedValue([discTwoPath, discOnePath]);
+
+        await syncMusic({ emit: jest.fn() });
+
+        const release = await models.release.findFirstOrThrow({
+            where: { title: 'Album A' }
+        });
+        const positions = await models.releaseTrack.findMany({
+            where: { releaseId: release.id },
+            include: { Recording: true }
+        });
+        const album = await models.album.findUniqueOrThrow({ where: { id: release.id } });
+        const albumArtist = await models.artist.findFirstOrThrow({ where: { name: 'Artist A' } });
+        const orderedMusics = await (albumResolvers.Album as {
+            musics: (album: { id: number }) => Promise<Array<{ id: number; name: string }>>;
+        }).musics(album);
+        const discNumber = await (musicResolvers.Music as {
+            discNumber: (music: { releaseTrackId: number }) => Promise<number | null>;
+        }).discNumber(orderedMusics[1] as never);
+        const artistReleaseResolvers = artistResolvers.Artist as {
+            albums: (artist: typeof albumArtist) => Promise<Array<{ id: number }>>;
+            appearsOn: (artist: typeof albumArtist) => Promise<Array<{ id: number }>>;
+        };
+
+        expect(release).toMatchObject({
+            releaseType: 'live',
+            totalDiscs: 2
+        });
+        expect(positions.map(position => ({
+            title: position.Recording.title,
+            discNumber: position.discNumber,
+            trackNumber: position.trackNumber
+        }))).toEqual(expect.arrayContaining([
+            { title: 'First Disc Opener', discNumber: 1, trackNumber: 1 },
+            { title: 'Second Disc Opener', discNumber: 2, trackNumber: 1 }
+        ]));
+        expect(orderedMusics.map(({ name }) => name)).toEqual([
+            'First Disc Opener',
+            'Second Disc Opener'
+        ]);
+        expect(discNumber).toBe(2);
+        await expect(artistReleaseResolvers.albums(albumArtist)).resolves.toEqual([
+            expect.objectContaining({ id: release.id })
+        ]);
+        await expect(artistReleaseResolvers.appearsOn(albumArtist)).resolves.toEqual([]);
+    });
+
     it('indexes ordered track credits separately from a compilation album artist', async () => {
         const contents = createTrackFixture({
             title: 'Collaboration',
@@ -454,6 +554,8 @@ describe('sync music identity', () => {
             album: 'Compilation',
             albumArtist: 'Various Artists',
             albumArtists: ['Various Artists'],
+            releaseTypes: ['Compilation'],
+            compilation: true,
             fingerprint: 'multi-artist-hash'
         });
         const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-credits-'));
@@ -485,12 +587,22 @@ describe('sync music identity', () => {
         const guestArtist = await models.artist.findFirstOrThrow({
             where: { name: 'Artist B' }
         });
+        const primaryArtist = await models.artist.findFirstOrThrow({
+            where: { name: 'Artist A' }
+        });
+        const compilationArtist = await models.artist.findFirstOrThrow({
+            where: { name: 'Various Artists' }
+        });
         const guestMusics = await (artistResolvers.Artist as {
             musics: (artist: typeof guestArtist) => Promise<Array<{ id: number }>>;
         }).musics(guestArtist);
         const creditedArtists = await (artistResolvers.Query as {
             allArtists: () => Promise<Array<{ name: string }>>;
         }).allArtists();
+        const artistReleaseResolvers = artistResolvers.Artist as {
+            albums: (artist: typeof primaryArtist) => Promise<Array<{ id: number }>>;
+            appearsOn: (artist: typeof primaryArtist) => Promise<Array<{ id: number }>>;
+        };
 
         expect(recordingCredits).toEqual([
             expect.objectContaining({
@@ -516,6 +628,17 @@ describe('sync music identity', () => {
             'Artist B',
             'Various Artists'
         ]));
+        await expect(artistReleaseResolvers.albums(primaryArtist)).resolves.toEqual([]);
+        await expect(artistReleaseResolvers.appearsOn(primaryArtist)).resolves.toEqual([
+            expect.objectContaining({ id: music.albumId })
+        ]);
+        await expect(artistReleaseResolvers.appearsOn(guestArtist)).resolves.toEqual([
+            expect.objectContaining({ id: music.albumId })
+        ]);
+        await expect(artistReleaseResolvers.albums(compilationArtist)).resolves.toEqual([
+            expect.objectContaining({ id: music.albumId })
+        ]);
+        await expect(artistReleaseResolvers.appearsOn(compilationArtist)).resolves.toEqual([]);
 
         fs.writeFileSync(filePath, createTrackFixture({
             title: 'Collaboration',
@@ -524,6 +647,8 @@ describe('sync music identity', () => {
             album: 'Compilation',
             albumArtist: 'Various Artists',
             albumArtists: ['Various Artists'],
+            releaseTypes: ['Compilation'],
+            compilation: true,
             fingerprint: 'multi-artist-hash'
         }));
         await syncMusic({ emit: jest.fn() }, true);

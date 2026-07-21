@@ -7,6 +7,7 @@ interface AlbumCollectionCardProps {
     artistName: string;
     musicCount?: number;
     publishedYear?: string;
+    releaseType?: string;
 }
 
 export default function AlbumCollectionCard({
@@ -15,10 +16,12 @@ export default function AlbumCollectionCard({
     albumName,
     artistName,
     musicCount,
-    publishedYear
+    publishedYear,
+    releaseType
 }: AlbumCollectionCardProps) {
     const meta = [
         publishedYear?.trim(),
+        releaseType?.trim(),
         typeof musicCount === 'number'
             ? `${musicCount} ${musicCount === 1 ? 'track' : 'tracks'}`
             : ''

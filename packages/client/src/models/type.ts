@@ -5,7 +5,8 @@ export interface Music {
     codec: string;
     bitrate: number;
     sampleRate: number;
-    trackNumber: number;
+    discNumber: number | null;
+    trackNumber: number | null;
     playCount: number;
     lastPlayedAt: string | null;
     totalPlayedMs: number;
@@ -78,6 +79,8 @@ export interface Album {
     cover: string;
     isCoverCustom: boolean;
     publishedYear: string;
+    releaseType: ReleaseType;
+    totalDiscs: number | null;
     artistDisplayName: string;
     artistCredits: ArtistCredit[];
     artist: {
@@ -94,10 +97,20 @@ export interface Artist {
     latestAlbum?: Album;
     albums: Album[];
     albumCount: number;
+    appearsOn: Album[];
+    appearsOnCount: number;
     musics: Pick<Music, 'id'>[];
     musicCount: number;
     createdAt: number;
 }
+
+export type ReleaseType =
+    | 'ALBUM'
+    | 'EP'
+    | 'SINGLE'
+    | 'COMPILATION'
+    | 'LIVE'
+    | 'UNKNOWN';
 
 export interface Playlist {
     id: string;

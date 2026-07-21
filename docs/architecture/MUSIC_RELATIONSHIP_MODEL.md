@@ -682,3 +682,35 @@ participants preserves its existing roles, credited names, and join phrases,
 even when the tag reader normalizes the singular display separator. Changing
 the ordered participant list creates a new parsed presentation instead of
 silently applying stale credit semantics.
+
+## 14. Release Presentation and Disc Ordering
+
+Release type is exposed as the closed GraphQL enum `ALBUM`, `EP`, `SINGLE`,
+`COMPILATION`, `LIVE`, or `UNKNOWN`. Imported MusicBrainz release-type values
+are normalized case-insensitively. When a file supplies more than one recognized
+classification, the deterministic precedence is compilation, live, EP, single,
+then album. An explicit compilation flag also maps to compilation. Track count,
+different track artists, and a `Various Artists` credit never infer a type on
+their own. Missing or unrecognized values remain `UNKNOWN` and stay visible.
+
+Disc number, track number, and total discs accept only positive integers. New
+imports preserve missing positions as null instead of inventing track 1. Album
+ordering is always disc number, track number, then ReleaseTrack id; null disc or
+track positions sort after known values. The album resolver returns this order,
+so album playback and the visual track list share the same sequence even when
+disc 1 and disc 2 both contain track 1. Disc headings appear inline only when a
+release has multiple or non-default discs; they do not create another tab or
+navigation level.
+
+An artist's regular releases are releases whose album-level ArtistCredit names
+that artist. `Appears On` contains active releases where the effective track
+credit names the artist but the release credit does not. A release cannot appear
+in both groups for the same artist. This keeps compilation and featured-track
+appearances out of the regular-release shelf while `Various Artists` remains the
+release artist when that credit was actually supplied.
+
+Release tags seed type and disc count when a release is first imported. A later
+new file may fill an unknown type or increase a known disc count for the same
+ordered album credit, title, and date. A rescan of an already linked file keeps
+the stored release classification instead of letting a changed external tag
+silently replace the relational value.

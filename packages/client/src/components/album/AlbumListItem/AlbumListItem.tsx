@@ -8,6 +8,7 @@ interface AlbumListItemProps {
     artistName: string;
     musicCount?: number;
     publishedYear?: string;
+    releaseType?: string;
     onClick: () => void;
     compact?: boolean;
 }
@@ -30,6 +31,7 @@ const AlbumListItem = ({
     artistName,
     musicCount,
     publishedYear,
+    releaseType,
     onClick,
     compact = false
 }: AlbumListItemProps) => {
@@ -41,7 +43,9 @@ const AlbumListItem = ({
             <AlbumArtwork src={albumCover} alt={albumName} />
             <div className="flex min-w-0 flex-col gap-1">
                 <span className="truncate text-sm font-medium">{albumName}</span>
-                <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">{artistName}</span>
+                <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">
+                    {[artistName, releaseType].filter(Boolean).join(' · ')}
+                </span>
             </div>
             <div className={metaContainerClass({ hidden: compact })}>
                 {publishedYear && <Badge tone="subtle">{publishedYear}</Badge>}

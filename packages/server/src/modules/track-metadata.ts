@@ -7,6 +7,11 @@ import {
     type ArtistCreditValue
 } from './artist-credits';
 import { parseBuffer } from './music-metadata';
+import {
+    normalizePositiveInteger,
+    normalizeReleaseType,
+    type ReleaseType
+} from './release-metadata';
 
 export interface ParsedTrackMetadata {
     title: string;
@@ -18,7 +23,10 @@ export interface ParsedTrackMetadata {
     pictureData: Buffer | null;
     genres: string[];
     year: string;
-    trackNumber: number;
+    releaseType: ReleaseType;
+    discNumber: number | null;
+    totalDiscs: number | null;
+    trackNumber: number | null;
     codec: string;
     container: string;
     bitrate: number;
@@ -36,6 +44,9 @@ export interface MusicMetadataOverride {
     genres: string[];
     year: string;
     trackNumber: number;
+    releaseType?: ReleaseType;
+    discNumber?: number | null;
+    totalDiscs?: number | null;
 }
 
 export const parseTrackMetadata = async (
@@ -60,7 +71,11 @@ export const parseTrackMetadata = async (
         picture,
         genre = [],
         year = (new Date()).getFullYear(),
-        track
+        track,
+        disk,
+        totaldiscs,
+        releasetype,
+        compilation
     } = common;
 
     const artistCredits = parseArtistCredits({
@@ -86,7 +101,11 @@ export const parseTrackMetadata = async (
         pictureData: picture?.[0]?.data ? Buffer.from(picture[0].data) : null,
         genres: genre,
         year: year.toString(),
-        trackNumber: track?.no || 1,
+        releaseType: normalizeReleaseType({ values: releasetype, compilation }),
+        discNumber: normalizePositiveInteger(disk?.no),
+        totalDiscs: normalizePositiveInteger(disk?.of)
+            ?? normalizePositiveInteger(totaldiscs),
+        trackNumber: normalizePositiveInteger(track?.no),
         codec,
         container,
         bitrate,
@@ -122,6 +141,18 @@ export const applyMusicMetadataOverride = (
                 : override.albumArtist === null
                     ? null
                     : metadata.albumArtistCredits;
+        const releaseType = override.releaseType === undefined
+            ? metadata.releaseType
+            : normalizeReleaseType({ values: override.releaseType });
+        const discNumber = override.discNumber === undefined
+            ? metadata.discNumber
+            : normalizePositiveInteger(override.discNumber);
+        const totalDiscs = override.totalDiscs === undefined
+            ? metadata.totalDiscs
+            : normalizePositiveInteger(override.totalDiscs);
+        const trackNumber = override.trackNumber === undefined
+            ? metadata.trackNumber
+            : normalizePositiveInteger(override.trackNumber);
 
         return {
             ...metadata,
@@ -130,6 +161,10 @@ export const applyMusicMetadataOverride = (
             artistCredits,
             albumArtist: albumArtistCredits ? formatArtistCredits(albumArtistCredits) : null,
             albumArtistCredits,
+            releaseType,
+            discNumber,
+            totalDiscs,
+            trackNumber,
             pictureData: metadata.pictureData
         };
     } catch {

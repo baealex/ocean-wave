@@ -24,6 +24,9 @@ describe('GraphQL API requests', () => {
         expect(payload.variables).toEqual({ id: '7' });
         expect(payload.query).toContain('query Artist($id: ID!)');
         expect(payload.query).toContain('artist(id: $id)');
+        expect(payload.query).toContain('appearsOn');
+        expect(payload.query).toContain('releaseType');
+        expect(payload.query).toContain('totalDiscs');
         expect(payload.query).not.toContain('artist(id: "7")');
     });
 
@@ -65,5 +68,7 @@ describe('GraphQL API requests', () => {
         expect(payload.query).toContain('artistDisplayName');
         expect(payload.query).toContain('artistCredits');
         expect(payload.query).toContain('joinPhrase');
+        expect(payload.query).toContain('discNumber');
+        expect(payload.query).toContain('releaseType');
     });
 });

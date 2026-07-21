@@ -18,7 +18,8 @@ export const musicType: string = gql`
         lastSkippedAt: String
         completionCount: Int!
         lastCompletedAt: String
-        trackNumber: Int!
+        discNumber: Int
+        trackNumber: Int
         filePath: String!
         hasMetadataOverride: Boolean!
         isLiked: Boolean!

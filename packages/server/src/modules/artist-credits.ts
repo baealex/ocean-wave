@@ -353,6 +353,26 @@ export const findActiveAlbumIdsForArtist = async (artistId: number) => {
     return releases.map(({ id }) => id);
 };
 
+export const findActiveAppearsOnAlbumIdsForArtist = async (artistId: number) => {
+    const regularAlbumIds = new Set(await findActiveAlbumIdsForArtist(artistId));
+    const appearances = await models.releaseTrack.findMany({
+        where: {
+            releaseId: { notIn: [...regularAlbumIds] },
+            PhysicalFile: { some: { syncStatus: TRACK_SYNC_STATUS.active } },
+            OR: [
+                { ArtistCredit: { some: { artistId } } },
+                {
+                    ArtistCredit: { none: {} },
+                    Recording: { ArtistCredit: { some: { artistId } } }
+                }
+            ]
+        },
+        select: { releaseId: true }
+    });
+
+    return [...new Set(appearances.map(({ releaseId }) => releaseId))];
+};
+
 export const findActiveCreditedArtistIds = async () => {
     const activeMusic = await models.music.findMany({
         where: { syncStatus: TRACK_SYNC_STATUS.active },

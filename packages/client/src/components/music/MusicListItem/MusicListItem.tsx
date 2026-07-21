@@ -10,7 +10,7 @@ interface MusicListItemProps {
     albumName: string;
     albumCover?: string;
     artistName: string;
-    trackNumber?: number;
+    trackNumber?: number | null;
     musicName: string;
     musicCodec?: string;
     isLiked?: boolean;
