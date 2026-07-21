@@ -1,5 +1,9 @@
 import models from '~/models';
 import {
+    createReadableAudioTestFile,
+    removeReadableAudioTestFiles
+} from '~/test-support/readable-audio-file';
+import {
     PlaybackSessionServiceError,
     getPlaybackSessionSnapshot,
     reportPlaybackState
@@ -22,7 +26,7 @@ const createMusic = async (duration = 180) => {
             name: `Track ${unique}`,
             artistId: artist.id,
             albumId: album.id,
-            filePath: `/music/${unique}.mp3`,
+            filePath: createReadableAudioTestFile(),
             duration,
             codec: 'mp3',
             container: 'mp3',
@@ -40,6 +44,7 @@ describe('playback session service', () => {
 
     afterEach(async () => {
         await models.playbackSession.deleteMany();
+        removeReadableAudioTestFiles();
     });
 
     it('creates an authoritative snapshot when the first web player claims it', async () => {
@@ -74,6 +79,52 @@ describe('playback session service', () => {
             activeDeviceId: 'web-tab-1',
             revision: 1
         });
+    });
+
+    it('stores the readable fallback identity and clamps to its duration', async () => {
+        const music = await createMusic(180);
+        await models.physicalFile.update({
+            where: { id: music.physicalFileId },
+            data: {
+                filePath: `/unreadable/session-preferred-${music.id}.flac`,
+                preferenceRank: 0,
+                codec: 'flac'
+            }
+        });
+        const fallback = await models.physicalFile.create({
+            data: {
+                releaseTrackId: music.releaseTrackId,
+                filePath: createReadableAudioTestFile(),
+                durationMs: 45_000,
+                codec: 'mp3',
+                container: 'mp3',
+                bitrate: 192_000,
+                sampleRate: 44_100,
+                syncStatus: 'active'
+            }
+        });
+
+        const result = await reportPlaybackState({
+            deviceId: 'web-fallback',
+            sequence: 1,
+            expectedRevision: 0,
+            claimActive: true,
+            state: 'playing',
+            currentMusicId: music.id.toString(),
+            positionMs: 90_000,
+            playbackHistory: {
+                clientSessionId: 'fallback-session-history',
+                startedAt: '2026-07-14T00:00:00.000Z',
+                accumulatedPlayedMs: 45_000,
+                hadSeek: false,
+                updatedAt: '2026-07-14T00:00:45.000Z'
+            }
+        });
+
+        expect(result.session.positionMs).toBe(45_000);
+        await expect(models.playbackSession.findUniqueOrThrow({
+            where: { scopeKey: 'local' }
+        })).resolves.toMatchObject({ historyPhysicalFileId: fallback.id });
     });
 
     it('persists current history lineage and clears it when playback stops', async () => {

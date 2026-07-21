@@ -7,6 +7,8 @@ export interface Music {
     sampleRate: number;
     discNumber: number | null;
     trackNumber: number | null;
+    recordingVersionTitle: string | null;
+    releaseVersionTitle: string | null;
     playCount: number;
     lastPlayedAt: string | null;
     totalPlayedMs: number;
@@ -15,6 +17,9 @@ export interface Music {
     completionCount: number;
     lastCompletedAt: string | null;
     filePath: string;
+    files?: MusicFileVersion[];
+    recordingAppearances?: Music[];
+    groupingCandidates?: MusicGroupingCandidate[];
     hasMetadataOverride: boolean;
     isLiked: boolean;
     isHated: boolean;
@@ -27,6 +32,26 @@ export interface Music {
         name: string;
     }[];
     tags: Tag[];
+}
+
+export interface MusicFileVersion {
+    id: string;
+    filePath: string;
+    codec: string;
+    container: string;
+    bitrate: number;
+    sampleRate: number;
+    duration: number;
+    syncStatus: string;
+    isPreferred: boolean;
+    isSelected: boolean;
+    isPlayable: boolean;
+}
+
+export interface MusicGroupingCandidate {
+    kind: 'ALTERNATE_FILE' | 'SAME_RECORDING';
+    music: Music;
+    reasons: string[];
 }
 
 export type ArtistCreditRole =

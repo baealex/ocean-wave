@@ -95,6 +95,85 @@ export function updateMusicMetadata(input: UpdateMusicMetadataInput) {
     );
 }
 
+export function setPreferredMusicFile(input: {
+    musicId: string;
+    fileId: string | null;
+}) {
+    return graphQuery<{
+        setPreferredMusicFile: Pick<Music, 'id' | 'name'>;
+    }, typeof input & OriginClientVariables>(
+        `mutation SetPreferredMusicFile($musicId: ID!, $fileId: ID, $originClientId: String) {
+            setPreferredMusicFile(musicId: $musicId, fileId: $fileId, originClientId: $originClientId) {
+                id
+                name
+            }
+        }`,
+        withOriginClientId(input)
+    );
+}
+
+export function groupMusicAsAlternateFile(input: {
+    musicId: string;
+    targetMusicId: string;
+}) {
+    return graphQuery<{
+        groupMusicAsAlternateFile: Pick<Music, 'id' | 'name'>;
+    }, typeof input & OriginClientVariables>(
+        `mutation GroupMusicAsAlternateFile($musicId: ID!, $targetMusicId: ID!, $originClientId: String) {
+            groupMusicAsAlternateFile(musicId: $musicId, targetMusicId: $targetMusicId, originClientId: $originClientId) {
+                id
+                name
+            }
+        }`,
+        withOriginClientId(input)
+    );
+}
+
+export function ungroupMusicFile(input: { musicId: string; fileId: string }) {
+    return graphQuery<{
+        ungroupMusicFile: Pick<Music, 'id' | 'name'>;
+    }, typeof input & OriginClientVariables>(
+        `mutation UngroupMusicFile($musicId: ID!, $fileId: ID!, $originClientId: String) {
+            ungroupMusicFile(musicId: $musicId, fileId: $fileId, originClientId: $originClientId) {
+                id
+                name
+            }
+        }`,
+        withOriginClientId(input)
+    );
+}
+
+export function linkMusicRecordings(input: {
+    musicId: string;
+    targetMusicId: string;
+}) {
+    return graphQuery<{
+        linkMusicRecordings: Pick<Music, 'id' | 'name'>;
+    }, typeof input & OriginClientVariables>(
+        `mutation LinkMusicRecordings($musicId: ID!, $targetMusicId: ID!, $originClientId: String) {
+            linkMusicRecordings(musicId: $musicId, targetMusicId: $targetMusicId, originClientId: $originClientId) {
+                id
+                name
+            }
+        }`,
+        withOriginClientId(input)
+    );
+}
+
+export function unlinkMusicRecording(input: { musicId: string }) {
+    return graphQuery<{
+        unlinkMusicRecording: Pick<Music, 'id' | 'name'>;
+    }, typeof input & OriginClientVariables>(
+        `mutation UnlinkMusicRecording($musicId: ID!, $originClientId: String) {
+            unlinkMusicRecording(musicId: $musicId, originClientId: $originClientId) {
+                id
+                name
+            }
+        }`,
+        withOriginClientId(input)
+    );
+}
+
 const getArtworkHeaders = (contentType?: string) => {
     const originClientId = getOriginClientId();
 

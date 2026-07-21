@@ -1,5 +1,9 @@
 import models from '~/models';
 import {
+    createReadableAudioTestFile,
+    removeReadableAudioTestFiles
+} from '~/test-support/readable-audio-file';
+import {
     classifyPlaybackOutcome,
     recordPlayback,
     shouldCountAsPlay
@@ -22,7 +26,7 @@ const createMusic = async (overrides?: { duration?: number }) => {
             name: `Track ${unique}`,
             artistId: artist.id,
             albumId: album.id,
-            filePath: `/music/${unique}.mp3`,
+            filePath: createReadableAudioTestFile(),
             duration: overrides?.duration ?? 200,
             codec: 'mp3',
             container: 'mp3',
@@ -147,6 +151,47 @@ describe('music playback history persistence', () => {
         await models.music.deleteMany();
         await models.album.deleteMany();
         await models.artist.deleteMany();
+    });
+
+    afterEach(removeReadableAudioTestFiles);
+
+    it('records the readable fallback file and uses its duration', async () => {
+        const music = await createMusic({ duration: 180 });
+        await models.physicalFile.update({
+            where: { id: music.physicalFileId },
+            data: {
+                filePath: `/unreadable/preferred-${music.id}.flac`,
+                preferenceRank: 0,
+                codec: 'flac'
+            }
+        });
+        const fallback = await models.physicalFile.create({
+            data: {
+                releaseTrackId: music.releaseTrackId,
+                filePath: createReadableAudioTestFile(),
+                durationMs: 60_000,
+                codec: 'mp3',
+                container: 'mp3',
+                bitrate: 192_000,
+                sampleRate: 44_100,
+                syncStatus: 'active'
+            }
+        });
+
+        const result = await recordPlayback({
+            id: music.id.toString(),
+            playedMs: 54_000,
+            endReason: 'ended',
+            clientSessionId: 'fallback-file-event'
+        }, at(55));
+
+        expect(result).toMatchObject({
+            completionRate: 0.9,
+            outcome: 'complete'
+        });
+        await expect(models.playbackEvent.findUniqueOrThrow({
+            where: { clientSessionId: 'fallback-file-event' }
+        })).resolves.toMatchObject({ physicalFileId: fallback.id });
     });
 
     it('creates a listen event and updates meaningful-listen aggregates', async () => {

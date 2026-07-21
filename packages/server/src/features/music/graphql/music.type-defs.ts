@@ -4,6 +4,31 @@ import { artistType } from '../../../schema/artist';
 import { artistCreditType } from '../../../schema/artist-credit';
 
 export const musicType: string = gql`
+    type MusicFileVersion {
+        id: ID!
+        filePath: String!
+        codec: String!
+        container: String!
+        bitrate: Float!
+        sampleRate: Float!
+        duration: Float!
+        syncStatus: String!
+        isPreferred: Boolean!
+        isSelected: Boolean!
+        isPlayable: Boolean!
+    }
+
+    enum MusicGroupingCandidateKind {
+        ALTERNATE_FILE
+        SAME_RECORDING
+    }
+
+    type MusicGroupingCandidate {
+        kind: MusicGroupingCandidateKind!
+        music: Music!
+        reasons: [String!]!
+    }
+
     type Music {
         id: ID!
         name: String!
@@ -20,7 +45,12 @@ export const musicType: string = gql`
         lastCompletedAt: String
         discNumber: Int
         trackNumber: Int
+        recordingVersionTitle: String
+        releaseVersionTitle: String
         filePath: String!
+        files: [MusicFileVersion!]!
+        recordingAppearances: [Music!]!
+        groupingCandidates: [MusicGroupingCandidate!]!
         hasMetadataOverride: Boolean!
         isLiked: Boolean!
         isHated: Boolean!
@@ -176,6 +206,11 @@ export const musicMutation = gql`
         setMusicLiked(id: ID!, isLiked: Boolean!, originClientId: String): MusicLikedPayload!
         setMusicHated(id: ID!, isHated: Boolean!, originClientId: String): MusicHatedPayload!
         updateMusicMetadata(input: UpdateMusicMetadataInput!, originClientId: String): Music!
+        setPreferredMusicFile(musicId: ID!, fileId: ID, originClientId: String): Music!
+        groupMusicAsAlternateFile(musicId: ID!, targetMusicId: ID!, originClientId: String): Music!
+        ungroupMusicFile(musicId: ID!, fileId: ID!, originClientId: String): Music!
+        linkMusicRecordings(musicId: ID!, targetMusicId: ID!, originClientId: String): Music!
+        unlinkMusicRecording(musicId: ID!, originClientId: String): Music!
         recordPlayback(input: RecordPlaybackInput!, originClientId: String): PlaybackRecordPayload
     }
 `;

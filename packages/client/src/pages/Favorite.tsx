@@ -87,6 +87,8 @@ export default function Music() {
     const smartFilteredMusics = filterMusicsBySmartFilter(favoriteMusics, smartFilterId);
     const filteredMusics = smartFilteredMusics.filter(music =>
         music.name.toLowerCase().includes(deferredQuery) ||
+        music.recordingVersionTitle?.toLowerCase().includes(deferredQuery) ||
+        music.releaseVersionTitle?.toLowerCase().includes(deferredQuery) ||
         music.artistDisplayName.toLowerCase().includes(deferredQuery) ||
         music.album.name.toLowerCase().includes(deferredQuery)
     );
@@ -221,6 +223,8 @@ export default function Music() {
                             albumCover={music.album.cover}
                             artistName={music.artistDisplayName}
                             musicName={music.name}
+                            versionTitle={[music.recordingVersionTitle, music.releaseVersionTitle]
+                                .filter(Boolean).join(' · ')}
                             musicCodec={music.codec}
                             isLiked={music.isLiked}
                             onClick={() => queueStore.add(music.id)}

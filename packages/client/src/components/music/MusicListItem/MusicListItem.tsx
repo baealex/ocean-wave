@@ -12,6 +12,7 @@ interface MusicListItemProps {
     artistName: string;
     trackNumber?: number | null;
     musicName: string;
+    versionTitle?: string;
     musicCodec?: string;
     isLiked?: boolean;
     isHated?: boolean;
@@ -26,6 +27,7 @@ const MusicListItem = ({
     artistName,
     trackNumber,
     musicName,
+    versionTitle,
     musicCodec,
     isLiked,
     isHated,
@@ -62,6 +64,14 @@ const MusicListItem = ({
                                 <span className="min-w-6 text-xs text-[var(--b-color-text-muted)]">{trackNumber}.</span>
                             )}
                             <span className="truncate">{musicName}</span>
+                            {versionTitle
+                                && !musicName.toLocaleLowerCase().includes(
+                                    versionTitle.toLocaleLowerCase()
+                                ) && (
+                                <span className="shrink-0 text-[10px] font-normal text-[var(--b-color-text-muted)]">
+                                    {versionTitle}
+                                </span>
+                            )}
                             {musicCodec?.toLowerCase() === 'flac' && (
                                 <span className="inline-flex min-h-[12px] shrink-0 items-center rounded-full border border-[rgba(139,92,246,0.28)] bg-[rgba(139,92,246,0.08)] px-1 text-[8px] font-normal leading-none text-[var(--b-color-point-light)]">
                                     {musicCodec.toUpperCase()}

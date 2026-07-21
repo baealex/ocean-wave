@@ -268,6 +268,22 @@ export const updateMusicMetadata = async (
             throw new MusicMetadataServiceError('Music not found.', 'MUSIC_NOT_FOUND');
         }
 
+        const [groupedFileCount, recordingAppearanceCount] = await Promise.all([
+            models.physicalFile.count({
+                where: { releaseTrackId: existingMusic.releaseTrackId }
+            }),
+            models.releaseTrack.count({
+                where: { recordingId: existingMusic.recordingId }
+            })
+        ]);
+
+        if (groupedFileCount > 1 || recordingAppearanceCount > 1) {
+            throw new MusicMetadataServiceError(
+                'Separate alternate files and linked release appearances before editing shared metadata.',
+                'RELATIONAL_METADATA_EDIT_REQUIRED'
+            );
+        }
+
         const [existingTrackCredits, existingAlbumCredits] = await Promise.all([
             getEffectiveMusicArtistCredits(existingMusic),
             getReleaseArtistCredits(existingMusic.albumId)

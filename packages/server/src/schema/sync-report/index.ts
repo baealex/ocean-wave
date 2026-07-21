@@ -71,5 +71,16 @@ export const syncReportResolvers: IResolvers = {
         missing: (report: { Item?: Array<{ kind: string }> }) => {
             return filterItemsByKind(SYNC_REPORT_KIND.missing, report.Item);
         }
+    },
+    SyncReportItem: {
+        musicId: async (item: { musicId: number | null }) => {
+            if (!item.musicId) return null;
+
+            const file = await models.physicalFile.findUnique({
+                where: { id: item.musicId },
+                select: { releaseTrackId: true }
+            });
+            return file?.releaseTrackId ?? null;
+        }
     }
 };

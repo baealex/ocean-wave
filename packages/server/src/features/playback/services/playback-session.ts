@@ -1,5 +1,5 @@
 import models, { type PlaybackSession } from '~/models';
-import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
+import { resolvePlayableReleaseTrack } from '~/modules/physical-file-selection';
 
 export const PLAYBACK_SCOPE_KEY = 'local';
 
@@ -325,21 +325,25 @@ export const reportPlaybackState = async (
     serverTime = new Date()
 ): Promise<PlaybackSessionReportResult> => {
     const normalized = validateInput(input);
-    const music = normalized.currentMusicId === null
+    const previousSession = normalized.currentMusicId === null
         ? null
-        : await models.music.findFirst({
-            where: {
-                id: normalized.currentMusicId,
-                syncStatus: TRACK_SYNC_STATUS.active
-            },
+        : await models.playbackSession.findUnique({
+            where: { scopeKey: PLAYBACK_SCOPE_KEY },
             select: {
-                id: true,
-                recordingId: true,
-                releaseTrackId: true,
-                physicalFileId: true,
-                duration: true
+                currentMusicId: true,
+                historyPhysicalFileId: true
             }
         });
+    const currentPhysicalFileId = previousSession?.currentMusicId
+        === normalized.currentMusicId
+        ? previousSession.historyPhysicalFileId
+        : null;
+    const music = normalized.currentMusicId === null
+        ? null
+        : await resolvePlayableReleaseTrack(
+            normalized.currentMusicId,
+            currentPhysicalFileId
+        );
 
     if (normalized.currentMusicId !== null && !music) {
         throw new PlaybackSessionServiceError(

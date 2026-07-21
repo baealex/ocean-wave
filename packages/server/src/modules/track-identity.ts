@@ -8,8 +8,10 @@ export type TrackSyncStatus = typeof TRACK_SYNC_STATUS[keyof typeof TRACK_SYNC_S
 
 export interface TrackIdentityRecord {
     id: number;
+    releaseTrackId?: number;
     filePath: string;
     contentHash: string | null;
+    isExplicitlyActivated: boolean;
     lastSeenAt: Date | null;
     missingSinceAt: Date | null;
     syncStatus: TrackSyncStatus;
@@ -49,6 +51,10 @@ export const resolveVisibleTrackSyncStatus = (
     const visibleHashMatches = records.filter((candidate) => {
         return candidate.contentHash === record.contentHash && visiblePaths.has(candidate.filePath);
     });
+
+    if (record.isExplicitlyActivated) {
+        return TRACK_SYNC_STATUS.active;
+    }
 
     if (visibleHashMatches.length <= 1) {
         return TRACK_SYNC_STATUS.active;

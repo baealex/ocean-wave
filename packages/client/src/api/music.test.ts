@@ -16,9 +16,14 @@ vi.mock('~/socket/socket', () => ({
 }));
 
 import {
+    groupMusicAsAlternateFile,
+    linkMusicRecordings,
     recordPlayback,
+    setPreferredMusicFile,
     setMusicHated,
     setMusicLiked,
+    ungroupMusicFile,
+    unlinkMusicRecording,
     updateMusicMetadata
 } from './music';
 
@@ -175,5 +180,31 @@ describe('music API requests', () => {
             'updateMusicMetadata(input: $input, originClientId: $originClientId)'
         );
         expect(payload.query).not.toContain('Edited Track');
+    });
+
+    it('sends every recording and file grouping control through typed variables', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({
+            data: { data: { music: { id: '7', name: 'Signal' } } }
+        });
+
+        await setPreferredMusicFile({ musicId: '7', fileId: '9' });
+        await groupMusicAsAlternateFile({ musicId: '8', targetMusicId: '7' });
+        await ungroupMusicFile({ musicId: '7', fileId: '9' });
+        await linkMusicRecordings({ musicId: '8', targetMusicId: '7' });
+        await unlinkMusicRecording({ musicId: '7' });
+
+        const payloads = post.mock.calls.map(call => call[1] as GraphqlPayload);
+
+        expect(payloads[0]).toMatchObject({
+            variables: { musicId: '7', fileId: '9', originClientId: 'client-1' }
+        });
+        expect(payloads[0].query).toContain('setPreferredMusicFile');
+        expect(payloads[1]).toMatchObject({
+            variables: { musicId: '8', targetMusicId: '7', originClientId: 'client-1' }
+        });
+        expect(payloads[1].query).toContain('groupMusicAsAlternateFile');
+        expect(payloads[2].query).toContain('ungroupMusicFile');
+        expect(payloads[3].query).toContain('linkMusicRecordings');
+        expect(payloads[4].query).toContain('unlinkMusicRecording');
     });
 });

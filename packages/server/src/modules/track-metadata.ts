@@ -12,6 +12,12 @@ import {
     normalizeReleaseType,
     type ReleaseType
 } from './release-metadata';
+import {
+    parseTrackIdentifiers,
+    resolveTrackVersionMetadata,
+    serializeTrackTagSnapshot,
+    type TrackIdentifier
+} from './track-version';
 
 export interface ParsedTrackMetadata {
     title: string;
@@ -27,6 +33,9 @@ export interface ParsedTrackMetadata {
     discNumber: number | null;
     totalDiscs: number | null;
     trackNumber: number | null;
+    recordingVersionTitle: string | null;
+    releaseVersionTitle: string | null;
+    identifiers: TrackIdentifier[];
     codec: string;
     container: string;
     bitrate: number;
@@ -75,7 +84,9 @@ export const parseTrackMetadata = async (
         disk,
         totaldiscs,
         releasetype,
-        compilation
+        compilation,
+        subtitle,
+        remixer
     } = common;
 
     const artistCredits = parseArtistCredits({
@@ -90,6 +101,11 @@ export const parseTrackMetadata = async (
             fallbackName: artistCredits[0].name
         })
         : null;
+    const versionMetadata = resolveTrackVersionMetadata({
+        title,
+        subtitles: subtitle,
+        remixers: remixer
+    });
 
     return {
         title,
@@ -106,12 +122,22 @@ export const parseTrackMetadata = async (
         totalDiscs: normalizePositiveInteger(disk?.of)
             ?? normalizePositiveInteger(totaldiscs),
         trackNumber: normalizePositiveInteger(track?.no),
+        ...versionMetadata,
+        identifiers: parseTrackIdentifiers(common),
         codec,
         container,
         bitrate,
         duration,
         sampleRate
     };
+};
+
+export const createTrackTagSnapshot = (metadata: ParsedTrackMetadata) => {
+    return serializeTrackTagSnapshot({
+        identifiers: metadata.identifiers,
+        recordingVersionTitle: metadata.recordingVersionTitle,
+        releaseVersionTitle: metadata.releaseVersionTitle
+    });
 };
 
 export const serializeMusicMetadataOverride = (metadata: MusicMetadataOverride) => {

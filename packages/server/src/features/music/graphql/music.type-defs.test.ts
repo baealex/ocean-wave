@@ -66,3 +66,33 @@ describe('release structure GraphQL contract', () => {
         ]);
     });
 });
+
+describe('recording version GraphQL contract', () => {
+    it('exposes files, recording appearances, safe candidates, and manual controls', () => {
+        const musicType = schema.getType('Music') as {
+            getFields: () => Record<string, { type: { toString: () => string } }>;
+        };
+        const candidateKind = schema.getType('MusicGroupingCandidateKind') as unknown as {
+            getValues: () => Array<{ name: string }>;
+        };
+        const mutations = schema.getMutationType()?.getFields();
+
+        expect(musicType.getFields().recordingVersionTitle.type.toString()).toBe('String');
+        expect(musicType.getFields().releaseVersionTitle.type.toString()).toBe('String');
+        expect(musicType.getFields().files.type.toString()).toBe('[MusicFileVersion!]!');
+        expect(musicType.getFields().recordingAppearances.type.toString()).toBe('[Music!]!');
+        expect(musicType.getFields().groupingCandidates.type.toString())
+            .toBe('[MusicGroupingCandidate!]!');
+        expect(candidateKind.getValues().map(value => value.name)).toEqual([
+            'ALTERNATE_FILE',
+            'SAME_RECORDING'
+        ]);
+        expect(Object.keys(mutations ?? {})).toEqual(expect.arrayContaining([
+            'setPreferredMusicFile',
+            'groupMusicAsAlternateFile',
+            'ungroupMusicFile',
+            'linkMusicRecordings',
+            'unlinkMusicRecording'
+        ]));
+    });
+});

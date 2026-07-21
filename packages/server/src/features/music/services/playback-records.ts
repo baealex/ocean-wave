@@ -5,6 +5,7 @@ import models, {
     type PlaybackEvent,
     type PlaybackEventBranch
 } from '~/models';
+import { resolvePlayableReleaseTrack } from '~/modules/physical-file-selection';
 
 export const PLAY_COUNT_MIN_MS = 30_000;
 export const SHORT_TRACK_COUNT_THRESHOLD = 0.5;
@@ -74,6 +75,8 @@ export interface PlaybackRecordResult {
 
 interface NormalizedPlaybackRecord {
     music: Music;
+    physicalFileId: number;
+    durationSeconds: number;
     playedMs: number;
     startedAt: Date;
     endedAt: Date;
@@ -224,6 +227,23 @@ const normalizeRecord = async (
         throw new Error('Playback session identity belongs to another track.');
     }
 
+    const existingPhysicalFile = existing?.physicalFileId
+        ? await models.physicalFile.findFirst({
+            where: {
+                id: existing.physicalFileId,
+                releaseTrackId: music.releaseTrackId
+            },
+            select: { id: true, durationMs: true }
+        })
+        : null;
+    const playable = existingPhysicalFile
+        ? {
+            physicalFileId: existingPhysicalFile.id,
+            duration: existingPhysicalFile.durationMs / 1_000
+        }
+        : await resolvePlayableReleaseTrack(music.releaseTrackId);
+    if (!playable) return null;
+
     const requestedPlayedMs = Number.isFinite(input.playedMs)
         ? Math.round(Number(input.playedMs))
         : 0;
@@ -231,8 +251,8 @@ const normalizeRecord = async (
         ? input.endReason
         : PLAYBACK_END_REASONS.legacy;
     const requestedNonNegativePlayedMs = Math.max(requestedPlayedMs, 0);
-    const durationMs = Number.isFinite(music.duration) && music.duration > 0
-        ? Math.round(music.duration * 1_000)
+    const durationMs = Number.isFinite(playable.duration) && playable.duration > 0
+        ? Math.round(playable.duration * 1_000)
         : null;
     const maximumUnseekedPlayedMs = durationMs === null
         ? requestedNonNegativePlayedMs
@@ -258,6 +278,8 @@ const normalizeRecord = async (
 
     return {
         music,
+        physicalFileId: playable.physicalFileId,
+        durationSeconds: playable.duration,
         playedMs,
         startedAt,
         endedAt,
@@ -435,15 +457,15 @@ const recordNormalizedPlayback = async (
 
         if (!existing) {
             const completionRate = toCompletionRate(
-                music.duration,
+                normalized.durationSeconds,
                 normalized.playedMs
             );
             const countedAsPlay = shouldCountAsPlay({
-                durationSeconds: music.duration,
+                durationSeconds: normalized.durationSeconds,
                 playedMs: normalized.playedMs
             });
             const outcome = classifyPlaybackOutcome({
-                durationSeconds: music.duration,
+                durationSeconds: normalized.durationSeconds,
                 playedMs: normalized.playedMs,
                 endReason: normalized.endReason
             });
@@ -451,7 +473,7 @@ const recordNormalizedPlayback = async (
                 data: {
                     musicId: music.recordingId,
                     releaseTrackId: music.releaseTrackId,
-                    physicalFileId: music.physicalFileId,
+                    physicalFileId: normalized.physicalFileId,
                     startedAt: normalized.startedAt,
                     endedAt: normalized.endedAt,
                     playedMs: normalized.playedMs,
@@ -563,14 +585,14 @@ const recordNormalizedPlayback = async (
         const playedDelta = playedMs - existing.playedMs;
         const completionRate = Math.max(
             existing.completionRate,
-            toCompletionRate(music.duration, playedMs)
+            toCompletionRate(normalized.durationSeconds, playedMs)
         );
         const countedAsPlay = existing.countedAsPlay || shouldCountAsPlay({
-            durationSeconds: music.duration,
+            durationSeconds: normalized.durationSeconds,
             playedMs
         });
         const incomingOutcome = classifyPlaybackOutcome({
-            durationSeconds: music.duration,
+            durationSeconds: normalized.durationSeconds,
             playedMs,
             endReason: normalized.endReason
         });
@@ -579,7 +601,7 @@ const recordNormalizedPlayback = async (
             ? isTerminalOutcome(existing.outcome)
                 ? existing.outcome as PlaybackOutcome
                 : classifyPlaybackOutcome({
-                    durationSeconds: music.duration,
+                    durationSeconds: normalized.durationSeconds,
                     playedMs,
                     endReason: existing.endReason as PlaybackEndReason
                 })

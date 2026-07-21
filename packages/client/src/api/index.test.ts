@@ -2,7 +2,7 @@ import axios from 'axios';
 import { describe, expect, it, vi } from 'vitest';
 
 import { graphQLRequest } from './graphql';
-import { getArtist, getMusics } from './library';
+import { getArtist, getMusic, getMusics } from './library';
 
 interface GraphqlPayload {
     operationName?: string;
@@ -70,5 +70,24 @@ describe('GraphQL API requests', () => {
         expect(payload.query).toContain('joinPhrase');
         expect(payload.query).toContain('discNumber');
         expect(payload.query).toContain('releaseType');
+    });
+
+    it('requests recording versions, grouped files, and conservative suggestions on detail', async () => {
+        const request = vi.spyOn(axios, 'request').mockResolvedValue({
+            data: { data: { music: { id: '1' } } }
+        });
+
+        await getMusic('1');
+
+        const payload = request.mock.calls[0]?.[0]?.data as GraphqlPayload;
+
+        expect(payload.query).toContain('recordingVersionTitle');
+        expect(payload.query).toContain('releaseVersionTitle');
+        expect(payload.query).toContain('files');
+        expect(payload.query).toContain('isPreferred');
+        expect(payload.query).toContain('isSelected');
+        expect(payload.query).toContain('recordingAppearances');
+        expect(payload.query).toContain('groupingCandidates');
+        expect(payload.query).toContain('reasons');
     });
 });

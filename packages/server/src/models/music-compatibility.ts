@@ -47,6 +47,9 @@ export interface CompatibilityMusicCreateInput {
     metadataOverride?: string | null;
     contentHash?: string | null;
     hashVersion?: number | null;
+    tagSnapshotJson?: string | null;
+    tagSnapshotVersion?: number | null;
+    fileSizeBytes?: bigint | null;
     duration: number;
     codec: string;
     container: string;
@@ -64,6 +67,8 @@ export interface CompatibilityMusicCreateInput {
     totalPlayedMs?: number;
     discNumber?: number | null;
     trackNumber: number | null;
+    recordingVersionTitle?: string | null;
+    releaseVersionTitle?: string | null;
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -199,6 +204,7 @@ export const createCompatibilityMusicInTransaction = async (
         data: {
             id: identityId,
             title: data.name,
+            versionTitle: data.recordingVersionTitle,
             playCount: data.playCount ?? 0,
             lastPlayedAt: data.lastPlayedAt,
             skipCount: data.skipCount ?? 0,
@@ -223,6 +229,7 @@ export const createCompatibilityMusicInTransaction = async (
             id: identityId,
             recordingId: recording.id,
             releaseId,
+            versionTitle: data.releaseVersionTitle,
             discNumber: data.discNumber === undefined ? 1 : data.discNumber,
             trackNumber: data.trackNumber,
             ...(data.createdAt === undefined ? {} : { createdAt: data.createdAt }),
@@ -238,6 +245,9 @@ export const createCompatibilityMusicInTransaction = async (
             legacyMetadataOverride: data.metadataOverride,
             contentHash: data.contentHash,
             hashVersion: data.hashVersion,
+            tagSnapshotJson: data.tagSnapshotJson,
+            tagSnapshotVersion: data.tagSnapshotVersion,
+            fileSizeBytes: data.fileSizeBytes,
             durationMs: Math.round(data.duration * 1_000),
             codec: data.codec,
             container: data.container,
@@ -300,6 +310,9 @@ export const updateCompatibilityMusicInTransaction = async (
     const physicalFileData: Prisma.PhysicalFileUpdateInput = {};
 
     if (data.name !== undefined) recordingData.title = data.name;
+    if (data.recordingVersionTitle !== undefined) {
+        recordingData.versionTitle = data.recordingVersionTitle;
+    }
     if (data.lastPlayedAt !== undefined) recordingData.lastPlayedAt = data.lastPlayedAt;
     if (data.lastSkippedAt !== undefined) recordingData.lastSkippedAt = data.lastSkippedAt;
     if (data.lastCompletedAt !== undefined) recordingData.lastCompletedAt = data.lastCompletedAt;
@@ -316,10 +329,22 @@ export const updateCompatibilityMusicInTransaction = async (
     if (data.albumId !== undefined) releaseTrackData.releaseId = data.albumId;
     if (data.discNumber !== undefined) releaseTrackData.discNumber = data.discNumber;
     if (data.trackNumber !== undefined) releaseTrackData.trackNumber = data.trackNumber;
+    if (data.releaseVersionTitle !== undefined) {
+        releaseTrackData.versionTitle = data.releaseVersionTitle;
+    }
     if (data.filePath !== undefined) physicalFileData.filePath = data.filePath;
     if (data.metadataOverride !== undefined) physicalFileData.legacyMetadataOverride = data.metadataOverride;
     if (data.contentHash !== undefined) physicalFileData.contentHash = data.contentHash;
     if (data.hashVersion !== undefined) physicalFileData.hashVersion = data.hashVersion;
+    if (data.tagSnapshotJson !== undefined) {
+        physicalFileData.tagSnapshotJson = data.tagSnapshotJson;
+    }
+    if (data.tagSnapshotVersion !== undefined) {
+        physicalFileData.tagSnapshotVersion = data.tagSnapshotVersion;
+    }
+    if (data.fileSizeBytes !== undefined) {
+        physicalFileData.fileSizeBytes = data.fileSizeBytes;
+    }
     if (data.duration !== undefined) physicalFileData.durationMs = Math.round(data.duration * 1_000);
     if (data.codec !== undefined) physicalFileData.codec = data.codec;
     if (data.container !== undefined) physicalFileData.container = data.container;
@@ -384,10 +409,9 @@ const deleteMusicRows = async (
     }
 
     const releaseTrackIds = rows.map(({ id }) => id);
-    const physicalFileIds = rows.map(({ physicalFileId }) => physicalFileId);
     const recordingIds = [...new Set(rows.map(({ recordingId }) => recordingId))];
 
-    await transaction.physicalFile.deleteMany({ where: { id: { in: physicalFileIds } } });
+    await transaction.physicalFile.deleteMany({ where: { releaseTrackId: { in: releaseTrackIds } } });
     await transaction.releaseTrack.deleteMany({ where: { id: { in: releaseTrackIds } } });
     await transaction.recording.deleteMany({
         where: {

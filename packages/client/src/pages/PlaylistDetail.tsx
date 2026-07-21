@@ -271,6 +271,10 @@ export default function PlaylistDetail() {
                                             albumCover={music.album.cover}
                                             artistName={music.artistDisplayName}
                                             musicName={music.name}
+                                            versionTitle={[
+                                                music.recordingVersionTitle,
+                                                music.releaseVersionTitle
+                                            ].filter(Boolean).join(' · ')}
                                             musicCodec={music.codec}
                                             isLiked={music.isLiked}
                                             isHated={music.isHated}

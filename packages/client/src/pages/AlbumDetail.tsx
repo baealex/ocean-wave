@@ -124,6 +124,10 @@ export default function AlbumDetail() {
                                 artistName={music.artistDisplayName}
                                 trackNumber={music.trackNumber}
                                 musicName={music.name}
+                                versionTitle={[
+                                    music.recordingVersionTitle,
+                                    music.releaseVersionTitle
+                                ].filter(Boolean).join(' · ')}
                                 musicCodec={music.codec}
                                 isLiked={music.isLiked}
                                 hideAlbumArt
