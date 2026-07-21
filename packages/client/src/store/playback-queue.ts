@@ -84,6 +84,25 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
         return this.inFlight === null && this.state.conflict === null;
     }
 
+    adoptExternalSnapshot(snapshot: PlaybackQueueSnapshot) {
+        const current = this.state.snapshot;
+
+        if (current && current.revision > snapshot.revision) {
+            return current;
+        }
+
+        this.refreshSequence += 1;
+        this.snapshotVersion += 1;
+        this.set({
+            snapshot,
+            conflict: null,
+            initialized: true,
+            loading: false,
+            error: null
+        });
+        return snapshot;
+    }
+
     connect() {
         if (this.connected) {
             return;

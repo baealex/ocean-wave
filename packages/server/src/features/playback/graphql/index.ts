@@ -1,4 +1,5 @@
 export {
+    createPersonalListeningSessionMutationResolver,
     createRenamePlaybackDeviceMutationResolver,
     createReportPlaybackStateMutationResolver,
     createSavePlaybackQueueMutationResolver,

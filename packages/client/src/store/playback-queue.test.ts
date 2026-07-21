@@ -205,6 +205,32 @@ describe('PlaybackQueueStore', () => {
         expect(store.state.snapshot).toEqual(accepted);
     });
 
+    it('adopts a session mutation snapshot without restoring over current playback', async () => {
+        const initial = createSnapshot({ revision: 2 });
+        const sessionQueue = createSnapshot({
+            musicIds: ['7', '42'],
+            revision: 3
+        });
+        mocks.fetchPlaybackQueue.mockResolvedValue({
+            type: 'success',
+            playbackQueue: initial
+        });
+        const store = new PlaybackQueueStore();
+        await store.refresh();
+        const restoreVersion = store.state.restoreVersion;
+
+        expect(store.adoptExternalSnapshot(sessionQueue)).toEqual(sessionQueue);
+        expect(store.state).toMatchObject({
+            snapshot: sessionQueue,
+            restoreVersion,
+            initialized: true,
+            loading: false,
+            error: null
+        });
+        expect(store.adoptExternalSnapshot(initial)).toEqual(sessionQueue);
+        expect(store.state.snapshot).toEqual(sessionQueue);
+    });
+
     it('does not let a delayed refresh regress conflict recovery authority', async () => {
         const initial = createSnapshot({ revision: 2 });
         const authoritative = createSnapshot({

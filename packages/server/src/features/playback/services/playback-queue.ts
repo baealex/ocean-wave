@@ -286,6 +286,129 @@ const validateInput = (input: SavePlaybackQueueInput) => {
     };
 };
 
+type NormalizedPlaybackQueueInput = ReturnType<typeof validateInput>;
+
+const saveNormalizedPlaybackQueue = async (
+    transaction: Prisma.TransactionClient,
+    normalized: NormalizedPlaybackQueueInput
+): Promise<PlaybackQueueSaveResult> => {
+    const activeMusicCount = await transaction.music.count({
+        where: {
+            id: { in: normalized.musicIds },
+            syncStatus: TRACK_SYNC_STATUS.active
+        }
+    });
+
+    if (activeMusicCount !== normalized.musicIds.length) {
+        throw new PlaybackQueueServiceError(
+            'Playback queue contains music that does not exist or is unavailable.',
+            'PLAYBACK_QUEUE_MUSIC_NOT_FOUND'
+        );
+    }
+
+    const sourceOrderByMusicId = new Map(
+        normalized.sourceMusicIds.map((musicId, index) => [musicId, index])
+    );
+    const items = normalized.musicIds.map((musicId, order) => ({
+        musicId,
+        order,
+        sourceOrder: normalized.shuffle
+            ? sourceOrderByMusicId.get(musicId) ?? order
+            : null
+    }));
+    const session = await transaction.playbackSession.upsert({
+        where: { scopeKey: PLAYBACK_SCOPE_KEY },
+        create: { scopeKey: PLAYBACK_SCOPE_KEY },
+        update: {}
+    });
+    const claim = await transaction.playbackQueue.updateMany({
+        where: {
+            sessionId: session.id,
+            revision: normalized.expectedRevision
+        },
+        data: {
+            currentIndex: normalized.currentIndex,
+            contextType: normalized.contextType,
+            contextId: normalized.contextId,
+            contextTitle: normalized.contextTitle,
+            shuffle: normalized.shuffle,
+            repeatMode: normalized.repeatMode,
+            revision: { increment: 1 }
+        }
+    });
+
+    if (claim.count === 1) {
+        const claimed = await transaction.playbackQueue.findUniqueOrThrow({
+            where: { sessionId: session.id },
+            select: { id: true }
+        });
+        await transaction.playbackQueueItem.deleteMany({
+            where: { queueId: claimed.id }
+        });
+        if (items.length > 0) {
+            await transaction.playbackQueueItem.createMany({
+                data: items.map(item => ({
+                    ...item,
+                    queueId: claimed.id
+                }))
+            });
+        }
+        const updated = await transaction.playbackQueue.findUniqueOrThrow({
+            where: { id: claimed.id },
+            include: queueInclude
+        });
+
+        return {
+            type: 'accepted',
+            queue: toSnapshot(updated),
+            conflict: null,
+            changed: true
+        };
+    }
+
+    const current = await transaction.playbackQueue.findUnique({
+        where: { sessionId: session.id },
+        include: queueInclude
+    });
+
+    if (current) {
+        return conflictResult(current);
+    }
+    if (normalized.expectedRevision !== 0) {
+        throw new PlaybackQueueServiceError(
+            'Playback queue revision is stale because no server queue exists.',
+            'STALE_PLAYBACK_QUEUE_REVISION'
+        );
+    }
+
+    const created = await transaction.playbackQueue.create({
+        data: {
+            sessionId: session.id,
+            currentIndex: normalized.currentIndex,
+            contextType: normalized.contextType,
+            contextId: normalized.contextId,
+            contextTitle: normalized.contextTitle,
+            shuffle: normalized.shuffle,
+            repeatMode: normalized.repeatMode,
+            revision: 1,
+            Item: { create: items }
+        },
+        include: queueInclude
+    });
+
+    return {
+        type: 'accepted',
+        queue: toSnapshot(created),
+        conflict: null,
+        changed: true
+    };
+};
+
+export const savePlaybackQueueWithTransaction = (
+    transaction: Prisma.TransactionClient,
+    input: SavePlaybackQueueInput
+) => saveNormalizedPlaybackQueue(transaction, validateInput(input));
+
 export const getPlaybackQueueSnapshot = async (): Promise<PlaybackQueueSnapshot | null> => {
     return models.$transaction(async (transaction) => {
         const queue = await transaction.playbackQueue.findFirst({
@@ -380,120 +503,11 @@ export const savePlaybackQueue = async (
     input: SavePlaybackQueueInput
 ): Promise<PlaybackQueueSaveResult> => {
     const normalized = validateInput(input);
-    const activeMusicCount = await models.music.count({
-        where: {
-            id: { in: normalized.musicIds },
-            syncStatus: TRACK_SYNC_STATUS.active
-        }
-    });
-
-    if (activeMusicCount !== normalized.musicIds.length) {
-        throw new PlaybackQueueServiceError(
-            'Playback queue contains music that does not exist or is unavailable.',
-            'PLAYBACK_QUEUE_MUSIC_NOT_FOUND'
-        );
-    }
-
-    const sourceOrderByMusicId = new Map(
-        normalized.sourceMusicIds.map((musicId, index) => [musicId, index])
-    );
-    const items = normalized.musicIds.map((musicId, order) => ({
-        musicId,
-        order,
-        sourceOrder: normalized.shuffle
-            ? sourceOrderByMusicId.get(musicId) ?? order
-            : null
-    }));
 
     try {
-        return await models.$transaction(async (transaction) => {
-            const session = await transaction.playbackSession.upsert({
-                where: { scopeKey: PLAYBACK_SCOPE_KEY },
-                create: { scopeKey: PLAYBACK_SCOPE_KEY },
-                update: {}
-            });
-            const claim = await transaction.playbackQueue.updateMany({
-                where: {
-                    sessionId: session.id,
-                    revision: normalized.expectedRevision
-                },
-                data: {
-                    currentIndex: normalized.currentIndex,
-                    contextType: normalized.contextType,
-                    contextId: normalized.contextId,
-                    contextTitle: normalized.contextTitle,
-                    shuffle: normalized.shuffle,
-                    repeatMode: normalized.repeatMode,
-                    revision: { increment: 1 }
-                }
-            });
-
-            if (claim.count === 1) {
-                const claimed = await transaction.playbackQueue.findUniqueOrThrow({
-                    where: { sessionId: session.id },
-                    select: { id: true }
-                });
-                await transaction.playbackQueueItem.deleteMany({
-                    where: { queueId: claimed.id }
-                });
-                if (items.length > 0) {
-                    await transaction.playbackQueueItem.createMany({
-                        data: items.map(item => ({
-                            ...item,
-                            queueId: claimed.id
-                        }))
-                    });
-                }
-                const updated = await transaction.playbackQueue.findUniqueOrThrow({
-                    where: { id: claimed.id },
-                    include: queueInclude
-                });
-
-                return {
-                    type: 'accepted',
-                    queue: toSnapshot(updated),
-                    conflict: null,
-                    changed: true
-                };
-            }
-
-            const current = await transaction.playbackQueue.findUnique({
-                where: { sessionId: session.id },
-                include: queueInclude
-            });
-
-            if (current) {
-                return conflictResult(current);
-            }
-            if (normalized.expectedRevision !== 0) {
-                throw new PlaybackQueueServiceError(
-                    'Playback queue revision is stale because no server queue exists.',
-                    'STALE_PLAYBACK_QUEUE_REVISION'
-                );
-            }
-
-            const created = await transaction.playbackQueue.create({
-                data: {
-                    sessionId: session.id,
-                    currentIndex: normalized.currentIndex,
-                    contextType: normalized.contextType,
-                    contextId: normalized.contextId,
-                    contextTitle: normalized.contextTitle,
-                    shuffle: normalized.shuffle,
-                    repeatMode: normalized.repeatMode,
-                    revision: 1,
-                    Item: { create: items }
-                },
-                include: queueInclude
-            });
-
-            return {
-                type: 'accepted',
-                queue: toSnapshot(created),
-                conflict: null,
-                changed: true
-            };
-        });
+        return await models.$transaction(transaction => (
+            saveNormalizedPlaybackQueue(transaction, normalized)
+        ));
     } catch (error) {
         if (!isUniqueConstraintError(error) || normalized.expectedRevision !== 0) {
             throw error;

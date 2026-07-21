@@ -36,6 +36,13 @@ export type PlaybackSessionRefreshResult =
     | { type: 'success'; snapshot: PlaybackSessionSnapshot | null }
     | { type: 'error' | 'superseded' };
 
+export interface PlaybackSessionMutationFence {
+    expectedPlaybackSessionRevision: number;
+    registrationGeneration: number;
+    registrationProof: string;
+    requestingEndpointId: string;
+}
+
 interface LocalPlaybackReport {
     state: SharedPlaybackState;
     currentMusicId: string | null;
@@ -111,6 +118,28 @@ export class PlaybackSessionStore extends BaseStore<PlaybackSessionStoreState> {
         return this.pendingIntent !== null
             || this.inFlight !== null
             || this.outstandingReports.size > 0;
+    }
+
+    get mutationFence(): PlaybackSessionMutationFence | null {
+        const registration = this.registration;
+
+        if (
+            !registration
+            || !this.registrationReadyForReports
+            || this.state.loading
+            || this.state.error
+            || this.state.receivedAtMs === 0
+            || this.state.endpointId !== registration.endpointId
+        ) {
+            return null;
+        }
+
+        return {
+            expectedPlaybackSessionRevision: this.state.snapshot?.revision ?? 0,
+            registrationGeneration: registration.registrationGeneration,
+            registrationProof: registration.registrationProof,
+            requestingEndpointId: registration.endpointId
+        };
     }
 
     quiesceForPlaybackCommandRecovery() {

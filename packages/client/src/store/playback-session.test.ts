@@ -143,6 +143,34 @@ describe('PlaybackSessionStore', () => {
         expect(mocks.socketOff).toHaveBeenCalledWith('connect', expect.any(Function));
     });
 
+    it('exposes a mutation fence only after the current registration refresh settles', async () => {
+        const initial = createSnapshot({ revision: 7 });
+        let resolveRefresh: ((value: unknown) => void) | undefined;
+        mocks.fetchPlaybackSession.mockReturnValue(new Promise((resolve) => {
+            resolveRefresh = resolve;
+        }));
+        const store = new PlaybackSessionStore();
+
+        store.connect();
+        expect(store.mutationFence).toBeNull();
+        resolveRefresh?.({
+            type: 'success',
+            playbackSession: initial
+        });
+
+        await vi.waitFor(() => expect(store.mutationFence).toEqual({
+            expectedPlaybackSessionRevision: 7,
+            registrationGeneration: 1,
+            registrationProof: 'proof-web-tab-local-1',
+            requestingEndpointId: 'web-tab-local'
+        }));
+
+        mocks.registrationCurrent = null;
+        mocks.registrationSubscriber?.(null);
+        expect(store.mutationFence).toBeNull();
+        store.disconnect();
+    });
+
     it('does not let a delayed null refresh clear a newer realtime snapshot', async () => {
         const initial = createSnapshot({ revision: 2 });
         const realtime = createSnapshot({
