@@ -228,7 +228,6 @@ export const resolvePlaybackCommand = async (
     const session = await models.playbackSession.findUnique({
         where: { scopeKey: PLAYBACK_SCOPE_KEY },
         include: {
-            Music: { select: { duration: true, syncStatus: true } },
             Queue: {
                 include: {
                     Item: {
@@ -330,8 +329,14 @@ export const resolvePlaybackCommand = async (
     }
 
     const currentMusicId = session.currentMusicId?.toString() ?? null;
+    const currentMusic = session.currentMusicId === null
+        ? null
+        : await models.music.findUnique({
+            where: { id: session.currentMusicId },
+            select: { duration: true, syncStatus: true }
+        });
     const currentMusicAvailable = !session.currentMusicId || (
-        session.Music?.syncStatus === TRACK_SYNC_STATUS.active
+        currentMusic?.syncStatus === TRACK_SYNC_STATUS.active
     );
 
     if (!currentMusicAvailable) {
@@ -345,8 +350,8 @@ export const resolvePlaybackCommand = async (
         );
     }
 
-    const durationMs = session.Music
-        ? Math.max(Math.round(session.Music.duration * 1_000), 0)
+    const durationMs = currentMusic
+        ? Math.max(Math.round(currentMusic.duration * 1_000), 0)
         : 0;
     const positionMs = toEffectivePositionMs({
         state: session.state,
@@ -364,7 +369,7 @@ export const resolvePlaybackCommand = async (
 
     if (desiredResult.position.mode === 'absolute') {
         const desiredMusic = desiredResult.currentMusicId === currentMusicId
-            ? session.Music
+            ? currentMusic
             : await models.music.findFirst({
                 where: {
                     id: Number(desiredResult.currentMusicId),
@@ -556,6 +561,8 @@ export const commitPlaybackCommandResult = async (
                     startedAt,
                     ...(trackChanged ? {
                         historyMusicId: null,
+                        historyReleaseTrackId: null,
+                        historyPhysicalFileId: null,
                         historySessionId: null,
                         historyBranchId: null,
                         historyParentBranchId: null,

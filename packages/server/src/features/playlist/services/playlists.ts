@@ -88,7 +88,11 @@ const getHeaderMusics = async (playlistId: number) => {
     const headerMusics = await models.playlistMusic.findMany({
         where: {
             playlistId,
-            Music: { syncStatus: TRACK_SYNC_STATUS.active }
+            ReleaseTrack: {
+                PhysicalFile: {
+                    some: { syncStatus: TRACK_SYNC_STATUS.active }
+                }
+            }
         },
         take: 4,
         orderBy: { order: 'asc' }
@@ -97,10 +101,14 @@ const getHeaderMusics = async (playlistId: number) => {
     return headerMusics.map((music) => ({ id: music.musicId.toString() }));
 };
 
-const getActiveMusicCount = (playlistId: number) => models.music.count({
+const getActiveMusicCount = (playlistId: number) => models.playlistMusic.count({
     where: {
-        PlaylistMusic: { some: { playlistId } },
-        syncStatus: TRACK_SYNC_STATUS.active
+        playlistId,
+        ReleaseTrack: {
+            PhysicalFile: {
+                some: { syncStatus: TRACK_SYNC_STATUS.active }
+            }
+        }
     }
 });
 

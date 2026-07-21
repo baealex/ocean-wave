@@ -8,6 +8,7 @@ import {
     hasHealthyAlbumCoverCache,
     syncAlbumCoverCache
 } from '../modules/album-cover-cache';
+import { normalizeArtistName } from '../modules/artist-identity';
 import { walk } from '../modules/file';
 import {
     normalizeMusicFilePath,
@@ -91,13 +92,22 @@ const toTrackIdentityRecord = (music: Music): TrackIdentityRecord => {
 };
 
 const findOrCreateArtist = async (name: string): Promise<Artist> => {
-    const existingArtist = await models.artist.findFirst({ where: { name } });
+    const normalizedName = normalizeArtistName(name);
+    const existingArtist = await models.artist.findFirst({
+        where: { name },
+        orderBy: { id: 'asc' }
+    });
 
     if (existingArtist) {
-        return existingArtist;
+        return existingArtist.normalizedName === normalizedName
+            ? existingArtist
+            : models.artist.update({
+                where: { id: existingArtist.id },
+                data: { normalizedName }
+            });
     }
 
-    return models.artist.create({ data: { name } });
+    return models.artist.create({ data: { name, normalizedName } });
 };
 
 const findOrCreateAlbum = async ({
@@ -300,29 +310,6 @@ const repairAlbumCoverCacheIfNeeded = async ({
     });
 };
 
-const pruneEmptyLibraryNodes = async () => {
-    const existingAlbums = await models.album.findMany({ include: { Music: true } });
-
-    for (const album of existingAlbums) {
-        if (album.Music.length === 0) {
-            await models.album.delete({ where: { id: album.id } });
-        }
-    }
-
-    const existingArtists = await models.artist.findMany({
-        include: {
-            Album: {},
-            Music: {}
-        }
-    });
-
-    for (const artist of existingArtists) {
-        if (artist.Album.length === 0 && artist.Music.length === 0) {
-            await models.artist.delete({ where: { id: artist.id } });
-        }
-    }
-};
-
 const flattenSyncReportEntries = (result: SyncMusicResult) => {
     return ([
         [SYNC_REPORT_KIND.created, result.created],
@@ -351,6 +338,13 @@ const persistSyncReport = async ({
     result: SyncMusicResult;
 }) => {
     const items = flattenSyncReportEntries(result);
+    const musicRows = await models.music.findMany({
+        where: { id: { in: [...new Set(items.map(item => item.musicId))] } },
+        select: { id: true, physicalFileId: true }
+    });
+    const physicalFileIdByMusicId = new Map(
+        musicRows.map(music => [music.id, music.physicalFileId])
+    );
 
     return models.syncReport.create({
         data: {
@@ -367,7 +361,7 @@ const persistSyncReport = async ({
             Item: {
                 create: items.map((entry) => ({
                     kind: entry.kind,
-                    musicId: entry.musicId,
+                    musicId: physicalFileIdByMusicId.get(entry.musicId) ?? null,
                     musicName: entry.musicName,
                     filePath: entry.filePath,
                     previousFilePath: entry.previousFilePath
@@ -637,7 +631,6 @@ export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Pr
             }
         }
 
-        await pruneEmptyLibraryNodes();
         await persistSyncReport({
             startedAt,
             completedAt: new Date(),

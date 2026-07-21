@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -56,13 +56,22 @@ const prepareRuntime = () => {
     fs.rmSync(runtimeDirectory, { recursive: true, force: true });
     fs.mkdirSync(musicDirectory, { recursive: true });
     fs.mkdirSync(cacheDirectory, { recursive: true });
-    createWaveFixture(path.join(musicDirectory, 'reconnect-fixture.wav'));
+    for (let track = 1; track <= 3; track += 1) {
+        createWaveFixture(path.join(musicDirectory, `reconnect-fixture-${track}.wav`));
+    }
 };
 
 const migrateDatabase = (environment) => {
     const migration = spawnSync(
         'pnpm',
-        ['exec', 'prisma', 'migrate', 'deploy'],
+        [
+            'exec',
+            'ts-node',
+            '-e',
+            "import { createDatabase } from './script/shared'; "
+                + "createDatabase('deploy').catch(error => { "
+                + 'console.error(error); process.exit(1); });'
+        ],
         {
             cwd: serverDirectory,
             env: environment,
@@ -83,39 +92,73 @@ const seedDatabase = () => {
     try {
         database.exec(`
             INSERT INTO "Artist" (
-                "id", "name", "createdAt", "updatedAt"
+                "id", "stableId", "name", "normalizedName", "createdAt", "updatedAt"
             ) VALUES (
-                1, 'E2E Artist', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-            );
-
-            INSERT INTO "Album" (
-                "id", "name", "cover", "publishedYear", "artistId",
-                "createdAt", "updatedAt"
-            ) VALUES (
-                1, 'Reconnect Fixtures', '', '2026', 1,
+                1, 'e2e:artist:1', 'E2E Artist', 'e2e artist',
                 CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
             );
 
-            INSERT INTO "Music" (
-                "id", "name", "albumId", "artistId", "filePath", "duration",
-                "codec", "container", "bitrate", "sampleRate", "trackNumber",
-                "lastSeenAt", "syncStatus", "createdAt", "updatedAt"
+            INSERT INTO "Release" (
+                "id", "stableId", "title", "releaseDate", "releaseType",
+                "totalDiscs", "cover", "createdAt", "updatedAt"
+            ) VALUES (
+                1, 'e2e:release:1', 'Reconnect Fixtures', '2026', 'album', 1, '',
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            );
+
+            INSERT INTO "Recording" (
+                "id", "stableId", "title", "createdAt", "updatedAt"
             ) VALUES
                 (
-                    1, 'Reconnect Track One', 1, 1, 'reconnect-fixture.wav', 90,
-                    'pcm_s16le', 'wav', 128000, 8000, 1,
-                    CURRENT_TIMESTAMP, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    1, 'e2e:recording:1', 'Reconnect Track One',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 ),
                 (
-                    2, 'Reconnect Track Two', 1, 1, 'reconnect-fixture.wav', 90,
-                    'pcm_s16le', 'wav', 128000, 8000, 2,
-                    CURRENT_TIMESTAMP, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    2, 'e2e:recording:2', 'Reconnect Track Two',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 ),
                 (
-                    3, 'Reconnect Track Three', 1, 1, 'reconnect-fixture.wav', 90,
-                    'pcm_s16le', 'wav', 128000, 8000, 3,
-                    CURRENT_TIMESTAMP, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    3, 'e2e:recording:3', 'Reconnect Track Three',
+                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 );
+
+            INSERT INTO "ReleaseTrack" (
+                "id", "stableId", "recordingId", "releaseId", "discNumber",
+                "trackNumber", "createdAt", "updatedAt"
+            ) VALUES
+                (1, 'e2e:release-track:1', 1, 1, 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (2, 'e2e:release-track:2', 2, 1, 1, 2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (3, 'e2e:release-track:3', 3, 1, 1, 3, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+            INSERT INTO "PhysicalFile" (
+                "id", "stableId", "releaseTrackId", "filePath", "durationMs",
+                "codec", "container", "bitrate", "sampleRate", "lastSeenAt",
+                "syncStatus", "createdAt", "updatedAt"
+            ) VALUES
+                (
+                    1, 'e2e:file:1', 1, 'reconnect-fixture-1.wav', 90000,
+                    'pcm_s16le', 'wav', 128000, 8000, CURRENT_TIMESTAMP,
+                    'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                ),
+                (
+                    2, 'e2e:file:2', 2, 'reconnect-fixture-2.wav', 90000,
+                    'pcm_s16le', 'wav', 128000, 8000, CURRENT_TIMESTAMP,
+                    'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                ),
+                (
+                    3, 'e2e:file:3', 3, 'reconnect-fixture-3.wav', 90000,
+                    'pcm_s16le', 'wav', 128000, 8000, CURRENT_TIMESTAMP,
+                    'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                );
+
+            INSERT INTO "ArtistCredit" (
+                "id", "artistId", "recordingId", "releaseId", "role", "position",
+                "createdAt", "updatedAt"
+            ) VALUES
+                (1, 1, 1, NULL, 'primary', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (2, 1, 2, NULL, 'primary', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (3, 1, 3, NULL, 'primary', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (4, 1, NULL, 1, 'primary', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
         `);
     } finally {
         database.close();

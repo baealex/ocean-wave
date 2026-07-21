@@ -40,7 +40,9 @@ interface PlaybackQueueRecord {
         musicId: number;
         order: number;
         sourceOrder: number | null;
-        Music?: { syncStatus: string };
+        ReleaseTrack: {
+            PhysicalFile: Array<{ id: number }>;
+        };
     }>;
 }
 
@@ -150,7 +152,15 @@ const queueInclude = {
             musicId: true,
             order: true,
             sourceOrder: true,
-            Music: { select: { syncStatus: true } }
+            ReleaseTrack: {
+                select: {
+                    PhysicalFile: {
+                        where: { syncStatus: TRACK_SYNC_STATUS.active },
+                        select: { id: true },
+                        take: 1
+                    }
+                }
+            }
         },
         orderBy: { order: 'asc' as const }
     }
@@ -422,7 +432,7 @@ export const getPlaybackQueueSnapshot = async (): Promise<PlaybackQueueSnapshot 
 
         const orderedItems = [...queue.Item].sort((a, b) => a.order - b.order);
         const availableItems = orderedItems.filter(
-            item => item.Music.syncStatus === TRACK_SYNC_STATUS.active
+            item => item.ReleaseTrack.PhysicalFile.length > 0
         );
         const needsRepair = availableItems.length !== orderedItems.length
             || orderedItems.some((item, index) => item.order !== index)

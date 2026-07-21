@@ -54,16 +54,17 @@ export const setMusicLiked = async ({
 }): Promise<MusicLikedResult> => {
     const musicId = parseMusicId(id);
 
-    await getMusicOrThrow(musicId);
+    const music = await getMusicOrThrow(musicId);
+    const recordingId = music.recordingId;
 
     if (isLiked) {
-        const existingLike = await models.musicLike.findFirst({ where: { musicId } });
+        const existingLike = await models.musicLike.findFirst({ where: { musicId: recordingId } });
 
         if (!existingLike) {
-            await models.musicLike.create({ data: { musicId } });
+            await models.musicLike.create({ data: { musicId: recordingId } });
         }
     } else {
-        await models.musicLike.deleteMany({ where: { musicId } });
+        await models.musicLike.deleteMany({ where: { musicId: recordingId } });
     }
 
     return {
@@ -81,16 +82,17 @@ export const setMusicHated = async ({
 }): Promise<MusicHatedResult> => {
     const musicId = parseMusicId(id);
 
-    await getMusicOrThrow(musicId);
+    const music = await getMusicOrThrow(musicId);
+    const recordingId = music.recordingId;
 
     if (isHated) {
-        const existingHate = await models.musicHate.findFirst({ where: { musicId } });
+        const existingHate = await models.musicHate.findFirst({ where: { musicId: recordingId } });
 
         if (!existingHate) {
-            await models.musicHate.create({ data: { musicId } });
+            await models.musicHate.create({ data: { musicId: recordingId } });
         }
     } else {
-        await models.musicHate.deleteMany({ where: { musicId } });
+        await models.musicHate.deleteMany({ where: { musicId: recordingId } });
     }
 
     return {

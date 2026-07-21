@@ -217,7 +217,12 @@ export const deleteMusicTag = async ({ id }: { id: string }): Promise<TagDeleteR
             select: { smartViewId: true }
         })
     ]);
-    const affectedMusicIds = musicTags.map((musicTag) => musicTag.musicId.toString());
+    const affectedMusics = await models.music.findMany({
+        where: { recordingId: { in: musicTags.map(musicTag => musicTag.musicId) } },
+        orderBy: { id: 'asc' },
+        select: { id: true }
+    });
+    const affectedMusicIds = affectedMusics.map(music => music.id.toString());
     const affectedSmartViewIds = smartViewTags.map((smartViewTag) => smartViewTag.smartViewId.toString());
 
     await models.tag.delete({ where: { id: tagId } });
@@ -239,16 +244,16 @@ export const addMusicTagToMusic = async ({
     const parsedMusicId = parseId(musicId, TAG_ERROR_CODE.invalidMusicId, 'Music id is invalid.');
     const parsedTagId = parseId(tagId, TAG_ERROR_CODE.invalidTagId, 'Tag id is invalid.');
 
-    await Promise.all([
+    const [music] = await Promise.all([
         getActiveMusicOrThrow(parsedMusicId),
         getTagOrThrow(parsedTagId)
     ]);
 
     await models.musicTag.upsert({
-        where: getMusicTagWhere(parsedMusicId, parsedTagId),
+        where: getMusicTagWhere(music.recordingId, parsedTagId),
         update: {},
         create: {
-            musicId: parsedMusicId,
+            musicId: music.recordingId,
             tagId: parsedTagId,
             source: TAG_SOURCE_MANUAL
         }
@@ -266,15 +271,15 @@ export const createAndAddMusicTagToMusic = async ({
 }): Promise<Music> => {
     const parsedMusicId = parseId(musicId, TAG_ERROR_CODE.invalidMusicId, 'Music id is invalid.');
 
-    await getActiveMusicOrThrow(parsedMusicId);
+    const music = await getActiveMusicOrThrow(parsedMusicId);
 
     const tag = await ensureTagByName(name);
 
     await models.musicTag.upsert({
-        where: getMusicTagWhere(parsedMusicId, tag.id),
+        where: getMusicTagWhere(music.recordingId, tag.id),
         update: {},
         create: {
-            musicId: parsedMusicId,
+            musicId: music.recordingId,
             tagId: tag.id,
             source: TAG_SOURCE_MANUAL
         }
@@ -293,11 +298,11 @@ export const removeMusicTagFromMusic = async ({
     const parsedMusicId = parseId(musicId, TAG_ERROR_CODE.invalidMusicId, 'Music id is invalid.');
     const parsedTagId = parseId(tagId, TAG_ERROR_CODE.invalidTagId, 'Tag id is invalid.');
 
-    await getActiveMusicOrThrow(parsedMusicId);
+    const music = await getActiveMusicOrThrow(parsedMusicId);
 
     await models.musicTag.deleteMany({
         where: {
-            musicId: parsedMusicId,
+            musicId: music.recordingId,
             tagId: parsedTagId
         }
     });

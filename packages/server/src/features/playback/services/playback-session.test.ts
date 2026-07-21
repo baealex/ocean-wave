@@ -103,7 +103,9 @@ describe('playback session service', () => {
         await expect(models.playbackSession.findUniqueOrThrow({
             where: { scopeKey: 'local' }
         })).resolves.toMatchObject({
-            historyMusicId: music.id,
+            historyMusicId: music.recordingId,
+            historyReleaseTrackId: music.releaseTrackId,
+            historyPhysicalFileId: music.physicalFileId,
             historySessionId: playbackHistory.clientSessionId,
             historyBranchId: playbackHistory.branchId,
             historyParentBranchId: null,
@@ -133,7 +135,9 @@ describe('playback session service', () => {
         await expect(models.playbackSession.findUniqueOrThrow({
             where: { scopeKey: 'local' }
         })).resolves.toMatchObject({
-            historyMusicId: music.id,
+            historyMusicId: music.recordingId,
+            historyReleaseTrackId: music.releaseTrackId,
+            historyPhysicalFileId: music.physicalFileId,
             historySessionId: playbackHistory.clientSessionId,
             historyBranchId: playbackHistory.branchId,
             historyPlayedMs: playbackHistory.accumulatedPlayedMs,
@@ -155,6 +159,8 @@ describe('playback session service', () => {
             where: { scopeKey: 'local' }
         })).resolves.toMatchObject({
             historyMusicId: null,
+            historyReleaseTrackId: null,
+            historyPhysicalFileId: null,
             historySessionId: null,
             historyBranchId: null,
             historyParentBranchId: null,

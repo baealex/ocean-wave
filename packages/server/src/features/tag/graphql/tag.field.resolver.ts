@@ -15,7 +15,13 @@ export const tagFieldResolvers: TagFieldResolvers = {
     musicCount: (tag: TagSource) => models.musicTag.count({
         where: {
             tagId: Number(tag.id),
-            Music: { syncStatus: TRACK_SYNC_STATUS.active }
+            Music: {
+                ReleaseTrack: {
+                    some: {
+                        PhysicalFile: { some: { syncStatus: TRACK_SYNC_STATUS.active } }
+                    }
+                }
+            }
         }
     }),
     smartViewCount: (tag: TagSource) => models.smartViewTag.count({

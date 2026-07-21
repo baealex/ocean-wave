@@ -23,6 +23,11 @@ export interface ResolvedPlaybackHandoff {
     sourceState: PlaybackHandoffSourceState;
     sourceStartedAt: Date | null;
     durationMs: number;
+    currentMusicIdentity: {
+        recordingId: number;
+        releaseTrackId: number;
+        physicalFileId: number;
+    };
     playbackHistory: PlaybackHandoffHistoryTransfer | null;
     snapshot: PlaybackHandoffSnapshot;
 }
@@ -96,6 +101,8 @@ const toEffectivePositionMs = (input: {
 const toPlaybackHistoryTransfer = (session: {
     currentMusicId: number | null;
     historyMusicId: number | null;
+    historyReleaseTrackId: number | null;
+    historyPhysicalFileId: number | null;
     historySessionId: string | null;
     historyBranchId: string | null;
     historyParentBranchId: string | null;
@@ -104,10 +111,14 @@ const toPlaybackHistoryTransfer = (session: {
     historyPlayedMs: number;
     historyHadSeek: boolean;
     historyUpdatedAt: Date | null;
-}): PlaybackHandoffHistoryTransfer | null => {
+}, currentMusic: ResolvedPlaybackHandoff['currentMusicIdentity']
+): PlaybackHandoffHistoryTransfer | null => {
     if (
         !session.currentMusicId
-        || session.historyMusicId !== session.currentMusicId
+        || session.currentMusicId !== currentMusic.releaseTrackId
+        || session.historyMusicId !== currentMusic.recordingId
+        || session.historyReleaseTrackId !== currentMusic.releaseTrackId
+        || session.historyPhysicalFileId !== currentMusic.physicalFileId
         || !session.historySessionId
         || !session.historyStartedAt
         || !session.historyUpdatedAt
@@ -157,9 +168,11 @@ const toPlaybackHistoryTransfer = (session: {
 
 const playbackHistoryUpdateData = (
     history: PlaybackHandoffHistoryTransfer | null,
-    currentMusicId: number
+    currentMusic: ResolvedPlaybackHandoff['currentMusicIdentity']
 ) => history ? {
-        historyMusicId: currentMusicId,
+        historyMusicId: currentMusic.recordingId,
+        historyReleaseTrackId: currentMusic.releaseTrackId,
+        historyPhysicalFileId: currentMusic.physicalFileId,
         historySessionId: history.clientSessionId,
         historyBranchId: history.branchId,
         historyParentBranchId: history.parentBranchId,
@@ -170,6 +183,8 @@ const playbackHistoryUpdateData = (
         historyUpdatedAt: new Date(history.updatedAt)
     } : {
         historyMusicId: null,
+        historyReleaseTrackId: null,
+        historyPhysicalFileId: null,
         historySessionId: null,
         historyBranchId: null,
         historyParentBranchId: null,
@@ -286,7 +301,6 @@ export const resolvePlaybackHandoff = async (
     const session = await models.playbackSession.findUnique({
         where: { scopeKey: PLAYBACK_SCOPE_KEY },
         include: {
-            Music: { select: { duration: true, syncStatus: true } },
             Queue: {
                 include: {
                     Item: {
@@ -362,12 +376,24 @@ export const resolvePlaybackHandoff = async (
         );
     }
 
+    const currentMusic = session.currentMusicId === null
+        ? null
+        : await models.music.findUnique({
+            where: { id: session.currentMusicId },
+            select: {
+                recordingId: true,
+                releaseTrackId: true,
+                physicalFileId: true,
+                duration: true,
+                syncStatus: true
+            }
+        });
     const handoffState = normalizePlaybackHandoffState(session.state);
     if (
         !handoffState
         || !session.currentMusicId
-        || !session.Music
-        || session.Music.syncStatus !== TRACK_SYNC_STATUS.active
+        || !currentMusic
+        || currentMusic.syncStatus !== TRACK_SYNC_STATUS.active
     ) {
         throw new PlaybackHandoffServiceError(
             'The current playback item is unavailable for transfer.',
@@ -390,7 +416,7 @@ export const resolvePlaybackHandoff = async (
         );
     }
 
-    const durationMs = Math.max(Math.round(session.Music.duration * 1_000), 0);
+    const durationMs = Math.max(Math.round(currentMusic.duration * 1_000), 0);
     const orderedItems = [...session.Queue.Item].sort((a, b) => a.order - b.order);
     const sourceItems = session.Queue.shuffle
         ? [...session.Queue.Item].sort((a, b) => (
@@ -433,7 +459,12 @@ export const resolvePlaybackHandoff = async (
         sourceState: session.state as PlaybackHandoffSourceState,
         sourceStartedAt: session.startedAt,
         durationMs,
-        playbackHistory: toPlaybackHistoryTransfer(session),
+        currentMusicIdentity: {
+            recordingId: currentMusic.recordingId,
+            releaseTrackId: currentMusic.releaseTrackId,
+            physicalFileId: currentMusic.physicalFileId
+        },
+        playbackHistory: toPlaybackHistoryTransfer(session, currentMusic),
         snapshot
     };
 };
@@ -471,7 +502,7 @@ export const claimPlaybackHandoff = async (
                     startedAt: resolved.sourceStartedAt,
                     ...playbackHistoryUpdateData(
                         targetPlaybackHistory,
-                        Number(resolved.snapshot.currentMusicId)
+                        resolved.currentMusicIdentity
                     ),
                     revision: { increment: 1 }
                 }
@@ -628,7 +659,7 @@ export const rollbackPlaybackHandoff = async (
                     positionUpdatedAt: now,
                     ...playbackHistoryUpdateData(
                         resolved.playbackHistory,
-                        Number(resolved.snapshot.currentMusicId)
+                        resolved.currentMusicIdentity
                     ),
                     revision: { increment: 1 }
                 }

@@ -345,6 +345,14 @@ describe('playback handoff coordinator integration', () => {
     );
 
     it('allows an explicit forced claim only after the old endpoint is terminated', async () => {
+        const firstMusic = await models.music.findUniqueOrThrow({
+            where: { id: firstMusicId },
+            select: {
+                recordingId: true,
+                releaseTrackId: true,
+                physicalFileId: true
+            }
+        });
         const playbackHistory = {
             clientSessionId: 'forced-shared-history',
             branchId: 'forced-shared-history',
@@ -360,7 +368,9 @@ describe('playback handoff coordinator integration', () => {
             where: { scopeKey: 'local' },
             data: {
                 state: 'stopped',
-                historyMusicId: firstMusicId,
+                historyMusicId: firstMusic.recordingId,
+                historyReleaseTrackId: firstMusic.releaseTrackId,
+                historyPhysicalFileId: firstMusic.physicalFileId,
                 historySessionId: playbackHistory.clientSessionId,
                 historyBranchId: playbackHistory.branchId,
                 historyParentBranchId: playbackHistory.parentBranchId,
@@ -437,7 +447,9 @@ describe('playback handoff coordinator integration', () => {
         })).resolves.toEqual(expect.objectContaining({
             state: 'paused',
             activeDeviceId: 'target-tab',
-            historyMusicId: firstMusicId,
+            historyMusicId: firstMusic.recordingId,
+            historyReleaseTrackId: firstMusic.releaseTrackId,
+            historyPhysicalFileId: firstMusic.physicalFileId,
             historySessionId: playbackHistory.clientSessionId,
             historyBranchId: targetPlaybackHistory?.branchId,
             historyParentBranchId: playbackHistory.branchId,

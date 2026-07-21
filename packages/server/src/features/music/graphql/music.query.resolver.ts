@@ -1,6 +1,6 @@
 import type { IResolvers } from '@graphql-tools/utils';
 
-import models, { type Music } from '~/models';
+import models, { type Music, type Prisma } from '~/models';
 import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
 import { getLibraryRediscovery } from '../services/library-rediscovery';
 
@@ -21,7 +21,7 @@ const parseTagIds = (tagIds: string[] | undefined) => {
         .filter((id) => Number.isInteger(id) && id > 0))];
 };
 
-const buildMusicWhere = (filter?: MusicFilterInput) => {
+const buildMusicWhere = (filter?: MusicFilterInput): Prisma.MusicWhereInput => {
     const tagIds = parseTagIds(filter?.tagIds);
 
     if (!tagIds.length) {
@@ -31,9 +31,11 @@ const buildMusicWhere = (filter?: MusicFilterInput) => {
     if (filter?.tagMode === 'ANY') {
         return {
             syncStatus: TRACK_SYNC_STATUS.active,
-            MusicTag: {
-                some: {
-                    tagId: { in: tagIds }
+            Recording: {
+                MusicTag: {
+                    some: {
+                        tagId: { in: tagIds }
+                    }
                 }
             }
         };
@@ -42,8 +44,10 @@ const buildMusicWhere = (filter?: MusicFilterInput) => {
     return {
         syncStatus: TRACK_SYNC_STATUS.active,
         AND: tagIds.map((tagId) => ({
-            MusicTag: {
-                some: { tagId }
+            Recording: {
+                MusicTag: {
+                    some: { tagId }
+                }
             }
         }))
     };
