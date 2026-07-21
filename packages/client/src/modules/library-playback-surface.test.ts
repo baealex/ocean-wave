@@ -18,6 +18,7 @@ const music: Music = {
     codec: 'FLAC',
     bitrate: 1_411,
     sampleRate: 44_100,
+    discNumber: 1,
     trackNumber: 1,
     playCount: 0,
     lastPlayedAt: null,
@@ -46,6 +47,8 @@ const music: Music = {
         name: 'Ocean Signals',
         albums: [],
         albumCount: 1,
+        appearsOn: [],
+        appearsOnCount: 0,
         musics: [{ id: 'track-1' }],
         musicCount: 1,
         createdAt: 1
@@ -56,6 +59,8 @@ const music: Music = {
         cover: '/cover.jpg',
         isCoverCustom: false,
         publishedYear: '2026',
+        releaseType: 'ALBUM',
+        totalDiscs: 1,
         artistDisplayName: 'Ocean Signals',
         artistCredits: [{
             artist: { id: 'artist-1', name: 'Ocean Signals' },

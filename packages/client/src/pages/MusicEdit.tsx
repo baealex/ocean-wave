@@ -93,7 +93,7 @@ const toEditorValues = (music: MusicModel): EditorValues => ({
         music.album.artist.name
     ),
     publishedYear: music.album.publishedYear,
-    trackNumber: music.trackNumber.toString(),
+    trackNumber: music.trackNumber?.toString() ?? '',
     genres: music.genres.map((genre) => genre.name).join(', ')
 });
 

@@ -14,6 +14,7 @@ import { Button, Loading, StateMessage, Text } from '~/components/shared';
 import { useRemotePlaybackOwnership, useResetQueue } from '~/hooks';
 import { Play } from '~/icon';
 import { panel } from '~/modules/panel';
+import { getReleaseTypeLabel } from '~/modules/releases';
 import {
     REMOTE_PLAYBACK_OWNERSHIP_MESSAGE,
     REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
@@ -21,6 +22,52 @@ import {
 import { useAppStore as useStore } from '~/store/base-store';
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
+import type { Album } from '~/models/type';
+
+const ReleaseShelf = ({
+    title,
+    albums,
+    onAlbumClick
+}: {
+    title: string;
+    albums: Album[];
+    onAlbumClick: (albumId: string) => void;
+}) => {
+    if (!albums.length) return null;
+
+    return (
+        <section className="mb-[var(--b-spacing-2xl)] last:mb-0">
+            <div className="mb-[var(--b-spacing-sm)] flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
+                <div className="flex items-center gap-[var(--b-spacing-sm)]">
+                    <Text as="h2" size="xl" weight="semibold">
+                        {title}
+                    </Text>
+                    <Text variant="tertiary" size="sm">
+                        {albums.length}
+                    </Text>
+                </div>
+            </div>
+            <div className="overflow-x-auto px-[var(--b-spacing-lg)] pb-[var(--b-spacing-sm)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="grid w-max auto-cols-[minmax(240px,320px)] grid-flow-col gap-[var(--b-spacing-sm)] [scroll-snap-type:x_proximity]">
+                    {albums.map(album => (
+                        <div key={album.id} className="min-w-0 overflow-hidden rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent [scroll-snap-align:start]">
+                            <AlbumListItem
+                                albumCover={album.cover}
+                                albumName={album.name}
+                                artistName={album.artistDisplayName}
+                                publishedYear={album.publishedYear}
+                                releaseType={getReleaseTypeLabel(album.releaseType)}
+                                musicCount={album.musics?.length}
+                                compact
+                                onClick={() => onAlbumClick(album.id)}
+                            />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </section>
+    );
+};
 
 export default function ArtistDetail() {
     const navigate = useNavigate();
@@ -92,35 +139,16 @@ export default function ArtistDetail() {
             {remotePlaybackOwnership && (
                 <RemotePlaybackOwnershipNotice className="mx-[var(--b-spacing-lg)] mb-[var(--b-spacing-lg)]" />
             )}
-            <div className="mb-[var(--b-spacing-2xl)] last:mb-0">
-                <div className="mb-[var(--b-spacing-sm)] flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
-                    <div className="flex items-center gap-[var(--b-spacing-sm)]">
-                        <Text as="h2" size="xl" weight="semibold">
-                            Albums
-                        </Text>
-                        <Text variant="tertiary" size="sm">
-                            {artist.albums.length}
-                        </Text>
-                    </div>
-                </div>
-                <div className="overflow-x-auto px-[var(--b-spacing-lg)] pb-[var(--b-spacing-sm)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <div className="grid w-max auto-cols-[minmax(240px,320px)] grid-flow-col gap-[var(--b-spacing-sm)] [scroll-snap-type:x_proximity]">
-                        {artist.albums.map(album => (
-                            <div key={album.id} className="min-w-0 overflow-hidden rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent [scroll-snap-align:start]">
-                                <AlbumListItem
-                                    albumCover={album.cover}
-                                    albumName={album.name}
-                                    artistName={album.artistDisplayName}
-                                    publishedYear={album.publishedYear}
-                                    musicCount={album.musics?.length}
-                                    compact
-                                    onClick={() => navigate(`/album/${album.id}`)}
-                                />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
+            <ReleaseShelf
+                title="Releases"
+                albums={artist.albums}
+                onAlbumClick={(albumId) => navigate(`/album/${albumId}`)}
+            />
+            <ReleaseShelf
+                title="Appears On"
+                albums={artist.appearsOn}
+                onAlbumClick={(albumId) => navigate(`/album/${albumId}`)}
+            />
 
             <div className="mb-[var(--b-spacing-2xl)] last:mb-0">
                 <div className="mb-[var(--b-spacing-sm)] flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">

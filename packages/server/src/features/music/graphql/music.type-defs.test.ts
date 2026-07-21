@@ -39,3 +39,30 @@ describe('artist credit GraphQL contract', () => {
         expect(metadataInput.getFields().artist.type.toString()).toBe('String');
     });
 });
+
+describe('release structure GraphQL contract', () => {
+    it('exposes safe release types, nullable positions, and Appears On', () => {
+        const musicType = schema.getType('Music') as {
+            getFields: () => Record<string, { type: { toString: () => string } }>;
+        };
+        const albumType = schema.getType('Album') as typeof musicType;
+        const artistType = schema.getType('Artist') as typeof musicType;
+        const releaseType = schema.getType('ReleaseType') as unknown as {
+            getValues: () => Array<{ name: string }>;
+        };
+
+        expect(musicType.getFields().discNumber.type.toString()).toBe('Int');
+        expect(musicType.getFields().trackNumber.type.toString()).toBe('Int');
+        expect(albumType.getFields().releaseType.type.toString()).toBe('ReleaseType!');
+        expect(albumType.getFields().totalDiscs.type.toString()).toBe('Int');
+        expect(artistType.getFields().appearsOn.type.toString()).toBe('[Album!]!');
+        expect(releaseType.getValues().map(value => value.name)).toEqual([
+            'ALBUM',
+            'EP',
+            'SINGLE',
+            'COMPILATION',
+            'LIVE',
+            'UNKNOWN'
+        ]);
+    });
+});

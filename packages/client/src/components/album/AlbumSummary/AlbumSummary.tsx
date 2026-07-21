@@ -4,12 +4,13 @@ import { Link } from 'react-router-dom';
 import { Image, Text } from '~/components/shared';
 import { Disc } from '~/icon';
 import { getOriginalImage } from '~/modules/image';
+import { getReleaseTypeLabel } from '~/modules/releases';
 
 import type { Album } from '~/models/type';
 
 type AlbumSummaryProps = Pick<
     Album,
-    'cover' | 'name' | 'artist' | 'artistCredits' | 'artistDisplayName' | 'publishedYear'
+    'cover' | 'name' | 'artist' | 'artistCredits' | 'artistDisplayName' | 'publishedYear' | 'releaseType' | 'totalDiscs'
 >;
 
 const AlbumSummary = ({
@@ -18,8 +19,16 @@ const AlbumSummary = ({
     artist,
     artistCredits,
     artistDisplayName,
-    publishedYear
+    publishedYear,
+    releaseType,
+    totalDiscs
 }: AlbumSummaryProps) => {
+    const releaseMeta = [
+        getReleaseTypeLabel(releaseType),
+        publishedYear.trim(),
+        totalDiscs && totalDiscs > 1 ? `${totalDiscs} discs` : ''
+    ].filter(Boolean);
+
     return (
         <div className="flex flex-col items-center gap-[var(--b-spacing-md)] text-center">
             <div className="mb-[var(--b-spacing-sm)] w-[260px] max-w-[76%]">
@@ -57,10 +66,14 @@ const AlbumSummary = ({
                         </Link>
                     )}
                 </span>
-                <Text variant="muted" size="md">•</Text>
-                <Text variant="tertiary" size="md">
-                    {publishedYear}
-                </Text>
+                {releaseMeta.map(value => (
+                    <Fragment key={value}>
+                        <Text variant="muted" size="md">•</Text>
+                        <Text variant="tertiary" size="md">
+                            {value}
+                        </Text>
+                    </Fragment>
+                ))}
             </div>
         </div>
     );

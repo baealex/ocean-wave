@@ -1,6 +1,6 @@
 import type { IResolvers } from '@graphql-tools/utils';
 
-import models, { type Music } from '~/models';
+import models, { type Music, type ReleaseTrack } from '~/models';
 import {
     formatArtistCredits,
     getEffectiveMusicArtistCredits,
@@ -12,6 +12,7 @@ type MusicFieldResolvers = NonNullable<IResolvers['Music']>;
 
 const toIsoString = (value: Date | null) => value?.toISOString() ?? null;
 const artistCreditRequests = new WeakMap<object, Promise<ArtistCreditWithArtist[]>>();
+const releaseTrackRequests = new WeakMap<object, Promise<ReleaseTrack | null>>();
 
 const getArtistCredits = (music: Music) => {
     const existingRequest = artistCreditRequests.get(music);
@@ -25,11 +26,25 @@ const getArtistCredits = (music: Music) => {
     return request;
 };
 
+const getReleaseTrack = (music: Music) => {
+    const existingRequest = releaseTrackRequests.get(music);
+
+    if (existingRequest) return existingRequest;
+
+    const request = models.releaseTrack.findUnique({
+        where: { id: music.releaseTrackId }
+    });
+    releaseTrackRequests.set(music, request);
+    return request;
+};
+
 export const musicFieldResolvers: MusicFieldResolvers = {
     hasMetadataOverride: (music: Music) => Boolean(music.metadataOverride),
     lastPlayedAt: (music: Music) => toIsoString(music.lastPlayedAt),
     lastSkippedAt: (music: Music) => toIsoString(music.lastSkippedAt),
     lastCompletedAt: (music: Music) => toIsoString(music.lastCompletedAt),
+    discNumber: async (music: Music) => (await getReleaseTrack(music))?.discNumber ?? null,
+    trackNumber: async (music: Music) => (await getReleaseTrack(music))?.trackNumber ?? null,
     artist: (music: Music) => models.artist.findUnique({ where: { id: music.artistId } }),
     artistDisplayName: async (music: Music) => formatArtistCredits(await getArtistCredits(music)),
     artistCredits: async (music: Music) => (

@@ -9,10 +9,15 @@ import {
     MusicListItem,
     RemotePlaybackOwnershipNotice
 } from '~/components/music';
-import { Button, Loading, StateMessage } from '~/components/shared';
+import { Button, Loading, StateMessage, Text } from '~/components/shared';
 import { useRemotePlaybackOwnership, useResetQueue } from '~/hooks';
 import { Play } from '~/icon';
 import { panel } from '~/modules/panel';
+import {
+    getDiscLabel,
+    groupTracksByDisc,
+    shouldShowDiscHeadings
+} from '~/modules/releases';
 import {
     REMOTE_PLAYBACK_OWNERSHIP_MESSAGE,
     REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
@@ -61,6 +66,13 @@ export default function AlbumDetail() {
         );
     }
 
+    const albumTracks = album.musics.flatMap(({ id: musicId }) => {
+        const music = musicMap.get(musicId);
+        return music ? [music] : [];
+    });
+    const discGroups = groupTracksByDisc(albumTracks);
+    const showDiscHeadings = shouldShowDiscHeadings(discGroups, album.totalDiscs);
+
     return (
         <TwoToneLayout
             header={(
@@ -92,37 +104,45 @@ export default function AlbumDetail() {
             {remotePlaybackOwnership && (
                 <RemotePlaybackOwnershipNotice className="mx-[var(--b-spacing-lg)] mb-[var(--b-spacing-lg)]" />
             )}
-            {album.musics.map(({ id }) => {
-                const music = musicMap.get(id);
-
-                if (!music) {
-                    return null;
-                }
-
-                return (
-                    <MusicListItem
-                        key={music.id}
-                        albumName={music.album.name}
-                        artistName={music.artistDisplayName}
-                        trackNumber={music.trackNumber}
-                        musicName={music.name}
-                        musicCodec={music.codec}
-                        isLiked={music.isLiked}
-                        hideAlbumArt
-                        isHated={music.isHated}
-                        onClick={() => queueStore.add(music.id)}
-                        onLongPress={() => panel.open({
-                            title: 'Related to this music',
-                            content: (
-                                <MusicActionPanelContent
-                                    id={music.id}
-                                    onArtistClick={(artistId) => navigate(`/artist/${artistId}`)}
-                                />
-                            )
-                        })}
-                    />
-                );
-            })}
+            <div className="flex flex-col">
+                {discGroups.map(group => (
+                    <section key={group.discNumber ?? 'unknown'}>
+                        {showDiscHeadings && (
+                            <div className="flex items-center gap-2 px-[var(--b-spacing-lg)] pb-2 pt-[var(--b-spacing-md)]">
+                                <Text as="h2" size="sm" weight="semibold">
+                                    {getDiscLabel(group.discNumber)}
+                                </Text>
+                                <Text variant="tertiary" size="xs">
+                                    {group.tracks.length} {group.tracks.length === 1 ? 'track' : 'tracks'}
+                                </Text>
+                            </div>
+                        )}
+                        {group.tracks.map(music => (
+                            <MusicListItem
+                                key={music.id}
+                                albumName={music.album.name}
+                                artistName={music.artistDisplayName}
+                                trackNumber={music.trackNumber}
+                                musicName={music.name}
+                                musicCodec={music.codec}
+                                isLiked={music.isLiked}
+                                hideAlbumArt
+                                isHated={music.isHated}
+                                onClick={() => queueStore.add(music.id)}
+                                onLongPress={() => panel.open({
+                                    title: 'Related to this music',
+                                    content: (
+                                        <MusicActionPanelContent
+                                            id={music.id}
+                                            onArtistClick={(artistId) => navigate(`/artist/${artistId}`)}
+                                        />
+                                    )
+                                })}
+                            />
+                        ))}
+                    </section>
+                ))}
+            </div>
         </TwoToneLayout>
     );
 }

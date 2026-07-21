@@ -40,11 +40,15 @@ const createMusic = ({
         isCoverCustom: false,
         musics: [{ id }],
         name: `Album ${albumId}`,
-        publishedYear: '2026'
+        publishedYear: '2026',
+        releaseType: 'ALBUM',
+        totalDiscs: 1
     },
     artist: {
         albumCount: 1,
         albums: [],
+        appearsOn: [],
+        appearsOnCount: 0,
         createdAt: 1,
         id: `artist-${albumId}`,
         musicCount: 1,
@@ -64,6 +68,7 @@ const createMusic = ({
     completionCount: 0,
     createdAt: 1,
     duration: 180,
+    discNumber: 1,
     filePath: `/${id}.flac`,
     genres: [],
     hasMetadataOverride: false,

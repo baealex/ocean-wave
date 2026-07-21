@@ -3,6 +3,7 @@ import type { IResolvers } from '@graphql-tools/utils';
 import models, { type Artist } from '~/models';
 import {
     findActiveAlbumIdsForArtist,
+    findActiveAppearsOnAlbumIdsForArtist,
     findActiveCreditedArtistIds,
     findActiveMusicIdsForArtist
 } from '~/modules/artist-credits';
@@ -19,6 +20,8 @@ export const artistType: string = gql`
         createdAt: String!
         albums: [Album!]!
         albumCount: Int!
+        appearsOn: [Album!]!
+        appearsOnCount: Int!
         musics: [Music!]!
         musicCount: Int!
     }
@@ -42,6 +45,7 @@ export const artistTypeDefs = `
 
 const activeMusicIdRequests = new WeakMap<object, Promise<number[]>>();
 const activeAlbumIdRequests = new WeakMap<object, Promise<number[]>>();
+const activeAppearsOnAlbumIdRequests = new WeakMap<object, Promise<number[]>>();
 
 const getActiveMusicIds = (artist: Artist) => {
     const existingRequest = activeMusicIdRequests.get(artist);
@@ -50,6 +54,16 @@ const getActiveMusicIds = (artist: Artist) => {
 
     const request = findActiveMusicIdsForArtist(artist.id);
     activeMusicIdRequests.set(artist, request);
+    return request;
+};
+
+const getActiveAppearsOnAlbumIds = (artist: Artist) => {
+    const existingRequest = activeAppearsOnAlbumIdRequests.get(artist);
+
+    if (existingRequest) return existingRequest;
+
+    const request = findActiveAppearsOnAlbumIdsForArtist(artist.id);
+    activeAppearsOnAlbumIdRequests.set(artist, request);
     return request;
 };
 
@@ -99,6 +113,13 @@ export const artistResolvers: IResolvers = {
             },
             orderBy: { publishedYear: 'desc' }
         }),
+        appearsOn: async (artist: Artist) => models.album.findMany({
+            where: {
+                id: { in: await getActiveAppearsOnAlbumIds(artist) },
+                Music: { some: { syncStatus: TRACK_SYNC_STATUS.active } }
+            },
+            orderBy: { publishedYear: 'desc' }
+        }),
         musics: async (artist: Artist) => models.music.findMany({
             where: {
                 id: { in: await getActiveMusicIds(artist) },
@@ -109,6 +130,12 @@ export const artistResolvers: IResolvers = {
         albumCount: async (artist: Artist) => models.album.count({
             where: {
                 id: { in: await getActiveAlbumIds(artist) },
+                Music: { some: { syncStatus: TRACK_SYNC_STATUS.active } }
+            }
+        }),
+        appearsOnCount: async (artist: Artist) => models.album.count({
+            where: {
+                id: { in: await getActiveAppearsOnAlbumIds(artist) },
                 Music: { some: { syncStatus: TRACK_SYNC_STATUS.active } }
             }
         }),

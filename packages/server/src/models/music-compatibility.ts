@@ -62,20 +62,22 @@ export interface CompatibilityMusicCreateInput {
     missingSinceAt?: Date | null;
     syncStatus?: string;
     totalPlayedMs?: number;
-    trackNumber: number;
+    discNumber?: number | null;
+    trackNumber: number | null;
     createdAt?: Date;
     updatedAt?: Date;
 }
 
 export type CompatibilityMusicUpdateInput = Partial<Omit<
 CompatibilityMusicCreateInput,
-'Album' | 'Artist' | 'Genre' | 'filePath' | 'name' | 'trackNumber'
+'Album' | 'Artist' | 'Genre' | 'discNumber' | 'filePath' | 'name' | 'trackNumber'
 >> & {
     name?: string;
     albumId?: number;
     artistId?: number;
     filePath?: string;
-    trackNumber?: number;
+    discNumber?: number | null;
+    trackNumber?: number | null;
     Genre?: GenreConnections;
     playCount?: NumericUpdate;
     skipCount?: NumericUpdate;
@@ -221,7 +223,7 @@ export const createCompatibilityMusicInTransaction = async (
             id: identityId,
             recordingId: recording.id,
             releaseId,
-            discNumber: 1,
+            discNumber: data.discNumber === undefined ? 1 : data.discNumber,
             trackNumber: data.trackNumber,
             ...(data.createdAt === undefined ? {} : { createdAt: data.createdAt }),
             ...(data.updatedAt === undefined ? {} : { updatedAt: data.updatedAt })
@@ -312,6 +314,7 @@ export const updateCompatibilityMusicInTransaction = async (
     if (completionCount !== undefined) recordingData.completionCount = completionCount;
     if (totalPlayedMs !== undefined) recordingData.totalPlayedMs = totalPlayedMs;
     if (data.albumId !== undefined) releaseTrackData.releaseId = data.albumId;
+    if (data.discNumber !== undefined) releaseTrackData.discNumber = data.discNumber;
     if (data.trackNumber !== undefined) releaseTrackData.trackNumber = data.trackNumber;
     if (data.filePath !== undefined) physicalFileData.filePath = data.filePath;
     if (data.metadataOverride !== undefined) physicalFileData.legacyMetadataOverride = data.metadataOverride;
