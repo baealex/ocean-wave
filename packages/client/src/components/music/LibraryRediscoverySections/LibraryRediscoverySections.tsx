@@ -64,8 +64,8 @@ const TrackCard = ({
         title={playbackBlocked ? REMOTE_PLAYBACK_OWNERSHIP_MESSAGE : undefined}
         aria-describedby={playbackBlocked ? REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID : undefined}
         aria-label={playbackBlocked
-            ? `Play ${item.music.name} by ${item.music.artist.name} unavailable while another device owns playback. Why this appears: ${item.reason.copy}`
-            : `Play ${item.music.name} by ${item.music.artist.name}. Why this appears: ${item.reason.copy}`}
+            ? `Play ${item.music.name} by ${item.music.artistDisplayName} unavailable while another device owns playback. Why this appears: ${item.reason.copy}`
+            : `Play ${item.music.name} by ${item.music.artistDisplayName}. Why this appears: ${item.reason.copy}`}
         onClick={() => onPlayTrack(item.music.id)}>
         <span className="relative aspect-square w-full shrink-0 transition-transform duration-150 group-hover/card:scale-[1.015] motion-reduce:transition-none">
             <span className={artworkClassName}>
@@ -87,7 +87,7 @@ const TrackCard = ({
                 {item.music.name}
             </span>
             <span className="truncate text-xs text-[var(--b-color-text-secondary)]">
-                {item.music.artist.name}
+                {item.music.artistDisplayName}
             </span>
             <span className="mt-auto line-clamp-2 text-xs text-[var(--b-color-text-tertiary)]">
                 <Reason item={item} />

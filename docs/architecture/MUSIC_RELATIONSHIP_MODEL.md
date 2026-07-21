@@ -659,3 +659,26 @@ Required acceptance evidence includes:
 
 Automatic grouping, multi-value tag parsing, external metadata lookup, lyrics,
 and downloader integration remain outside this migration.
+
+## 13. Artist Credit API Transition
+
+The GraphQL `Music.artist` and `Album.artist` fields remain compatibility
+projections of the first ordered primary credit. They are deprecated, and
+first-party clients must use `artistCredits` for identity/navigation and
+`artistDisplayName` for rendering, search, and sort. The scalar fields may only
+be removed in a future breaking schema version after supported external clients
+have had a full migration window.
+
+Metadata mutations accept ordered `artistCredits` and `albumArtistCredits`.
+The legacy scalar `artist` and `albumArtist` inputs remain accepted during the
+same compatibility window but are not sent by first-party clients. A scalar tag
+without a corresponding multi-value tag is one artist value and is never split
+on commas. When a format exposes explicit artist values, their order defines
+the credit boundaries and the singular display value may recover join phrases.
+
+File formats do not consistently encode arbitrary credit roles or join phrases.
+The relational credit remains canonical. A rescan that reports the same ordered
+participants preserves its existing roles, credited names, and join phrases,
+even when the tag reader normalizes the singular display separator. Changing
+the ordered participant list creates a new parsed presentation instead of
+silently applying stale credit semantics.

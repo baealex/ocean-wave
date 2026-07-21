@@ -179,7 +179,7 @@ export const createCompatibilityAlbumInTransaction = async (
     return transaction.album.findUniqueOrThrow({ where: { id: release.id } });
 };
 
-const createMusicInTransaction = async (
+export const createCompatibilityMusicInTransaction = async (
     transaction: Prisma.TransactionClient,
     data: CompatibilityMusicCreateInput
 ) => {
@@ -397,7 +397,7 @@ const deleteMusicRows = async (
 export const createCompatibilityDelegates = (client: PrismaClient) => {
     const musicWrites = {
         create: ({ data }: { data: CompatibilityMusicCreateInput }) => (
-            client.$transaction(transaction => createMusicInTransaction(transaction, data))
+            client.$transaction(transaction => createCompatibilityMusicInTransaction(transaction, data))
         ),
         createMany: ({ data }: {
             data: CompatibilityMusicCreateInput | CompatibilityMusicCreateInput[];
@@ -405,7 +405,7 @@ export const createCompatibilityDelegates = (client: PrismaClient) => {
             const rows = Array.isArray(data) ? data : [data];
 
             for (const row of rows) {
-                await createMusicInTransaction(transaction, row);
+                await createCompatibilityMusicInTransaction(transaction, row);
             }
 
             return { count: rows.length };

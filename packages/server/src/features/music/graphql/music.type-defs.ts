@@ -1,6 +1,7 @@
 import { gql } from '~/modules/graphql';
 import { albumType } from '../../../schema/album';
 import { artistType } from '../../../schema/artist';
+import { artistCreditType } from '../../../schema/artist-credit';
 
 export const musicType: string = gql`
     type Music {
@@ -23,7 +24,9 @@ export const musicType: string = gql`
         isLiked: Boolean!
         isHated: Boolean!
         createdAt: String!
-        artist: Artist!
+        artist: Artist! @deprecated(reason: "Use artistCredits or artistDisplayName; removal is planned for the next breaking schema version.")
+        artistDisplayName: String!
+        artistCredits: [ArtistCredit!]!
         album: Album!
         genres: [Genre!]!
         tags: [Tag!]!
@@ -141,9 +144,11 @@ export const musicType: string = gql`
     input UpdateMusicMetadataInput {
         id: ID!
         title: String!
-        artist: String!
+        artist: String @deprecated(reason: "Use artistCredits; removal is planned for the next breaking schema version.")
+        artistCredits: [ArtistCreditInput!]
         album: String!
-        albumArtist: String
+        albumArtist: String @deprecated(reason: "Use albumArtistCredits; removal is planned for the next breaking schema version.")
+        albumArtistCredits: [ArtistCreditInput!]
         publishedYear: String!
         trackNumber: Int!
         genres: [String!]!
@@ -152,6 +157,8 @@ export const musicType: string = gql`
     ${artistType}
 
     ${albumType}
+
+    ${artistCreditType}
 `;
 
 export const musicQuery = gql`

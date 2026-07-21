@@ -1,6 +1,11 @@
 import type { IResolvers } from '@graphql-tools/utils';
 
 import models, { type Artist } from '~/models';
+import {
+    findActiveAlbumIdsForArtist,
+    findActiveCreditedArtistIds,
+    findActiveMusicIdsForArtist
+} from '~/modules/artist-credits';
 import { gql } from '~/modules/graphql';
 import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
 import { albumType } from '../album';
@@ -35,45 +40,81 @@ export const artistTypeDefs = `
     ${artistQuery}
 `;
 
+const activeMusicIdRequests = new WeakMap<object, Promise<number[]>>();
+const activeAlbumIdRequests = new WeakMap<object, Promise<number[]>>();
+
+const getActiveMusicIds = (artist: Artist) => {
+    const existingRequest = activeMusicIdRequests.get(artist);
+
+    if (existingRequest) return existingRequest;
+
+    const request = findActiveMusicIdsForArtist(artist.id);
+    activeMusicIdRequests.set(artist, request);
+    return request;
+};
+
+const getActiveAlbumIds = (artist: Artist) => {
+    const existingRequest = activeAlbumIdRequests.get(artist);
+
+    if (existingRequest) return existingRequest;
+
+    const request = findActiveAlbumIdsForArtist(artist.id);
+    activeAlbumIdRequests.set(artist, request);
+    return request;
+};
+
 export const artistResolvers: IResolvers = {
     Query: {
-        allArtists: () => models.artist.findMany({
-            where: { Music: { some: { syncStatus: TRACK_SYNC_STATUS.active } } },
-            orderBy: { Music: { _count: 'desc' } }
-        }),
+        allArtists: async () => {
+            const artistIds = await findActiveCreditedArtistIds();
+            const artists = await models.artist.findMany({
+                where: { id: { in: artistIds } }
+            });
+            const artistsWithCounts = await Promise.all(artists.map(async artist => ({
+                artist,
+                musicCount: (await getActiveMusicIds(artist)).length
+            })));
+
+            return artistsWithCounts
+                .sort((left, right) => (
+                    right.musicCount - left.musicCount
+                    || left.artist.name.localeCompare(right.artist.name)
+                ))
+                .map(({ artist }) => artist);
+        },
         artist: (_, { id }: Artist) => models.artist.findUnique({ where: { id: Number(id) } })
     },
     Artist: {
-        latestAlbum: (artist: Artist) => models.album.findFirst({
+        latestAlbum: async (artist: Artist) => models.album.findFirst({
             where: {
-                artistId: artist.id,
+                id: { in: await getActiveAlbumIds(artist) },
                 Music: { some: { syncStatus: TRACK_SYNC_STATUS.active } }
             },
             orderBy: { publishedYear: 'desc' }
         }),
-        albums: (artist: Artist) => models.album.findMany({
+        albums: async (artist: Artist) => models.album.findMany({
             where: {
-                artistId: artist.id,
+                id: { in: await getActiveAlbumIds(artist) },
                 Music: { some: { syncStatus: TRACK_SYNC_STATUS.active } }
             },
             orderBy: { publishedYear: 'desc' }
         }),
-        musics: (artist: Artist) => models.music.findMany({
+        musics: async (artist: Artist) => models.music.findMany({
             where: {
-                artistId: artist.id,
+                id: { in: await getActiveMusicIds(artist) },
                 syncStatus: TRACK_SYNC_STATUS.active
             },
             orderBy: { playCount: 'desc' }
         }),
-        albumCount: (artist: Artist) => models.album.count({
+        albumCount: async (artist: Artist) => models.album.count({
             where: {
-                artistId: artist.id,
+                id: { in: await getActiveAlbumIds(artist) },
                 Music: { some: { syncStatus: TRACK_SYNC_STATUS.active } }
             }
         }),
-        musicCount: (artist: Artist) => models.music.count({
+        musicCount: async (artist: Artist) => models.music.count({
             where: {
-                artistId: artist.id,
+                id: { in: await getActiveMusicIds(artist) },
                 syncStatus: TRACK_SYNC_STATUS.active
             }
         })

@@ -5,6 +5,7 @@ import { parseBuffer } from '../modules/music-metadata';
 
 import models from '~/models';
 import { musicResolvers } from '~/features/music/graphql';
+import { artistResolvers } from '~/schema/artist';
 
 jest.mock('../modules/file', () => ({ walk: jest.fn() }));
 
@@ -41,7 +42,10 @@ const restoreEnvValue = (key: string, value: string | undefined) => {
 const createTrackFixture = (overrides?: {
     title?: string;
     artist?: string;
+    artists?: string[];
     album?: string;
+    albumArtist?: string;
+    albumArtists?: string[];
     year?: string;
     trackNumber?: number;
     fingerprint?: string;
@@ -49,13 +53,16 @@ const createTrackFixture = (overrides?: {
 }) => {
     const title = overrides?.title ?? 'Track A';
     const artist = overrides?.artist ?? 'Artist A';
+    const artists = overrides?.artists?.join('~') ?? '';
     const album = overrides?.album ?? 'Album A';
+    const albumArtist = overrides?.albumArtist ?? '';
+    const albumArtists = overrides?.albumArtists?.join('~') ?? '';
     const year = overrides?.year ?? '2026';
     const trackNumber = overrides?.trackNumber ?? 1;
     const fingerprint = overrides?.fingerprint ?? 'fingerprint-a';
     const picture = overrides?.picture ?? '';
 
-    return `title=${title}|artist=${artist}|album=${album}|year=${year}|track=${trackNumber}|fingerprint=${fingerprint}|picture=${picture}`;
+    return `title=${title}|artist=${artist}|artists=${artists}|album=${album}|albumArtist=${albumArtist}|albumArtists=${albumArtists}|year=${year}|track=${trackNumber}|fingerprint=${fingerprint}|picture=${picture}`;
 };
 
 const createTempTrackFile = ({
@@ -141,7 +148,10 @@ describe('sync music identity', () => {
                 common: {
                     title: entries.title,
                     artist: entries.artist,
+                    artists: entries.artists?.split('~').filter(Boolean),
                     album: entries.album,
+                    albumartist: entries.albumArtist || undefined,
+                    albumartists: entries.albumArtists?.split('~').filter(Boolean),
                     picture: entries.picture
                         ? [
                             {
@@ -434,6 +444,97 @@ describe('sync music identity', () => {
         });
         expect(updated.Recording.RecordingGenre
             .map(({ Genre: genre }) => genre.name)).toEqual(['Ambient']);
+    });
+
+    it('indexes ordered track credits separately from a compilation album artist', async () => {
+        const contents = createTrackFixture({
+            title: 'Collaboration',
+            artist: 'Artist A feat. Artist B',
+            artists: ['Artist A', 'Artist B'],
+            album: 'Compilation',
+            albumArtist: 'Various Artists',
+            albumArtists: ['Various Artists'],
+            fingerprint: 'multi-artist-hash'
+        });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-credits-'));
+        const relativePath = 'library/collaboration.mp3';
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+        const filePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath,
+            contents
+        });
+        walkMock.mockResolvedValue([filePath]);
+
+        await syncMusic({ emit: jest.fn() });
+
+        const music = await models.music.findFirstOrThrow({
+            where: { name: 'Collaboration' }
+        });
+        const recordingCredits = await models.artistCredit.findMany({
+            where: { recordingId: music.recordingId },
+            include: { Artist: true },
+            orderBy: { position: 'asc' }
+        });
+        const releaseCredits = await models.artistCredit.findMany({
+            where: { releaseId: music.albumId },
+            include: { Artist: true },
+            orderBy: { position: 'asc' }
+        });
+        const guestArtist = await models.artist.findFirstOrThrow({
+            where: { name: 'Artist B' }
+        });
+        const guestMusics = await (artistResolvers.Artist as {
+            musics: (artist: typeof guestArtist) => Promise<Array<{ id: number }>>;
+        }).musics(guestArtist);
+        const creditedArtists = await (artistResolvers.Query as {
+            allArtists: () => Promise<Array<{ name: string }>>;
+        }).allArtists();
+
+        expect(recordingCredits).toEqual([
+            expect.objectContaining({
+                role: 'primary',
+                joinPhrase: ' feat. ',
+                Artist: expect.objectContaining({ name: 'Artist A' })
+            }),
+            expect.objectContaining({
+                role: 'featured',
+                joinPhrase: '',
+                Artist: expect.objectContaining({ name: 'Artist B' })
+            })
+        ]);
+        expect(releaseCredits).toEqual([
+            expect.objectContaining({
+                role: 'primary',
+                Artist: expect.objectContaining({ name: 'Various Artists' })
+            })
+        ]);
+        expect(guestMusics.map(({ id }) => id)).toContain(music.id);
+        expect(creditedArtists.map(({ name }) => name)).toEqual(expect.arrayContaining([
+            'Artist A',
+            'Artist B',
+            'Various Artists'
+        ]));
+
+        fs.writeFileSync(filePath, createTrackFixture({
+            title: 'Collaboration',
+            artist: 'Artist A; Artist B',
+            artists: ['Artist A', 'Artist B'],
+            album: 'Compilation',
+            albumArtist: 'Various Artists',
+            albumArtists: ['Various Artists'],
+            fingerprint: 'multi-artist-hash'
+        }));
+        await syncMusic({ emit: jest.fn() }, true);
+
+        await expect(models.artistCredit.findMany({
+            where: { recordingId: music.recordingId },
+            orderBy: { position: 'asc' }
+        })).resolves.toEqual([
+            expect.objectContaining({ role: 'primary', joinPhrase: ' feat. ' }),
+            expect.objectContaining({ role: 'featured', joinPhrase: '' })
+        ]);
     });
 
     it('does not overwrite custom album artwork during a force sync', async () => {

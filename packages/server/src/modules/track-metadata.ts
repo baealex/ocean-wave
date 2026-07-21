@@ -1,11 +1,19 @@
 import path from 'path';
 
+import {
+    formatArtistCredits,
+    normalizeArtistCredits,
+    parseArtistCredits,
+    type ArtistCreditValue
+} from './artist-credits';
 import { parseBuffer } from './music-metadata';
 
 export interface ParsedTrackMetadata {
     title: string;
     albumArtist: string | null;
+    albumArtistCredits: ArtistCreditValue[] | null;
     artist: string;
+    artistCredits: ArtistCreditValue[];
     album: string;
     pictureData: Buffer | null;
     genres: string[];
@@ -21,7 +29,9 @@ export interface ParsedTrackMetadata {
 export interface MusicMetadataOverride {
     title: string;
     albumArtist: string | null;
+    albumArtistCredits: ArtistCreditValue[] | null;
     artist: string;
+    artistCredits: ArtistCreditValue[];
     album: string;
     genres: string[];
     year: string;
@@ -43,7 +53,9 @@ export const parseTrackMetadata = async (
     const {
         title = path.parse(filePath).name,
         albumartist: albumArtist = null,
+        albumartists,
         artist = 'unknown',
+        artists,
         album = 'unknown',
         picture,
         genre = [],
@@ -51,10 +63,25 @@ export const parseTrackMetadata = async (
         track
     } = common;
 
+    const artistCredits = parseArtistCredits({
+        displayName: artist,
+        names: artists,
+        fallbackName: 'unknown'
+    });
+    const albumArtistCredits = albumArtist || albumartists?.length
+        ? parseArtistCredits({
+            displayName: albumArtist,
+            names: albumartists,
+            fallbackName: artistCredits[0].name
+        })
+        : null;
+
     return {
         title,
-        albumArtist,
-        artist,
+        albumArtist: albumArtistCredits ? formatArtistCredits(albumArtistCredits) : null,
+        albumArtistCredits,
+        artist: formatArtistCredits(artistCredits),
+        artistCredits,
         album,
         pictureData: picture?.[0]?.data ? Buffer.from(picture[0].data) : null,
         genres: genre,
@@ -81,11 +108,28 @@ export const applyMusicMetadataOverride = (
     }
 
     try {
-        const override = JSON.parse(serializedOverride) as MusicMetadataOverride;
+        const override = JSON.parse(serializedOverride) as Partial<MusicMetadataOverride>;
+        const artistCredits = Array.isArray(override.artistCredits)
+            ? normalizeArtistCredits(override.artistCredits)
+            : parseArtistCredits({
+                displayName: override.artist ?? metadata.artist,
+                fallbackName: metadata.artistCredits[0].name
+            });
+        const albumArtistCredits = Array.isArray(override.albumArtistCredits)
+            ? normalizeArtistCredits(override.albumArtistCredits, 'Album artist credits')
+            : override.albumArtist
+                ? parseArtistCredits({ displayName: override.albumArtist })
+                : override.albumArtist === null
+                    ? null
+                    : metadata.albumArtistCredits;
 
         return {
             ...metadata,
             ...override,
+            artist: formatArtistCredits(artistCredits),
+            artistCredits,
+            albumArtist: albumArtistCredits ? formatArtistCredits(albumArtistCredits) : null,
+            albumArtistCredits,
             pictureData: metadata.pictureData
         };
     } catch {

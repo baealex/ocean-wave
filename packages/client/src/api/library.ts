@@ -7,6 +7,14 @@ import type {
 
 import { createQuery, graphQLRequest, wrapper } from './graphql';
 
+const artistCreditFields = [
+    'role',
+    'position',
+    'creditedName',
+    'joinPhrase',
+    createQuery<Artist>('artist', ['id', 'name'])
+];
+
 export function getMusics() {
     return graphQLRequest<'allMusics', Music[]>({
         operationName: 'AllMusics',
@@ -28,6 +36,8 @@ export function getMusics() {
             'isLiked',
             'isHated',
             'createdAt',
+            'artistDisplayName',
+            createQuery('artistCredits', artistCreditFields),
             createQuery<Artist>('artist', [
                 'id',
                 'name'
@@ -70,6 +80,8 @@ export function getMusic(id: string) {
             'duration',
             'trackNumber',
             'hasMetadataOverride',
+            'artistDisplayName',
+            createQuery('artistCredits', artistCreditFields),
             createQuery<Artist>('artist', [
                 'id',
                 'name'
@@ -80,6 +92,8 @@ export function getMusic(id: string) {
                 'cover',
                 'isCoverCustom',
                 'publishedYear',
+                'artistDisplayName',
+                createQuery('artistCredits', artistCreditFields),
                 createQuery<Artist>('artist', [
                     'id',
                     'name'
@@ -125,7 +139,9 @@ export function getArtist(id: string) {
                 'id',
                 'name',
                 'cover',
-                'publishedYear'
+                'publishedYear',
+                'artistDisplayName',
+                createQuery('artistCredits', artistCreditFields)
             ]),
             createQuery<Music>('musics', [
                 'id'
@@ -144,6 +160,8 @@ export function getAlbums() {
             'isCoverCustom',
             'publishedYear',
             'createdAt',
+            'artistDisplayName',
+            createQuery('artistCredits', artistCreditFields),
             createQuery<Artist>('artist', [
                 'id',
                 'name'
@@ -162,6 +180,8 @@ export function getAlbum(id: string) {
             'cover',
             'isCoverCustom',
             'publishedYear',
+            'artistDisplayName',
+            createQuery('artistCredits', artistCreditFields),
             createQuery<Artist>('artist', [
                 'id',
                 'name'

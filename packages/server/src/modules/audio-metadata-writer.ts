@@ -46,6 +46,15 @@ const sameStringSet = (left: string[], right: string[]) => {
     return [...new Set(left)].sort().join('\0') === [...new Set(right)].sort().join('\0');
 };
 
+const sameStringList = (left: string[], right: string[]) => {
+    return left.join('\0') === right.join('\0');
+};
+
+const stringList = (value: string | string[] | undefined) => {
+    if (!value) return [];
+    return Array.isArray(value) ? value : [value];
+};
+
 const firstString = (value: string | string[] | undefined) => {
     return Array.isArray(value) ? value[0] : value;
 };
@@ -54,12 +63,17 @@ const verifyWrittenMetadata = (
     expected: MusicMetadataOverride,
     actual: Awaited<ReturnType<TagLibSimpleModule['readTags']>>
 ) => {
-    const actualAlbumArtist = firstString(actual.albumArtist) || null;
     const actualYear = firstString(actual.date) ?? actual.year?.toString();
     const matches = firstString(actual.title) === expected.title
-        && firstString(actual.artist) === expected.artist
+        && sameStringList(
+            stringList(actual.artist),
+            expected.artistCredits.map(credit => credit.name)
+        )
         && firstString(actual.album) === expected.album
-        && actualAlbumArtist === expected.albumArtist
+        && sameStringList(
+            stringList(actual.albumArtist),
+            expected.albumArtistCredits?.map(credit => credit.name) ?? []
+        )
         && actualYear === expected.year
         && actual.track === expected.trackNumber
         && sameStringSet(actual.genre ?? [], expected.genres);
@@ -145,9 +159,9 @@ export const writeTrackMetadataToFile = async (
 
         const tags = {
             title: metadata.title,
-            artist: metadata.artist,
+            artist: metadata.artistCredits.map(credit => credit.name),
             album: metadata.album,
-            albumArtist: metadata.albumArtist ?? [],
+            albumArtist: metadata.albumArtistCredits?.map(credit => credit.name) ?? [],
             date: metadata.year,
             track: metadata.trackNumber,
             genre: metadata.genres

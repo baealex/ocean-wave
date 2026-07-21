@@ -69,7 +69,7 @@ export function toTrack(serverUrl: string, music: PlayableMusic, sessionCookie?:
     id: String(music.id),
     url: music.offlineAudioUri ?? audioStreamUrl(serverUrl, music.id),
     title: fallbackText(music.name, `Track ${music.id}`),
-    artist: fallbackText(music.artist?.name, 'Unknown Artist'),
+    artist: fallbackText(music.artistDisplayName ?? music.artist?.name, 'Unknown Artist'),
     album: fallbackText(music.album?.name, 'Unknown Album'),
     duration: music.duration ?? undefined,
     artwork: music.offlineArtworkUri ?? albumArtUrl(serverUrl, music.album?.cover),

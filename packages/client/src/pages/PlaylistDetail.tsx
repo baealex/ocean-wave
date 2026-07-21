@@ -269,7 +269,7 @@ export default function PlaylistDetail() {
                                         <MusicListItem
                                             albumName={music.album.name}
                                             albumCover={music.album.cover}
-                                            artistName={music.artist.name}
+                                            artistName={music.artistDisplayName}
                                             musicName={music.name}
                                             musicCodec={music.codec}
                                             isLiked={music.isLiked}
@@ -280,7 +280,7 @@ export default function PlaylistDetail() {
                                                     <MusicActionPanelContent
                                                         id={music.id}
                                                         onAlbumClick={() => navigate(`/album/${music.album.id}`)}
-                                                        onArtistClick={() => navigate(`/artist/${music.artist.id}`)}
+                                                        onArtistClick={(artistId) => navigate(`/artist/${artistId}`)}
                                                     />
                                                 )
                                             })}

@@ -110,7 +110,7 @@ export default function ArtistDetail() {
                                 <AlbumListItem
                                     albumCover={album.cover}
                                     albumName={album.name}
-                                    artistName={artist.name}
+                                    artistName={album.artistDisplayName}
                                     publishedYear={album.publishedYear}
                                     musicCount={album.musics?.length}
                                     compact
@@ -142,7 +142,7 @@ export default function ArtistDetail() {
                         return (
                             <MusicListItem
                                 key={music.id}
-                                artistName={music.artist.name}
+                                artistName={music.artistDisplayName}
                                 albumCover={music.album.cover}
                                 albumName={music.album.name}
                                 musicName={music.name}

@@ -12,6 +12,14 @@ export type OceanWaveMusic = {
   duration?: number | null;
   isLiked?: boolean;
   createdAt?: string | null;
+  artistDisplayName?: string | null;
+  artistCredits?: Array<{
+    artist: { id: number; name: string };
+    role: string;
+    position: number;
+    creditedName?: string | null;
+    joinPhrase: string;
+  }>;
   artist?: { id: number; name: string } | null;
   album?: { id: number; name: string; cover?: string | null } | null;
 };
@@ -92,6 +100,8 @@ const libraryQuery = `
       duration
       isLiked
       createdAt
+      artistDisplayName
+      artistCredits { role position creditedName joinPhrase artist { id name } }
       artist { id name }
       album { id name cover }
     }
@@ -108,6 +118,8 @@ const musicQuery = `
       duration
       isLiked
       createdAt
+      artistDisplayName
+      artistCredits { role position creditedName joinPhrase artist { id name } }
       artist { id name }
       album { id name cover }
     }
@@ -136,6 +148,8 @@ const playlistDetailQuery = `
         duration
         isLiked
         createdAt
+        artistDisplayName
+        artistCredits { role position creditedName joinPhrase artist { id name } }
         artist { id name }
         album { id name cover }
       }

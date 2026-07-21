@@ -62,5 +62,8 @@ describe('GraphQL API requests', () => {
         expect(payload.query).toContain('lastSkippedAt');
         expect(payload.query).toContain('completionCount');
         expect(payload.query).toContain('lastCompletedAt');
+        expect(payload.query).toContain('artistDisplayName');
+        expect(payload.query).toContain('artistCredits');
+        expect(payload.query).toContain('joinPhrase');
     });
 });

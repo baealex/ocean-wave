@@ -716,7 +716,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
             : undefined;
         if (music === undefined) return;
 
-        document.title = `${music.name} - ${music.artist.name}`;
+        document.title = `${music.name} - ${music.artistDisplayName}`;
 
         this.audioChannel.load(music);
         play && this.audioChannel.play();
@@ -1537,7 +1537,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                     };
                 }
 
-                document.title = `${music.name} - ${music.artist.name}`;
+                document.title = `${music.name} - ${music.artistDisplayName}`;
                 this.set({
                     ...nextQueueState,
                     progress: getProgress(desiredPosition, music.duration),
@@ -2108,7 +2108,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 isPlaying: false
             });
 
-            document.title = `${music.name} - ${music.artist.name}`;
+            document.title = `${music.name} - ${music.artistDisplayName}`;
             if (!preserveCurrentAudio || previousTrackId !== snapshot.currentMusicId) {
                 this.audioChannel.load(music);
             }
@@ -2262,7 +2262,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 : undefined;
 
             if (music) {
-                document.title = `${music.name} - ${music.artist.name}`;
+                document.title = `${music.name} - ${music.artistDisplayName}`;
                 this.audioChannel.load(music);
 
                 if (restoredQueueState.currentTime > 0) {

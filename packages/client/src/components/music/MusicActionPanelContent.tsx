@@ -21,7 +21,7 @@ import { queueStore } from '~/store/queue';
 
 interface MusicActionPanelContentProps {
     id: string;
-    onArtistClick?: () => void;
+    onArtistClick?: (artistId: string) => void;
     onAlbumClick?: () => void;
 }
 
@@ -39,6 +39,16 @@ export default function MusicActionPanelContent({
     if (!music) {
         return null;
     }
+
+    const artistCredits = music.artistCredits?.length
+        ? music.artistCredits
+        : [{
+            artist: music.artist,
+            role: 'PRIMARY' as const,
+            position: 0,
+            creditedName: null,
+            joinPhrase: ''
+        }];
 
     const header = (onAlbumClick || onArtistClick) ? (
         <>
@@ -62,21 +72,24 @@ export default function MusicActionPanelContent({
                     </div>
                 </PanelHeaderAction>
             )}
-            {onArtistClick && (
+            {onArtistClick && artistCredits.map(credit => (
                 <PanelHeaderAction
+                    key={`${credit.position}-${credit.artist.id}`}
                     layout="artist"
                     onClick={() => {
                         panel.close();
-                        setTimeout(onArtistClick, 100);
+                        setTimeout(() => onArtistClick(credit.artist.id), 100);
                     }}>
                     <div>
-                        <div className={panelContentClass.subTitle}>Artist</div>
+                        <div className={panelContentClass.subTitle}>
+                            {credit.role === 'PRIMARY' ? 'Artist' : `${credit.role.toLowerCase()} artist`}
+                        </div>
                         <div className={panelContentClass.subContent}>
-                            {music.artist.name}
+                            {credit.creditedName || credit.artist.name}
                         </div>
                     </div>
                 </PanelHeaderAction>
-            )}
+            ))}
         </>
     ) : undefined;
 

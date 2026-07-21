@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-import type { Music } from '~/models/type';
+import type { ArtistCreditRole, Music } from '~/models/type';
 import { getOriginClientId } from '~/socket/socket';
 
 import { graphQuery } from './graphql';
@@ -55,9 +55,21 @@ export interface RecordPlaybackParams {
 export interface UpdateMusicMetadataInput {
     id: string;
     title: string;
-    artist: string;
+    artist?: string | null;
+    artistCredits?: Array<{
+        name: string;
+        role: ArtistCreditRole;
+        creditedName?: string | null;
+        joinPhrase?: string | null;
+    }>;
     album: string;
     albumArtist?: string | null;
+    albumArtistCredits?: Array<{
+        name: string;
+        role: ArtistCreditRole;
+        creditedName?: string | null;
+        joinPhrase?: string | null;
+    }>;
     publishedYear: string;
     trackNumber: number;
     genres: string[];

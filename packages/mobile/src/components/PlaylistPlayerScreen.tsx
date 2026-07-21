@@ -391,7 +391,7 @@ const PlaylistTrackRow = memo(function PlaylistTrackRowComponent({
         <View style={styles.songTitleRow}>
           <Text numberOfLines={1} style={[styles.songTitle, active && styles.activeText]}>{item.name}</Text>
         </View>
-        <Text numberOfLines={1} style={styles.songMeta}>{item.artist?.name ?? 'Unknown Artist'} · {item.album?.name ?? 'Unknown Album'}</Text>
+        <Text numberOfLines={1} style={styles.songMeta}>{item.artistDisplayName ?? item.artist?.name ?? 'Unknown Artist'} · {item.album?.name ?? 'Unknown Album'}</Text>
       </View>
       <View style={styles.durationSlot}>
         {buffering ? <ActivityIndicator color={brand.colors.primary} size="small" /> : <Text style={styles.duration}>{formatDuration(item.duration)}</Text>}

@@ -26,6 +26,14 @@ const createMusic = ({
 }): Music => ({
     album: {
         artist: { id: `artist-${albumId}`, name: `Artist ${albumId}` },
+        artistDisplayName: `Artist ${albumId}`,
+        artistCredits: [{
+            artist: { id: `artist-${albumId}`, name: `Artist ${albumId}` },
+            role: 'PRIMARY',
+            position: 0,
+            creditedName: null,
+            joinPhrase: ''
+        }],
         cover: `/covers/${albumId}.jpg`,
         createdAt: 1,
         id: albumId,
@@ -43,6 +51,14 @@ const createMusic = ({
         musics: [{ id }],
         name: `Artist ${albumId}`
     },
+    artistDisplayName: `Artist ${albumId}`,
+    artistCredits: [{
+        artist: { id: `artist-${albumId}`, name: `Artist ${albumId}` },
+        role: 'PRIMARY',
+        position: 0,
+        creditedName: null,
+        joinPhrase: ''
+    }],
     bitrate: 320_000,
     codec: 'FLAC',
     completionCount: 0,

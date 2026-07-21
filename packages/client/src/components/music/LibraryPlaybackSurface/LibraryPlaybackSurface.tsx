@@ -77,7 +77,7 @@ const getDescription = (model: LibraryPlaybackSurfaceModel) => {
     }
 
     if (model.music) {
-        return `${model.music.artist.name} · ${model.music.album.name}`;
+        return `${model.music.artistDisplayName} · ${model.music.album.name}`;
     }
 
     return 'No recent track is available.';

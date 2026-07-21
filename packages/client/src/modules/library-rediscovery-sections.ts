@@ -189,7 +189,7 @@ const resolveAlbumItems = ({
             id: representativeMusic.album.id,
             name: representativeMusic.album.name
         },
-        artistName: representativeMusic.artist.name,
+        artistName: representativeMusic.artistDisplayName,
         kind: 'album',
         reason: resolveReason(candidate.reasonCodes, preferredReasonCode),
         representativeMusicId: candidate.representativeMusicId,

@@ -14,3 +14,28 @@ describe('library rediscovery GraphQL contract', () => {
             .toEqual([...LIBRARY_REDISCOVERY_REASON_CODES]);
     });
 });
+
+describe('artist credit GraphQL contract', () => {
+    it('exposes ordered credits while keeping scalar artists as deprecated compatibility fields', () => {
+        const musicType = schema.getType('Music') as {
+            getFields: () => Record<string, {
+                deprecationReason?: string;
+                type: { toString: () => string };
+            }>;
+        };
+        const albumType = schema.getType('Album') as typeof musicType;
+        const metadataInput = schema.getType('UpdateMusicMetadataInput') as {
+            getFields: () => Record<string, { type: { toString: () => string } }>;
+        };
+
+        expect(musicType.getFields().artistCredits.type.toString()).toBe('[ArtistCredit!]!');
+        expect(musicType.getFields().artistDisplayName.type.toString()).toBe('String!');
+        expect(musicType.getFields().artist.deprecationReason).toContain('next breaking schema');
+        expect(albumType.getFields().artistCredits.type.toString()).toBe('[ArtistCredit!]!');
+        expect(albumType.getFields().artist.deprecationReason).toContain('next breaking schema');
+        expect(metadataInput.getFields().artistCredits.type.toString()).toBe('[ArtistCreditInput!]');
+        expect(metadataInput.getFields().albumArtistCredits.type.toString())
+            .toBe('[ArtistCreditInput!]');
+        expect(metadataInput.getFields().artist.type.toString()).toBe('String');
+    });
+});

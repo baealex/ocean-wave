@@ -2,8 +2,8 @@ export const sortByName = <T extends { name: string }>(items: T[]) => {
     return items.sort((a, b) => a.name.localeCompare(b.name));
 };
 
-export const sortByArtistName = <T extends { artist: { name: string } }>(items: T[]) => {
-    return items.sort((a, b) => a.artist.name.localeCompare(b.artist.name));
+export const sortByArtistName = <T extends { artistDisplayName: string }>(items: T[]) => {
+    return items.sort((a, b) => a.artistDisplayName.localeCompare(b.artistDisplayName));
 };
 
 export const sortByAlbumName = <T extends { album: { name: string } }>(items: T[]) => {

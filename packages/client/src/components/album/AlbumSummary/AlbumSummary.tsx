@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Image, Text } from '~/components/shared';
@@ -6,12 +7,17 @@ import { getOriginalImage } from '~/modules/image';
 
 import type { Album } from '~/models/type';
 
-type AlbumSummaryProps = Pick<Album, 'cover' | 'name' | 'artist' | 'publishedYear'>;
+type AlbumSummaryProps = Pick<
+    Album,
+    'cover' | 'name' | 'artist' | 'artistCredits' | 'artistDisplayName' | 'publishedYear'
+>;
 
 const AlbumSummary = ({
     cover,
     name,
     artist,
+    artistCredits,
+    artistDisplayName,
     publishedYear
 }: AlbumSummaryProps) => {
     return (
@@ -25,13 +31,32 @@ const AlbumSummary = ({
                 {name}
             </Text>
             <div className="flex items-center gap-[var(--b-spacing-sm)]">
-                <Link
-                    className="inline-flex min-h-8 items-center rounded-full px-1 no-underline transition-opacity duration-150 hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"
-                    to={`/artist/${artist.id}`}>
-                    <Text variant="secondary" size="md">
-                        {artist.name}
-                    </Text>
-                </Link>
+                <span className="inline-flex min-h-8 flex-wrap items-center justify-center">
+                    {artistCredits?.length ? artistCredits.map(credit => (
+                        <Fragment key={`${credit.position}-${credit.artist.id}`}>
+                            <Link
+                                className="inline-flex min-h-8 items-center rounded-full px-1 no-underline transition-opacity duration-150 hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"
+                                to={`/artist/${credit.artist.id}`}>
+                                <Text variant="secondary" size="md">
+                                    {credit.creditedName || credit.artist.name}
+                                </Text>
+                            </Link>
+                            {credit.joinPhrase && (
+                                <Text as="span" variant="secondary" size="md">
+                                    {credit.joinPhrase}
+                                </Text>
+                            )}
+                        </Fragment>
+                    )) : (
+                        <Link
+                            className="inline-flex min-h-8 items-center rounded-full px-1 no-underline transition-opacity duration-150 hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"
+                            to={`/artist/${artist.id}`}>
+                            <Text variant="secondary" size="md">
+                                {artistDisplayName}
+                            </Text>
+                        </Link>
+                    )}
+                </span>
                 <Text variant="muted" size="md">•</Text>
                 <Text variant="tertiary" size="md">
                     {publishedYear}

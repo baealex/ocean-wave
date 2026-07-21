@@ -103,7 +103,7 @@ export default function AlbumDetail() {
                     <MusicListItem
                         key={music.id}
                         albumName={music.album.name}
-                        artistName={music.artist.name}
+                        artistName={music.artistDisplayName}
                         trackNumber={music.trackNumber}
                         musicName={music.name}
                         musicCodec={music.codec}
@@ -116,7 +116,7 @@ export default function AlbumDetail() {
                             content: (
                                 <MusicActionPanelContent
                                     id={music.id}
-                                    onArtistClick={() => navigate(`/artist/${music.artist.id}`)}
+                                    onArtistClick={(artistId) => navigate(`/artist/${artistId}`)}
                                 />
                             )
                         })}

@@ -83,7 +83,11 @@ export function usePlaylistLibrary({ setIsLoading, setMessage, setScreen, setSyn
     const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
     if (!normalizedQuery) return library;
 
-    return library.filter(item => [item.name, item.artist?.name, item.album?.name]
+    return library.filter(item => [
+      item.name,
+      item.artistDisplayName ?? item.artist?.name,
+      item.album?.name,
+    ]
       .filter(Boolean)
       .some(value => value?.toLowerCase().includes(normalizedQuery)));
   }, [deferredSearchQuery, library]);

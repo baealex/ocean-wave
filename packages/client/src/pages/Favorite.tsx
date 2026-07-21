@@ -87,7 +87,7 @@ export default function Music() {
     const smartFilteredMusics = filterMusicsBySmartFilter(favoriteMusics, smartFilterId);
     const filteredMusics = smartFilteredMusics.filter(music =>
         music.name.toLowerCase().includes(deferredQuery) ||
-        music.artist.name.toLowerCase().includes(deferredQuery) ||
+        music.artistDisplayName.toLowerCase().includes(deferredQuery) ||
         music.album.name.toLowerCase().includes(deferredQuery)
     );
     const hasActiveFilters = Boolean(query.trim()) || isSmartFilterActive;
@@ -219,7 +219,7 @@ export default function Music() {
                             key={music.id}
                             albumName={music.album.name}
                             albumCover={music.album.cover}
-                            artistName={music.artist.name}
+                            artistName={music.artistDisplayName}
                             musicName={music.name}
                             musicCodec={music.codec}
                             isLiked={music.isLiked}
@@ -230,7 +230,7 @@ export default function Music() {
                                     <MusicActionPanelContent
                                         id={music.id}
                                         onAlbumClick={() => navigate(`/album/${music.album.id}`)}
-                                        onArtistClick={() => navigate(`/artist/${music.artist.id}`)}
+                                        onArtistClick={(artistId) => navigate(`/artist/${artistId}`)}
                                     />
                                 )
                             })}
