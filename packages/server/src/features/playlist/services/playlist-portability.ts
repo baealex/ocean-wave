@@ -75,7 +75,9 @@ export const parseM3u = (content: string, fallbackName = 'Imported playlist'): P
         if (line.startsWith('#EXTINF:')) {
             const match = /^#EXTINF:([^,]*),(.*)$/.exec(line);
             if (match) {
-                const [artist, title] = match[2].split(/\s+-\s+/, 2);
+                const separator = match[2].indexOf(' - ');
+                const artist = separator >= 0 ? match[2].slice(0, separator) : match[2];
+                const title = separator >= 0 ? match[2].slice(separator + 3) : undefined;
                 pending = {
                     durationMs: parseDurationSeconds(match[1]),
                     ...(title ? { artist, title } : { title: match[2] })
@@ -97,8 +99,30 @@ const decodeXml = (value: string) => value
     .replaceAll('&apos;', "'").replaceAll('&amp;', '&');
 
 const xmlValue = (xml: string, name: string) => {
-    const match = new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${name}>`, 'i').exec(xml);
-    return match ? decodeXml(match[1].trim()) : undefined;
+    const lower = xml.toLocaleLowerCase();
+    const opening = lower.indexOf(`<${name.toLocaleLowerCase()}`);
+    if (opening < 0) return undefined;
+    const contentStart = lower.indexOf('>', opening);
+    if (contentStart < 0) return undefined;
+    const closing = lower.indexOf(`</${name.toLocaleLowerCase()}>`, contentStart + 1);
+    return closing < 0 ? undefined : decodeXml(xml.slice(contentStart + 1, closing).trim());
+};
+
+const xmlTrackBlocks = (xml: string) => {
+    const blocks: string[] = [];
+    const lower = xml.toLocaleLowerCase();
+    let cursor = 0;
+    while (cursor < lower.length) {
+        const opening = lower.indexOf('<track', cursor);
+        if (opening < 0) break;
+        const contentStart = lower.indexOf('>', opening);
+        if (contentStart < 0) break;
+        const closing = lower.indexOf('</track>', contentStart + 1);
+        if (closing < 0) break;
+        blocks.push(xml.slice(contentStart + 1, closing));
+        cursor = closing + '</track>'.length;
+    }
+    return blocks;
 };
 
 export const parseXspf = (content: string, fallbackName = 'Imported playlist'): PortablePlaylist => {
@@ -106,18 +130,18 @@ export const parseXspf = (content: string, fallbackName = 'Imported playlist'): 
     if (/<!DOCTYPE|<!ENTITY/i.test(content)) {
         throw new PlaylistPortabilityError('UNSAFE_XML', 'DTD and entity declarations are not supported.');
     }
-    const tracks = [...content.matchAll(/<track(?:\s[^>]*)?>([\s\S]*?)<\/track>/gi)].map((match) => {
-        const location = xmlValue(match[1], 'location');
-        const identifier = xmlValue(match[1], 'identifier');
-        const duration = Number(xmlValue(match[1], 'duration'));
+    const tracks = xmlTrackBlocks(content).map((trackXml) => {
+        const location = xmlValue(trackXml, 'location');
+        const identifier = xmlValue(trackXml, 'identifier');
+        const duration = Number(xmlValue(trackXml, 'duration'));
         return {
             ...(identifier?.startsWith('urn:ocean-wave:track:')
                 ? { stableId: identifier.slice('urn:ocean-wave:track:'.length) }
                 : {}),
             ...(location ? { path: safePathHint(decodeURIComponent(location.replace(/^file:\/\//, ''))) } : {}),
-            title: xmlValue(match[1], 'title'),
-            artist: xmlValue(match[1], 'creator'),
-            album: xmlValue(match[1], 'album'),
+            title: xmlValue(trackXml, 'title'),
+            artist: xmlValue(trackXml, 'creator'),
+            album: xmlValue(trackXml, 'album'),
             durationMs: Number.isFinite(duration) && duration >= 0 ? Math.round(duration) : undefined
         };
     });
