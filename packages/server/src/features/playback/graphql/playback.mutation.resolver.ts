@@ -2,7 +2,10 @@ import type { IResolvers } from '@graphql-tools/utils';
 
 import { connectors } from '~/socket/connectors';
 import { withOriginClientId } from '~/socket/origin-client';
-import { PLAYBACK_STATE_UPDATED } from '~/socket/playback';
+import {
+    PLAYBACK_QUEUE_INVALIDATED,
+    PLAYBACK_STATE_UPDATED
+} from '~/socket/playback';
 import {
     PLAYBACK_ENDPOINTS_INVALIDATED,
     playbackEndpointRegistry,
@@ -138,9 +141,26 @@ export const createReportPlaybackStateMutationResolver = (
 export const createSavePlaybackQueueMutationResolver = (
     save = savePlaybackQueue
 ) => {
-    return async (_: unknown, { input }: { input: SavePlaybackQueueInput }) => {
+    return async (_: unknown, {
+        input,
+        originClientId
+    }: {
+        input: SavePlaybackQueueInput;
+        originClientId?: string | null;
+    }) => {
         try {
             const result = await save(input);
+
+            if (result.type === 'accepted') {
+                notifySafely(() => {
+                    connectors.notify(
+                        PLAYBACK_QUEUE_INVALIDATED,
+                        withOriginClientId({
+                            revision: result.queue.revision
+                        }, originClientId)
+                    );
+                });
+            }
 
             return {
                 type: result.type,

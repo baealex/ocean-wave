@@ -37,6 +37,9 @@ export interface PlaybackHandoffQueueSnapshot {
     musicIds: string[];
     sourceMusicIds: string[];
     currentIndex: number;
+    contextType: 'album' | 'playlist' | 'queue';
+    contextId: string | null;
+    contextTitle: string | null;
     shuffle: boolean;
     repeatMode: 'none' | 'one' | 'all';
     revision: number;

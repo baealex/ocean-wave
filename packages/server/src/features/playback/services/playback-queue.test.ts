@@ -52,6 +52,9 @@ describe('playback queue service', () => {
             musicIds: [second.id.toString(), first.id.toString()],
             sourceMusicIds: [first.id.toString(), second.id.toString()],
             currentIndex: 0,
+            contextType: 'album',
+            contextId: first.albumId.toString(),
+            contextTitle: 'Saved album',
             shuffle: true,
             repeatMode: 'all',
             expectedRevision: 0
@@ -65,12 +68,45 @@ describe('playback queue service', () => {
                 musicIds: [second.id.toString(), first.id.toString()],
                 sourceMusicIds: [first.id.toString(), second.id.toString()],
                 currentIndex: 0,
+                contextType: 'album',
+                contextId: first.albumId.toString(),
+                contextTitle: 'Saved album',
                 shuffle: true,
                 repeatMode: 'all',
                 revision: 1
             }
         });
         await expect(getPlaybackQueueSnapshot()).resolves.toEqual(result.queue);
+    });
+
+    it('rejects incomplete or conflicting queue contexts', async () => {
+        const music = await createMusic();
+        const baseInput = {
+            musicIds: [music.id.toString()],
+            sourceMusicIds: [],
+            currentIndex: 0,
+            shuffle: false,
+            repeatMode: 'none' as const,
+            expectedRevision: 0
+        };
+
+        await expect(savePlaybackQueue({
+            ...baseInput,
+            contextType: 'queue',
+            contextId: music.albumId.toString(),
+            contextTitle: 'Unexpected album'
+        })).rejects.toEqual(expect.objectContaining({
+            code: 'INVALID_PLAYBACK_QUEUE_CONTEXT'
+        } satisfies Partial<PlaybackQueueServiceError>));
+
+        await expect(savePlaybackQueue({
+            ...baseInput,
+            contextType: 'playlist',
+            contextId: null,
+            contextTitle: 'Missing playlist id'
+        })).rejects.toEqual(expect.objectContaining({
+            code: 'INVALID_PLAYBACK_QUEUE_CONTEXT'
+        } satisfies Partial<PlaybackQueueServiceError>));
     });
 
     it('turns a concurrent initial create into one accepted write and one conflict', async () => {

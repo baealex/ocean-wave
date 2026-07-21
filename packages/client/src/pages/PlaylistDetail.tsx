@@ -167,7 +167,14 @@ export default function PlaylistDetail() {
                         ? REMOTE_PLAYBACK_OWNERSHIP_MESSAGE
                         : undefined}
                     disabled={playlistMusics.length === 0 || Boolean(remotePlaybackOwnership)}
-                    onClick={() => void resetQueue(playlistMusics.map(({ id }) => id))}>
+                    onClick={() => void resetQueue(
+                        playlistMusics.map(({ id }) => id),
+                        {
+                            type: 'playlist',
+                            id: playlist.id,
+                            title: playlist.name
+                        }
+                    )}>
                     <Play />
                 </TwoTonePrimaryAction>
             )}>

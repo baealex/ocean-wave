@@ -185,6 +185,9 @@ PlaybackQueue
 - id
 - sessionId (unique)
 - currentIndex (nullable)
+- contextType: album | playlist | queue
+- contextId (nullable)
+- contextTitle (nullable; bounded label snapshot)
 - revision
 - shuffle
 - repeatMode: none | one | all
@@ -201,6 +204,7 @@ PlaybackQueueItem
 
 The server owns the shared queue snapshot. The web client still owns immediate audio execution and keeps a local fallback copy.
 `sourceOrder` is populated only while shuffle is enabled so disabling shuffle can restore the user's original sequence after a server round trip.
+The context fields remember which album or playlist started the queue. A manual structural edit, such as adding, removing, or reordering a track, changes the context to a general queue. Older clients may omit the context fields; the server treats those snapshots as general queues.
 
 Queue writes replace the full ordered item list in one transaction. Every mutation includes `expectedRevision`:
 
@@ -236,7 +240,19 @@ For the implemented server queue:
 - A server read repairs unavailable items and advances the queue revision once for the repaired snapshot.
 - An explicit user playback or queue action may claim the active session and submit a mutation using the last observed revision.
 - The server atomically claims the expected queue revision before replacing queue items. Exactly one concurrent writer can advance a revision, and an initial-create race becomes an explicit conflict instead of a raw uniqueness error.
+- Every accepted queue save emits `playback:queue-invalidated` with the committed revision and optional origin client id. Other web tabs refetch the authoritative GraphQL snapshot; the origin tab and clients already holding that revision skip the read.
 - On conflict, preserve local playback and keep both the latest local queue and the authoritative server queue. The queue page offers explicit **Keep newer queue** and **Replace with this queue** actions; it never silently rebases or multi-way merges.
+
+### Library continuation surface
+
+The Library page owns the compact cross-device continuation surface. It does not add a separate Now page or navigation item.
+
+- A playing or paused session shows its current track, output device, and live online status.
+- A deliberately stopped session may show the selected track from a queue updated within the last 30 days. A final track that reaches its exact duration with repeat disabled is treated as natural queue completion and is not offered as interrupted playback. Album and playlist labels come from the bounded queue-origin snapshot; a general or manually edited queue is labeled as a saved queue.
+- Remote command buttons always name and affect the remote output. **Play Here** is a separate action that moves the queue and position to the current browser through the existing handoff protocol, and it is shown only when both endpoints and the complete saved queue satisfy handoff preflight.
+- An offline endpoint disables remote commands but keeps handoff recovery available, including the explicit force flow when the source cannot release ownership.
+- Session notifications, queue invalidations, and endpoint-registry invalidations update the surface in place. When an interrupted session stops, the active view becomes a recovery view; when an endpoint expires, its status becomes offline.
+- The surface renders below the sticky Library header, stays compact on small screens, and disappears when there is no active output or usable recovery data.
 
 ## 10. Failure and Security Rules
 

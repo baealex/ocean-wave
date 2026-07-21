@@ -2,8 +2,10 @@ import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 const DEVICE_A = 'e2e-device-a';
 const DEVICE_B = 'e2e-device-b';
+const DEVICE_OBSERVER = 'e2e-device-observer';
 const ENDPOINT_A = 'e2e-endpoint-a';
 const ENDPOINT_B = 'e2e-endpoint-b';
+const ENDPOINT_OBSERVER = 'e2e-endpoint-observer';
 
 interface PlaybackSessionSnapshot {
     activeDeviceId: string | null;
@@ -176,20 +178,35 @@ test('keeps playback and queue authority consistent through offline reconnect', 
 }) => {
     const contextA = await browser.newContext();
     const contextB = await browser.newContext();
+    const contextObserver = await browser.newContext();
     await initializePlaybackIdentity(contextA, DEVICE_A, ENDPOINT_A);
     await initializePlaybackIdentity(contextB, DEVICE_B, ENDPOINT_B);
+    await initializePlaybackIdentity(
+        contextObserver,
+        DEVICE_OBSERVER,
+        ENDPOINT_OBSERVER
+    );
 
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
+    const observerPage = await contextObserver.newPage();
 
     try {
+        const observerInitialQueueRead = observerPage.waitForResponse((response) => {
+            const request = response.request();
+            return request.url().endsWith('/graphql')
+                && request.postData()?.includes('"operationName":"PlaybackQueue"') === true;
+        });
         await Promise.all([
             pageA.goto('/library'),
-            pageB.goto('/library')
+            pageB.goto('/library'),
+            observerPage.goto('/library')
         ]);
         await Promise.all([
             expect(trackButton(pageA, 'Reconnect Track One')).toBeVisible(),
-            expect(trackButton(pageB, 'Reconnect Track One')).toBeVisible()
+            expect(trackButton(pageB, 'Reconnect Track One')).toBeVisible(),
+            expect(trackButton(observerPage, 'Reconnect Track One')).toBeVisible(),
+            observerInitialQueueRead
         ]);
 
         await expect.poll(async () => endpointIsOnline(
@@ -219,16 +236,24 @@ test('keeps playback and queue authority consistent through offline reconnect', 
         });
         await expect.poll(async () => (await fetchQueue(pageB))?.musicIds).toEqual(['1']);
 
-        await expect(pageB.getByRole('group', {
+        const libraryPlaybackSurface = pageB.getByRole('region', {
+            name: 'Current playback and continue listening'
+        });
+        await expect(libraryPlaybackSurface).toContainText('Playing on Browser A');
+        await expect(libraryPlaybackSurface).toContainText('Browser A · Online');
+        await expect(libraryPlaybackSurface.getByRole('group', {
             name: 'Remote playback controls for Browser A'
         })).toBeVisible();
-        const pauseBrowserA = pageB.getByRole('button', {
+        await expect(libraryPlaybackSurface.getByRole('button', {
+            name: 'Play Here'
+        })).toBeVisible();
+        const pauseBrowserA = libraryPlaybackSurface.getByRole('button', {
             name: 'Pause playback on Browser A'
         });
         await expect(pauseBrowserA).toBeEnabled({ timeout: 15_000 });
         await pauseBrowserA.click();
         await expect.poll(async () => (await fetchSession(pageB))?.state).toBe('paused');
-        await pageB.getByRole('button', {
+        await libraryPlaybackSurface.getByRole('button', {
             name: 'Resume playback on Browser A'
         }).click();
         await expect.poll(async () => (await fetchSession(pageB))?.state).toBe('playing');
@@ -255,12 +280,22 @@ test('keeps playback and queue authority consistent through offline reconnect', 
         await expect(pageA.getByText('Reconnect Track Two', { exact: true })).toBeVisible();
         await pageA.waitForTimeout(1_500);
 
+        await expect(libraryPlaybackSurface).toContainText('Browser A · Offline');
+        await expect(libraryPlaybackSurface.getByRole('button', {
+            name: 'Pause playback on Browser A'
+        })).toBeDisabled();
         await pageB.getByRole('button', {
             name: /Playback output: Browser A, Offline\. Open device list/
         }).click();
-        await pageB.getByRole('button', { name: 'Play Here' }).click();
-        await expect(pageB.getByRole('button', { name: 'Force Play Here' })).toBeVisible();
-        await pageB.getByRole('button', { name: 'Force Play Here' }).click();
+        const playbackOutputDialog = pageB.getByRole('dialog', {
+            name: 'Playback output'
+        });
+        await playbackOutputDialog.getByRole('button', { name: 'Play Here' }).click();
+        const forcePlayHere = playbackOutputDialog.getByRole('button', {
+            name: 'Force Play Here'
+        });
+        await expect(forcePlayHere).toBeVisible();
+        await forcePlayHere.click();
 
         await expect.poll(async () => {
             const session = await fetchSession(pageB);
@@ -417,8 +452,24 @@ test('keeps playback and queue authority consistent through offline reconnect', 
         expect(queueFromA).toEqual(queueFromB);
         expect(queueFromA?.musicIds).toEqual(['1', '3']);
         expect(queueFromA?.revision).toBeGreaterThan(beforeDisconnectQueue!.revision);
+
+        await pageB.goto('/player');
+        await pageB.getByRole('button', { name: 'Stop playback' }).click();
+        await expect.poll(async () => (await fetchSession(observerPage))?.state)
+            .toBe('stopped');
+
+        const observerSurface = observerPage.getByRole('region', {
+            name: 'Current playback and continue listening'
+        });
+        await expect(observerSurface).toContainText('Continue listening');
+        await expect(observerSurface).toContainText('Reconnect Track One');
+        await expect(observerSurface).toContainText('Saved queue · 1 of 2 tracks');
+        await expect(observerSurface.getByRole('button', {
+            name: 'Play Here'
+        })).toBeVisible();
     } finally {
         await contextA.close().catch(() => undefined);
         await contextB.close().catch(() => undefined);
+        await contextObserver.close().catch(() => undefined);
     }
 });

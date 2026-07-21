@@ -78,7 +78,14 @@ export default function AlbumDetail() {
                         ? REMOTE_PLAYBACK_OWNERSHIP_MESSAGE
                         : undefined}
                     disabled={album.musics.length === 0 || Boolean(remotePlaybackOwnership)}
-                    onClick={() => void resetQueue(album.musics.map(music => music.id))}>
+                    onClick={() => void resetQueue(
+                        album.musics.map(music => music.id),
+                        {
+                            type: 'album',
+                            id: album.id,
+                            title: album.name
+                        }
+                    )}>
                     <Play />
                 </TwoTonePrimaryAction>
             )}>

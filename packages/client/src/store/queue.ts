@@ -1,4 +1,7 @@
-import type { PlaybackQueueSnapshot } from '~/api/playback-queue';
+import type {
+    PlaybackQueueContext,
+    PlaybackQueueSnapshot
+} from '~/api/playback-queue';
 import {
     type AudioChannel,
     type AudioChannelEventHandler,
@@ -25,6 +28,10 @@ import {
     PlaybackSessionTracker
 } from '~/modules/playback-session';
 import { getNextSelectedIndexAfterRemovingCurrent } from '~/modules/queue-selection';
+import {
+    GENERAL_PLAYBACK_QUEUE_CONTEXT,
+    normalizePlaybackQueueContext
+} from '~/modules/playback-queue-context';
 import {
     deriveQueueState,
     deriveQueueStateFromTrack,
@@ -74,6 +81,7 @@ interface QueueStoreState {
     progress: number;
     items: string[];
     sourceItems: string[];
+    context: PlaybackQueueContext;
 }
 
 const getMusic = (id: string) => {
@@ -166,7 +174,8 @@ class QueueStore extends BaseStore<QueueStoreState> {
             currentTime: 0,
             progress: 0,
             items: [],
-            sourceItems: []
+            sourceItems: [],
+            context: GENERAL_PLAYBACK_QUEUE_CONTEXT
         };
 
         const audioChannelEventHandler: AudioChannelEventHandler = {
@@ -276,8 +285,22 @@ class QueueStore extends BaseStore<QueueStoreState> {
                         this.audioChannel.play();
                     } else {
                         this.commitPlaybackEvent('queue-ended', 'ended');
+                        const duration = this.state.currentTrackId
+                            ? getMusic(this.state.currentTrackId)?.duration
+                            : undefined;
+                        if (duration !== undefined) {
+                            this.set({
+                                currentTime: duration,
+                                progress: 100,
+                                isPlaying: false
+                            });
+                        }
                         this.audioChannel.stop();
-                        this.set({ isPlaying: false });
+                        this.set({
+                            currentTime: 0,
+                            progress: 0,
+                            isPlaying: false
+                        });
                     }
                 }
             },
@@ -406,6 +429,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
                         shuffle: persistedState.shuffle ?? false,
                         insertMode: persistedState.insertMode ?? 'last',
                         repeatMode: persistedState.repeatMode ?? 'none',
+                        context: normalizePlaybackQueueContext(persistedState.context),
                         playMode: persistedState.playMode ?? 'later',
                         mixMode: persistedState.mixMode ?? 'none',
                         progress: getProgress(
@@ -515,7 +539,10 @@ class QueueStore extends BaseStore<QueueStoreState> {
         });
     }
 
-    async reset(ids: string[]) {
+    async reset(
+        ids: string[],
+        context: PlaybackQueueContext = GENERAL_PLAYBACK_QUEUE_CONTEXT
+    ) {
         if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
         this.commitPlaybackEvent('queue-reset', 'stopped');
         this.reportSharedPlaybackState('stopped');
@@ -523,6 +550,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         await this.set({
             ...createQueueState(ids, null),
             sourceItems: [],
+            context: normalizePlaybackQueueContext(context),
             shuffle: false,
             currentTime: 0,
             progress: 0,
@@ -573,7 +601,8 @@ class QueueStore extends BaseStore<QueueStoreState> {
         this.set({
             ...nextQueueState,
             items: nextItems,
-            sourceItems: nextSourceItems
+            sourceItems: nextSourceItems,
+            context: GENERAL_PLAYBACK_QUEUE_CONTEXT
         });
 
         toast('Added to queue');
@@ -608,7 +637,8 @@ class QueueStore extends BaseStore<QueueStoreState> {
         await this.set({
             ...deriveQueueStateFromTrack(newItems, prevSelectedItem),
             items: newItems,
-            sourceItems: newSourceItems
+            sourceItems: newSourceItems,
+            context: GENERAL_PLAYBACK_QUEUE_CONTEXT
         });
 
         if (newItems.length === 0) {
@@ -1701,7 +1731,8 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
         this.set({
             ...deriveQueueStateFromTrack(nextItems, this.state.currentTrackId),
-            items: nextItems
+            items: nextItems,
+            context: GENERAL_PLAYBACK_QUEUE_CONTEXT
         });
     }
 
@@ -1715,7 +1746,8 @@ class QueueStore extends BaseStore<QueueStoreState> {
 
         this.set({
             ...deriveQueueStateFromTrack(nextItems, this.state.currentTrackId),
-            items: nextItems
+            items: nextItems,
+            context: GENERAL_PLAYBACK_QUEUE_CONTEXT
         });
     }
 
@@ -1927,6 +1959,9 @@ class QueueStore extends BaseStore<QueueStoreState> {
             && this.state.sourceItems.every(
                 (id, index) => id === snapshot.queue.sourceMusicIds[index]
             )
+            && this.state.context.type === snapshot.queue.contextType
+            && this.state.context.id === snapshot.queue.contextId
+            && this.state.context.title === snapshot.queue.contextTitle
             && this.state.shuffle === snapshot.queue.shuffle
             && this.state.repeatMode === snapshot.queue.repeatMode
         );
@@ -1951,6 +1986,11 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 sourceItems: snapshot.queue.shuffle
                     ? [...snapshot.queue.sourceMusicIds]
                     : [],
+                context: normalizePlaybackQueueContext({
+                    type: snapshot.queue.contextType,
+                    id: snapshot.queue.contextId,
+                    title: snapshot.queue.contextTitle
+                }),
                 shuffle: snapshot.queue.shuffle,
                 repeatMode: snapshot.queue.repeatMode,
                 currentTime: position,
@@ -2022,6 +2062,9 @@ class QueueStore extends BaseStore<QueueStoreState> {
         return state.items !== previousState.items
             || state.sourceItems !== previousState.sourceItems
             || state.selected !== previousState.selected
+            || state.context.type !== previousState.context.type
+            || state.context.id !== previousState.context.id
+            || state.context.title !== previousState.context.title
             || state.shuffle !== previousState.shuffle
             || state.repeatMode !== previousState.repeatMode;
     }
@@ -2046,6 +2089,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
             musicIds: this.state.items,
             sourceMusicIds: this.state.shuffle ? this.state.sourceItems : [],
             currentIndex: this.state.selected,
+            context: this.state.context,
             shuffle: this.state.shuffle,
             repeatMode: this.state.repeatMode
         });
@@ -2088,6 +2132,11 @@ class QueueStore extends BaseStore<QueueStoreState> {
             await this.set({
                 ...restoredQueueState,
                 isPlaying: false,
+                context: normalizePlaybackQueueContext({
+                    type: snapshot.contextType,
+                    id: snapshot.contextId,
+                    title: snapshot.contextTitle
+                }),
                 shuffle: snapshot.shuffle,
                 repeatMode: snapshot.repeatMode,
                 progress

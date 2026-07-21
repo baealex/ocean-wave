@@ -7,6 +7,10 @@ import {
     vi
 } from 'vitest';
 
+vi.mock('~/socket/socket', () => ({
+    getOriginClientId: () => 'client-1'
+}));
+
 import {
     fetchPlaybackQueue,
     savePlaybackQueue
@@ -51,6 +55,9 @@ describe('playback queue API', () => {
             musicIds: ['42', '7'],
             sourceMusicIds: [],
             currentIndex: 1,
+            contextType: 'playlist' as const,
+            contextId: '12',
+            contextTitle: 'Road Trip',
             shuffle: false,
             repeatMode: 'all' as const,
             expectedRevision: 3
@@ -63,8 +70,12 @@ describe('playback queue API', () => {
             variables: Record<string, unknown>;
         };
 
-        expect(payload.variables).toEqual({ input });
+        expect(payload.variables).toEqual({
+            input,
+            originClientId: 'client-1'
+        });
         expect(payload.query).toContain('input: $input');
+        expect(payload.query).toContain('originClientId: $originClientId');
         expect(payload.query).not.toContain('42');
     });
 });
