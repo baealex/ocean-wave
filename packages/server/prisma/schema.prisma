@@ -530,6 +530,13 @@ model PlaylistImportItem {
   @@index([selectedMusicId])
 }
 
+model LibraryRestoreApplication {
+  manifestId   String   @id
+  manifestHash String
+  mode         String
+  appliedAt    DateTime @default(now())
+}
+
 model PlaylistMusic {
   id           Int          @id @default(autoincrement())
   order        Int          @default(0)
