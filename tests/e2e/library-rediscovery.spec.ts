@@ -9,19 +9,32 @@ const createMusic = (id: string, index: number) => {
     const label = id.startsWith('dormant')
         ? 'Favorite'
         : id.startsWith('forgotten') ? 'Forgotten' : 'Library';
+    const artist = {
+        id: `artist-${id}`,
+        name: `${label} Artist ${index + 1}`
+    };
+    const artistCredits = [{
+        artist,
+        creditedName: null,
+        joinPhrase: '',
+        position: 0,
+        role: 'PRIMARY'
+    }];
 
     return {
         album: {
+            artist,
+            artistCredits,
+            artistDisplayName: artist.name,
             cover: '',
             id: `album-${id}`,
             isCoverCustom: false,
             name: `${label} Album ${index + 1}`,
             publishedYear: '2024'
         },
-        artist: {
-            id: `artist-${id}`,
-            name: `${label} Artist ${index + 1}`
-        },
+        artist,
+        artistCredits,
+        artistDisplayName: artist.name,
         codec: 'FLAC',
         completionCount: 2,
         createdAt: Date.parse('2024-01-01T00:00:00.000Z'),
