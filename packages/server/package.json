@@ -3,6 +3,7 @@
     "version": "1.0.0",
     "description": "Ocean Wave server",
     "scripts": {
+        "benchmark:rediscovery": "ts-node script/benchmark-library-rediscovery.ts",
         "postinstall": "prisma generate",
         "dev": "cross-env PORT=44100 ts-node script/_dev.ts",
         "dev:client": "pnpm --filter ocean-wave-client dev",
