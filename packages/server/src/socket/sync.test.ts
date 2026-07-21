@@ -415,7 +415,11 @@ describe('sync music identity', () => {
             include: {
                 Artist: true,
                 Album: { include: { Artist: true } },
-                Genre: true
+                Recording: {
+                    include: {
+                        RecordingGenre: { include: { Genre: true } }
+                    }
+                }
             }
         });
         expect(updated).toMatchObject({
@@ -428,7 +432,8 @@ describe('sync music identity', () => {
                 Artist: { name: 'Manual Album Artist' }
             }
         });
-        expect(updated.Genre.map((genre) => genre.name)).toEqual(['Ambient']);
+        expect(updated.Recording.RecordingGenre
+            .map(({ Genre: genre }) => genre.name)).toEqual(['Ambient']);
     });
 
     it('does not overwrite custom album artwork during a force sync', async () => {

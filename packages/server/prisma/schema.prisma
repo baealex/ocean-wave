@@ -2,334 +2,509 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-    provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["views"]
 }
 
 datasource db {
-    provider = "sqlite"
+  provider = "sqlite"
 }
 
 model Artist {
-    id        Int      @id @default(autoincrement())
-    name      String   @unique
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    Album     Album[]
-    Music     Music[]
+  id             Int            @id @default(autoincrement())
+  stableId       String         @unique @default(uuid())
+  name           String
+  normalizedName String         @default("")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  ArtistCredit   ArtistCredit[]
+  Album          Album[]        @relation("CompatibilityAlbumArtist")
+  Music          Music[]        @relation("CompatibilityMusicArtist")
+
+  @@index([normalizedName])
 }
 
-model Album {
-    id            Int      @id @default(autoincrement())
-    name          String
-    cover         String
-    isCoverCustom Boolean  @default(false)
-    createdAt     DateTime @default(now())
-    updatedAt     DateTime @updatedAt
-    publishedYear String
-    Music         Music[]
-    Artist        Artist   @relation(fields: [artistId], references: [id])
-    artistId      Int
+model Recording {
+  id               Int               @id @default(autoincrement())
+  stableId         String            @unique @default(uuid())
+  title            String
+  versionTitle     String?
+  metadataRevision Int               @default(0)
+  playCount        Int               @default(0)
+  lastPlayedAt     DateTime?
+  skipCount        Int               @default(0)
+  lastSkippedAt    DateTime?
+  completionCount  Int               @default(0)
+  lastCompletedAt  DateTime?
+  totalPlayedMs    Float             @default(0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  ReleaseTrack     ReleaseTrack[]
+  ArtistCredit     ArtistCredit[]    @relation("RecordingArtistCredit")
+  RecordingGenre   RecordingGenre[]
+  MusicLike        MusicLike?
+  MusicHate        MusicHate?
+  MusicTag         MusicTag[]
+  PlaybackEvent    PlaybackEvent[]
+  PlaybackSession  PlaybackSession[] @relation("PlaybackSessionHistoryRecording")
+  Music            Music[]           @relation("CompatibilityMusicRecording")
+
+  @@index([title])
+  @@index([lastPlayedAt])
+}
+
+model Release {
+  id               Int            @id @default(autoincrement())
+  stableId         String         @unique @default(uuid())
+  title            String
+  releaseDate      String?
+  releaseType      String         @default("unknown")
+  totalDiscs       Int?
+  cover            String         @default("")
+  isCoverCustom    Boolean        @default(false)
+  metadataRevision Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  ReleaseTrack     ReleaseTrack[]
+  ArtistCredit     ArtistCredit[] @relation("ReleaseArtistCredit")
+
+  @@index([title])
+  @@index([releaseType, releaseDate])
+}
+
+model ReleaseTrack {
+  id                Int                 @id @default(autoincrement())
+  stableId          String              @unique @default(uuid())
+  recordingId       Int
+  releaseId         Int
+  titleOverride     String?
+  versionTitle      String?
+  discNumber        Int?
+  trackNumber       Int?
+  metadataRevision  Int                 @default(0)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  Recording         Recording           @relation(fields: [recordingId], references: [id], onDelete: Restrict)
+  Release           Release             @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  PhysicalFile      PhysicalFile[]
+  ArtistCredit      ArtistCredit[]      @relation("ReleaseTrackArtistCredit")
+  PlaylistMusic     PlaylistMusic[]
+  PlaybackQueueItem PlaybackQueueItem[]
+  PlaybackEvent     PlaybackEvent[]
+  CurrentSession    PlaybackSession[]   @relation("PlaybackSessionCurrentReleaseTrack")
+  HistorySession    PlaybackSession[]   @relation("PlaybackSessionHistoryReleaseTrack")
+
+  @@index([recordingId])
+  @@index([releaseId, discNumber, trackNumber])
+}
+
+model PhysicalFile {
+  id                     Int               @id @default(autoincrement())
+  stableId               String            @unique @default(uuid())
+  releaseTrackId         Int
+  filePath               String            @unique
+  contentHash            String?
+  hashVersion            Int?
+  durationMs             Int
+  codec                  String
+  container              String
+  bitrate                Int
+  sampleRate             Int
+  fileSizeBytes          BigInt?
+  tagSnapshotJson        String?
+  tagSnapshotVersion     Int?
+  legacyMetadataOverride String?
+  preferenceRank         Int?
+  metadataRevision       Int               @default(0)
+  lastSeenAt             DateTime?
+  missingSinceAt         DateTime?
+  syncStatus             String            @default("active")
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  ReleaseTrack           ReleaseTrack      @relation(fields: [releaseTrackId], references: [id], onDelete: Restrict)
+  PlaybackEvent          PlaybackEvent[]
+  PlaybackSession        PlaybackSession[] @relation("PlaybackSessionHistoryPhysicalFile")
+  SyncReportItem         SyncReportItem[]
+
+  @@unique([releaseTrackId, preferenceRank])
+  @@index([releaseTrackId, syncStatus, preferenceRank])
+  @@index([hashVersion, contentHash])
+  @@index([syncStatus, missingSinceAt])
+}
+
+model ArtistCredit {
+  id             Int           @id @default(autoincrement())
+  artistId       Int
+  recordingId    Int?
+  releaseId      Int?
+  releaseTrackId Int?
+  role           String        @default("primary")
+  position       Int
+  creditedName   String?
+  joinPhrase     String        @default("")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  Artist         Artist        @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  Recording      Recording?    @relation("RecordingArtistCredit", fields: [recordingId], references: [id], onDelete: Cascade)
+  Release        Release?      @relation("ReleaseArtistCredit", fields: [releaseId], references: [id], onDelete: Cascade)
+  ReleaseTrack   ReleaseTrack? @relation("ReleaseTrackArtistCredit", fields: [releaseTrackId], references: [id], onDelete: Cascade)
+
+  @@unique([recordingId, position])
+  @@unique([releaseId, position])
+  @@unique([releaseTrackId, position])
+  @@index([artistId])
 }
 
 model Genre {
-    id        Int      @id @default(autoincrement())
-    name      String   @unique
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    Music     Music[]
+  id             Int              @id @default(autoincrement())
+  name           String           @unique
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  RecordingGenre RecordingGenre[]
+}
+
+model RecordingGenre {
+  recordingId Int
+  genreId     Int
+  source      String    @default("file")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  Recording   Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  Genre       Genre     @relation(fields: [genreId], references: [id], onDelete: Cascade)
+
+  @@id([recordingId, genreId])
+  @@index([genreId, recordingId])
 }
 
 model Tag {
-    id             Int            @id @default(autoincrement())
-    scopeKey       String         @default("local")
-    name           String
-    normalizedName String
-    color          String?
-    description    String?
-    order          Int            @default(0)
-    createdAt      DateTime       @default(now())
-    updatedAt      DateTime       @updatedAt
-    MusicTag       MusicTag[]
-    SmartViewTag   SmartViewTag[]
+  id             Int            @id @default(autoincrement())
+  scopeKey       String         @default("local")
+  name           String
+  normalizedName String
+  color          String?
+  description    String?
+  order          Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  MusicTag       MusicTag[]
+  SmartViewTag   SmartViewTag[]
 
-    @@unique([scopeKey, normalizedName])
-    @@index([scopeKey, order])
-    @@index([scopeKey, updatedAt])
-}
-
-model Music {
-    id            Int             @id @default(autoincrement())
-    name          String
-    createdAt     DateTime        @default(now())
-    updatedAt     DateTime        @updatedAt
-    Album         Album           @relation(fields: [albumId], references: [id])
-    Artist        Artist          @relation(fields: [artistId], references: [id])
-    albumId       Int
-    artistId      Int
-    filePath      String
-    metadataOverride String?
-    contentHash   String?
-    hashVersion   Int?
-    duration      Float
-    codec         String
-    container     String
-    bitrate       Float
-    sampleRate    Float
-    playCount     Int             @default(0)
-    lastPlayedAt  DateTime?
-    skipCount     Int             @default(0)
-    lastSkippedAt DateTime?
-    completionCount Int           @default(0)
-    lastCompletedAt DateTime?
-    lastSeenAt    DateTime?
-    missingSinceAt DateTime?
-    syncStatus    String          @default("active")
-    totalPlayedMs Float           @default(0)
-    trackNumber   Int
-    Genre         Genre[]
-    MusicLike     MusicLike[]
-    MusicHate     MusicHate[]
-    MusicTag      MusicTag[]
-    PlaybackEvent PlaybackEvent[]
-    PlaybackQueueItem PlaybackQueueItem[]
-    PlaybackSession PlaybackSession[]
-    PlaylistMusic PlaylistMusic[]
-
-    @@index([contentHash])
-    @@index([syncStatus, missingSinceAt])
+  @@unique([scopeKey, normalizedName])
+  @@index([scopeKey, order])
+  @@index([scopeKey, updatedAt])
 }
 
 model MusicTag {
-    id        Int      @id @default(autoincrement())
-    source    String   @default("manual")
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    Music     Music    @relation(fields: [musicId], references: [id], onDelete: Cascade)
-    musicId   Int
-    Tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
-    tagId     Int
+  id        Int       @id @default(autoincrement())
+  source    String    @default("manual")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  musicId   Int       @map("recordingId")
+  Music     Recording @relation(fields: [musicId], references: [id], onDelete: Cascade)
+  tagId     Int
+  Tag       Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
-    @@unique([musicId, tagId])
-    @@index([tagId, musicId])
+  @@unique([musicId, tagId], map: "MusicTag_recordingId_tagId_key")
+  @@index([tagId, musicId], map: "MusicTag_tagId_recordingId_idx")
 }
 
 model SmartView {
-    id             Int            @id @default(autoincrement())
-    scopeKey       String         @default("local")
-    name           String
-    normalizedName String
-    tagMode        String         @default("all")
-    filterVersion  Int            @default(1)
-    filterJson     String?
-    sortKey        String?
-    order          Int            @default(0)
-    createdAt      DateTime       @default(now())
-    updatedAt      DateTime       @updatedAt
-    SmartViewTag   SmartViewTag[]
+  id             Int            @id @default(autoincrement())
+  scopeKey       String         @default("local")
+  name           String
+  normalizedName String
+  tagMode        String         @default("all")
+  filterVersion  Int            @default(1)
+  filterJson     String?
+  sortKey        String?
+  order          Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  SmartViewTag   SmartViewTag[]
 
-    @@unique([scopeKey, normalizedName])
-    @@index([scopeKey, order])
-    @@index([scopeKey, updatedAt])
+  @@unique([scopeKey, normalizedName])
+  @@index([scopeKey, order])
+  @@index([scopeKey, updatedAt])
 }
 
 model SmartViewTag {
-    id          Int       @id @default(autoincrement())
-    polarity    String    @default("include")
-    order       Int       @default(0)
-    createdAt   DateTime  @default(now())
-    updatedAt   DateTime  @updatedAt
-    SmartView   SmartView @relation(fields: [smartViewId], references: [id], onDelete: Cascade)
-    smartViewId Int
-    Tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
-    tagId       Int
+  id          Int       @id @default(autoincrement())
+  polarity    String    @default("include")
+  order       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  SmartView   SmartView @relation(fields: [smartViewId], references: [id], onDelete: Cascade)
+  smartViewId Int
+  Tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId       Int
 
-    @@unique([smartViewId, tagId])
-    @@index([tagId, smartViewId])
-    @@index([smartViewId, order])
+  @@unique([smartViewId, tagId])
+  @@index([tagId, smartViewId])
+  @@index([smartViewId, order])
 }
 
 model SyncReport {
-    id             Int              @id @default(autoincrement())
-    createdAt      DateTime         @default(now())
-    updatedAt      DateTime         @updatedAt
-    startedAt      DateTime
-    completedAt    DateTime?
-    status         String
-    force          Boolean          @default(false)
-    scannedFiles   Int              @default(0)
-    indexedFiles   Int              @default(0)
-    createdCount   Int              @default(0)
-    movedCount     Int              @default(0)
-    duplicateCount Int              @default(0)
-    missingCount   Int              @default(0)
-    Item           SyncReportItem[]
+  id             Int              @id @default(autoincrement())
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  startedAt      DateTime
+  completedAt    DateTime?
+  status         String
+  force          Boolean          @default(false)
+  scannedFiles   Int              @default(0)
+  indexedFiles   Int              @default(0)
+  createdCount   Int              @default(0)
+  movedCount     Int              @default(0)
+  duplicateCount Int              @default(0)
+  missingCount   Int              @default(0)
+  Item           SyncReportItem[]
 
-    @@index([createdAt])
-    @@index([status, createdAt])
+  @@index([createdAt])
+  @@index([status, createdAt])
 }
 
 model SyncReportItem {
-    id               Int        @id @default(autoincrement())
-    createdAt        DateTime   @default(now())
-    kind             String
-    musicId          Int?
-    musicName        String
-    filePath         String
-    previousFilePath String?
-    SyncReport       SyncReport @relation(fields: [syncReportId], references: [id], onDelete: Cascade)
-    syncReportId     Int
+  id               Int           @id @default(autoincrement())
+  createdAt        DateTime      @default(now())
+  kind             String
+  musicId          Int?          @map("physicalFileId")
+  musicName        String
+  filePath         String
+  previousFilePath String?
+  SyncReport       SyncReport    @relation(fields: [syncReportId], references: [id], onDelete: Cascade)
+  syncReportId     Int
+  PhysicalFile     PhysicalFile? @relation(fields: [musicId], references: [id], onDelete: SetNull)
 
-    @@index([syncReportId, kind])
+  @@index([syncReportId, kind])
+  @@index([musicId], map: "SyncReportItem_physicalFileId_idx")
 }
 
 model PlaybackEvent {
-    id             Int      @id @default(autoincrement())
-    createdAt      DateTime @default(now())
-    startedAt      DateTime
-    endedAt        DateTime
-    playedMs       Float
-    completionRate Float
-    countedAsPlay  Boolean  @default(false)
-    outcome        String   @default("legacy")
-    endReason      String   @default("legacy")
-    hadSeek        Boolean  @default(false)
-    source         String
-    clientSessionId String? @unique
-    connectorId    String?
-    Music          Music    @relation(fields: [musicId], references: [id])
-    musicId        Int
-    Branch         PlaybackEventBranch[]
+  id              Int                   @id @default(autoincrement())
+  createdAt       DateTime              @default(now())
+  startedAt       DateTime
+  endedAt         DateTime
+  playedMs        Float
+  completionRate  Float
+  countedAsPlay   Boolean               @default(false)
+  outcome         String                @default("legacy")
+  endReason       String                @default("legacy")
+  hadSeek         Boolean               @default(false)
+  source          String
+  clientSessionId String?               @unique
+  connectorId     String?
+  musicId         Int                   @map("recordingId")
+  releaseTrackId  Int
+  physicalFileId  Int?
+  Music           Recording             @relation(fields: [musicId], references: [id], onDelete: Restrict)
+  ReleaseTrack    ReleaseTrack          @relation(fields: [releaseTrackId], references: [id], onDelete: Restrict)
+  PhysicalFile    PhysicalFile?         @relation(fields: [physicalFileId], references: [id], onDelete: SetNull)
+  Branch          PlaybackEventBranch[]
 
-    @@index([musicId, endedAt])
+  @@index([musicId, endedAt], map: "PlaybackEvent_recordingId_endedAt_idx")
+  @@index([releaseTrackId, endedAt])
+  @@index([physicalFileId])
 }
 
 model PlaybackEventBranch {
-    id               Int           @id @default(autoincrement())
-    branchId         String
-    parentBranchId   String?
-    basePlayedMs     Float         @default(0)
-    reportedPlayedMs Float         @default(0)
-    PlaybackEvent    PlaybackEvent @relation(fields: [playbackEventId], references: [id], onDelete: Cascade)
-    playbackEventId  Int
+  id               Int           @id @default(autoincrement())
+  branchId         String
+  parentBranchId   String?
+  basePlayedMs     Float         @default(0)
+  reportedPlayedMs Float         @default(0)
+  PlaybackEvent    PlaybackEvent @relation(fields: [playbackEventId], references: [id], onDelete: Cascade)
+  playbackEventId  Int
 
-    @@unique([playbackEventId, branchId])
-    @@index([playbackEventId, parentBranchId])
+  @@unique([playbackEventId, branchId])
+  @@index([playbackEventId, parentBranchId])
 }
 
 model PlaybackSession {
-    id                   Int      @id @default(autoincrement())
-    scopeKey             String   @unique @default("local")
-    state                String   @default("stopped")
-    activeDeviceId       String?
-    activeDeviceSequence Int      @default(0)
-    currentMusicId       Int?
-    positionMs           Float    @default(0)
-    positionUpdatedAt    DateTime @default(now())
-    startedAt            DateTime?
-    historyMusicId       Int?
-    historySessionId     String?
-    historyBranchId      String?
-    historyParentBranchId String?
-    historyBranchBasePlayedMs Float @default(0)
-    historyStartedAt     DateTime?
-    historyPlayedMs      Float    @default(0)
-    historyHadSeek       Boolean  @default(false)
-    historyUpdatedAt     DateTime?
-    revision             Int      @default(0)
-    createdAt            DateTime @default(now())
-    updatedAt            DateTime @updatedAt
-    Music                Music?   @relation(fields: [currentMusicId], references: [id], onDelete: SetNull)
-    Queue                PlaybackQueue?
+  id                        Int            @id @default(autoincrement())
+  scopeKey                  String         @unique @default("local")
+  state                     String         @default("stopped")
+  activeDeviceId            String?
+  activeDeviceSequence      Int            @default(0)
+  currentMusicId            Int?           @map("currentReleaseTrackId")
+  positionMs                Float          @default(0)
+  positionUpdatedAt         DateTime       @default(now())
+  startedAt                 DateTime?
+  historyMusicId            Int?           @map("historyRecordingId")
+  historyReleaseTrackId     Int?
+  historyPhysicalFileId     Int?
+  historySessionId          String?
+  historyBranchId           String?
+  historyParentBranchId     String?
+  historyBranchBasePlayedMs Float          @default(0)
+  historyStartedAt          DateTime?
+  historyPlayedMs           Float          @default(0)
+  historyHadSeek            Boolean        @default(false)
+  historyUpdatedAt          DateTime?
+  revision                  Int            @default(0)
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+  CurrentReleaseTrack       ReleaseTrack?  @relation("PlaybackSessionCurrentReleaseTrack", fields: [currentMusicId], references: [id], onDelete: SetNull)
+  HistoryRecording          Recording?     @relation("PlaybackSessionHistoryRecording", fields: [historyMusicId], references: [id], onDelete: SetNull)
+  HistoryReleaseTrack       ReleaseTrack?  @relation("PlaybackSessionHistoryReleaseTrack", fields: [historyReleaseTrackId], references: [id], onDelete: SetNull)
+  HistoryPhysicalFile       PhysicalFile?  @relation("PlaybackSessionHistoryPhysicalFile", fields: [historyPhysicalFileId], references: [id], onDelete: SetNull)
+  Queue                     PlaybackQueue?
 
-    @@index([currentMusicId])
+  @@index([currentMusicId], map: "PlaybackSession_currentReleaseTrackId_idx")
+  @@index([historyMusicId], map: "PlaybackSession_historyRecordingId_idx")
+  @@index([historyReleaseTrackId])
+  @@index([historyPhysicalFileId])
 }
 
 model PlaybackDevice {
-    id         String             @id
-    name       String
-    type       String
-    lastSeenAt DateTime
-    createdAt  DateTime           @default(now())
-    updatedAt  DateTime           @updatedAt
-    Endpoint   PlaybackEndpoint[]
+  id         String             @id
+  name       String
+  type       String
+  lastSeenAt DateTime
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  Endpoint   PlaybackEndpoint[]
 
-    @@index([lastSeenAt])
+  @@index([lastSeenAt])
 }
 
 model PlaybackEndpoint {
-    id           String         @id
-    deviceId     String
-    capabilities String         @default("[]")
-    lastSeenAt   DateTime
-    createdAt    DateTime       @default(now())
-    updatedAt    DateTime       @updatedAt
-    Device       PlaybackDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  id           String         @id
+  deviceId     String
+  capabilities String         @default("[]")
+  lastSeenAt   DateTime
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  Device       PlaybackDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
-    @@index([deviceId, lastSeenAt])
+  @@index([deviceId, lastSeenAt])
 }
 
 model PlaybackQueue {
-    id           Int                 @id @default(autoincrement())
-    sessionId    Int                 @unique
-    currentIndex Int?
-    contextType  String              @default("queue")
-    contextId    Int?
-    contextTitle String?
-    shuffle      Boolean             @default(false)
-    repeatMode   String              @default("none")
-    revision     Int                 @default(0)
-    createdAt    DateTime            @default(now())
-    updatedAt    DateTime            @updatedAt
-    Session      PlaybackSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-    Item         PlaybackQueueItem[]
+  id           Int                 @id @default(autoincrement())
+  sessionId    Int                 @unique
+  currentIndex Int?
+  contextType  String              @default("queue")
+  contextId    Int?
+  contextTitle String?
+  shuffle      Boolean             @default(false)
+  repeatMode   String              @default("none")
+  revision     Int                 @default(0)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  Session      PlaybackSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  Item         PlaybackQueueItem[]
 }
 
 model PlaybackQueueItem {
-    id          Int           @id @default(autoincrement())
-    queueId     Int
-    musicId     Int
-    order       Int
-    sourceOrder Int?
-    Queue       PlaybackQueue @relation(fields: [queueId], references: [id], onDelete: Cascade)
-    Music       Music         @relation(fields: [musicId], references: [id], onDelete: Cascade)
+  id           Int           @id @default(autoincrement())
+  queueId      Int
+  musicId      Int           @map("releaseTrackId")
+  order        Int
+  sourceOrder  Int?
+  Queue        PlaybackQueue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+  ReleaseTrack ReleaseTrack  @relation(fields: [musicId], references: [id], onDelete: Restrict)
 
-    @@unique([queueId, musicId])
-    @@unique([queueId, order])
-    @@index([musicId])
+  @@unique([queueId, musicId], map: "PlaybackQueueItem_queueId_releaseTrackId_key")
+  @@unique([queueId, order])
+  @@index([musicId], map: "PlaybackQueueItem_releaseTrackId_idx")
 }
 
 model MusicLike {
-    id        Int      @id @default(autoincrement())
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    Music     Music    @relation(fields: [musicId], references: [id])
-    musicId   Int
+  id        Int       @id @default(autoincrement())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  musicId   Int       @unique(map: "MusicLike_recordingId_key") @map("recordingId")
+  Music     Recording @relation(fields: [musicId], references: [id], onDelete: Cascade)
 }
 
 model MusicHate {
-    id        Int      @id @default(autoincrement())
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    Music     Music    @relation(fields: [musicId], references: [id])
-    musicId   Int
+  id        Int       @id @default(autoincrement())
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  musicId   Int       @unique(map: "MusicHate_recordingId_key") @map("recordingId")
+  Music     Recording @relation(fields: [musicId], references: [id], onDelete: Cascade)
 }
 
 model Playlist {
-    id            Int             @id @default(autoincrement())
-    name          String
-    order         Int             @default(0)
-    createdAt     DateTime        @default(now())
-    updatedAt     DateTime        @updatedAt
-    PlaylistMusic PlaylistMusic[]
+  id            Int             @id @default(autoincrement())
+  name          String
+  order         Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  PlaylistMusic PlaylistMusic[]
 }
 
 model PlaylistMusic {
-    id         Int      @id @default(autoincrement())
-    order      Int      @default(0)
-    createdAt  DateTime @default(now())
-    updatedAt  DateTime @updatedAt
-    Music      Music    @relation(fields: [musicId], references: [id])
-    musicId    Int
-    Playlist   Playlist @relation(fields: [playlistId], references: [id])
-    playlistId Int
+  id           Int          @id @default(autoincrement())
+  order        Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  musicId      Int          @map("releaseTrackId")
+  ReleaseTrack ReleaseTrack @relation(fields: [musicId], references: [id], onDelete: Restrict)
+  playlistId   Int
+  Playlist     Playlist     @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, musicId], map: "PlaylistMusic_playlistId_releaseTrackId_key")
+  @@index([playlistId, order])
+  @@index([musicId], map: "PlaylistMusic_releaseTrackId_idx")
+}
+
+// A pending row set survives the SQL transaction so startup can prove the
+// migration was verified even if the process restarts after Prisma commits.
+model MusicRelationshipMigrationVerification {
+  key         String    @id
+  value       Float
+  finalizedAt DateTime?
+
+  @@map("_MusicRelationshipMigrationVerification")
+}
+
+// Read-only compatibility projections keep the public GraphQL Album and Music
+// contracts stable while their canonical owners move to the relational model.
+view Album {
+  id            Int      @unique
+  name          String
+  cover         String
+  isCoverCustom Boolean
+  createdAt     DateTime
+  updatedAt     DateTime
+  publishedYear String
+  artistId      Int
+  Artist        Artist   @relation("CompatibilityAlbumArtist", fields: [artistId], references: [id])
+  Music         Music[]  @relation("CompatibilityAlbumMusic")
+}
+
+view Music {
+  id               Int       @unique
+  recordingId      Int
+  releaseTrackId   Int
+  physicalFileId   Int
+  name             String
+  createdAt        DateTime
+  updatedAt        DateTime
+  albumId          Int
+  artistId         Int
+  filePath         String
+  metadataOverride String?
+  contentHash      String?
+  hashVersion      Int?
+  duration         Float
+  codec            String
+  container        String
+  bitrate          Float
+  sampleRate       Float
+  playCount        Int
+  lastPlayedAt     DateTime?
+  skipCount        Int
+  lastSkippedAt    DateTime?
+  completionCount  Int
+  lastCompletedAt  DateTime?
+  lastSeenAt       DateTime?
+  missingSinceAt   DateTime?
+  syncStatus       String
+  totalPlayedMs    Float
+  trackNumber      Int
+  Album            Album     @relation("CompatibilityAlbumMusic", fields: [albumId], references: [id])
+  Artist           Artist    @relation("CompatibilityMusicArtist", fields: [artistId], references: [id])
+  Recording        Recording @relation("CompatibilityMusicRecording", fields: [recordingId], references: [id])
 }

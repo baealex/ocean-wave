@@ -118,7 +118,11 @@ describe('music metadata editor', () => {
             include: {
                 Artist: true,
                 Album: { include: { Artist: true } },
-                Genre: true
+                Recording: {
+                    include: {
+                        RecordingGenre: { include: { Genre: true } }
+                    }
+                }
             }
         });
 
@@ -132,7 +136,9 @@ describe('music metadata editor', () => {
                 Artist: { name: 'Edited Album Artist' }
             }
         });
-        expect(updated.Genre.map((genre) => genre.name).sort()).toEqual(['Ambient', 'Electronic']);
+        expect(updated.Recording.RecordingGenre
+            .map(({ Genre: genre }) => genre.name)
+            .sort()).toEqual(['Ambient', 'Electronic']);
         expect(updated.metadataOverride).toBeNull();
         expect(updated.contentHash).not.toBeNull();
         expect(writeTrackMetadata).toHaveBeenCalledWith(

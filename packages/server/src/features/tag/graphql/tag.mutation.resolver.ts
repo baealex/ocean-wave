@@ -60,7 +60,13 @@ const toRealtimeTag = async (tag: Tag) => ({
     musicCount: await models.musicTag.count({
         where: {
             tagId: tag.id,
-            Music: { syncStatus: TRACK_SYNC_STATUS.active }
+            Music: {
+                ReleaseTrack: {
+                    some: {
+                        PhysicalFile: { some: { syncStatus: TRACK_SYNC_STATUS.active } }
+                    }
+                }
+            }
         }
     }),
     smartViewCount: await models.smartViewTag.count({
@@ -73,8 +79,14 @@ const toRealtimeTag = async (tag: Tag) => ({
 });
 
 const resolveRealtimeMusicTags = async (musicId: string | number) => {
+    const music = await models.music.findUnique({ where: { id: Number(musicId) } });
+
+    if (!music) {
+        return [];
+    }
+
     const tags = await models.tag.findMany({
-        where: { MusicTag: { some: { musicId: Number(musicId) } } },
+        where: { MusicTag: { some: { musicId: music.recordingId } } },
         orderBy: [
             { order: 'asc' },
             { name: 'asc' }

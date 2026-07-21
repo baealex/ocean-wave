@@ -129,9 +129,11 @@ interface PersonalListeningSessionTrackRow {
     lastPlayedAt: Date | null;
     playCount: number;
     skipCount: number;
-    Genre: Array<{ id: number }>;
-    MusicLike: Array<{ id: number }>;
-    MusicTag: Array<{ tagId: number }>;
+    Recording: {
+        RecordingGenre: Array<{ genreId: number }>;
+        MusicLike: { id: number } | null;
+        MusicTag: Array<{ tagId: number }>;
+    };
 }
 
 const toTrackInput = (
@@ -140,13 +142,13 @@ const toTrackInput = (
     albumId: track.albumId,
     artistId: track.artistId,
     completionCount: track.completionCount,
-    genreIds: track.Genre.map(genre => genre.id),
+    genreIds: track.Recording.RecordingGenre.map(genre => genre.genreId),
     id: track.id,
-    isLiked: track.MusicLike.length > 0,
+    isLiked: track.Recording.MusicLike !== null,
     lastPlayedAtMs: track.lastPlayedAt?.getTime() ?? null,
     playCount: track.playCount,
     skipCount: track.skipCount,
-    tagIds: track.MusicTag.map(musicTag => musicTag.tagId)
+    tagIds: track.Recording.MusicTag.map(musicTag => musicTag.tagId)
 });
 
 const trackSelect = {
@@ -157,9 +159,13 @@ const trackSelect = {
     lastPlayedAt: true,
     playCount: true,
     skipCount: true,
-    Genre: { select: { id: true } },
-    MusicLike: { select: { id: true } },
-    MusicTag: { select: { tagId: true } }
+    Recording: {
+        select: {
+            RecordingGenre: { select: { genreId: true } },
+            MusicLike: { select: { id: true } },
+            MusicTag: { select: { tagId: true } }
+        }
+    }
 } as const;
 
 const matchesView = (tagIds: number[], view: PersonalListeningSessionSmartViewInput) => {
@@ -223,7 +229,7 @@ export const createPersonalListeningSession = async (
             where: {
                 id: parsed.startMusicId,
                 syncStatus: TRACK_SYNC_STATUS.active,
-                MusicHate: { none: {} }
+                Recording: { MusicHate: null }
             },
             select: trackSelect
         });
@@ -270,10 +276,14 @@ export const createPersonalListeningSession = async (
             { albumId: seed.albumId },
             { artistId: seed.artistId },
             ...(seed.genreIds.length > 0 ? [{
-                Genre: { some: { id: { in: seed.genreIds } } }
+                Recording: {
+                    RecordingGenre: { some: { genreId: { in: seed.genreIds } } }
+                }
             }] : []),
             ...(relatedTagIds.length > 0 ? [{
-                MusicTag: { some: { tagId: { in: relatedTagIds } } }
+                Recording: {
+                    MusicTag: { some: { tagId: { in: relatedTagIds } } }
+                }
             }] : [])
         ];
         const recentRepeatCutoff = new Date(
@@ -297,7 +307,7 @@ export const createPersonalListeningSession = async (
                 where: {
                     id: { not: seed.id },
                     syncStatus: TRACK_SYNC_STATUS.active,
-                    MusicHate: { none: {} },
+                    Recording: { MusicHate: null },
                     AND: [
                         { OR: relationships },
                         {

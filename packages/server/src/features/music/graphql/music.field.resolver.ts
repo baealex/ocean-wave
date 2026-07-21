@@ -13,14 +13,16 @@ export const musicFieldResolvers: MusicFieldResolvers = {
     lastCompletedAt: (music: Music) => toIsoString(music.lastCompletedAt),
     artist: (music: Music) => models.artist.findUnique({ where: { id: music.artistId } }),
     album: (music: Music) => models.album.findUnique({ where: { id: music.albumId } }),
-    genres: (music: Music) => models.genre.findMany({ where: { Music: { some: { id: music.id } } } }),
+    genres: (music: Music) => models.genre.findMany({
+        where: { RecordingGenre: { some: { recordingId: music.recordingId } } }
+    }),
     tags: (music: Music) => models.tag.findMany({
-        where: { MusicTag: { some: { musicId: music.id } } },
+        where: { MusicTag: { some: { musicId: music.recordingId } } },
         orderBy: [
             { order: 'asc' },
             { name: 'asc' }
         ]
     }),
-    isLiked: (music: Music) => models.musicLike.findFirst({ where: { musicId: music.id } }).then((like) => !!like),
-    isHated: (music: Music) => models.musicHate.findFirst({ where: { musicId: music.id } }).then((hate) => !!hate)
+    isLiked: (music: Music) => models.musicLike.findFirst({ where: { musicId: music.recordingId } }).then((like) => !!like),
+    isHated: (music: Music) => models.musicHate.findFirst({ where: { musicId: music.recordingId } }).then((hate) => !!hate)
 };

@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 
 import models from '~/models';
 import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
@@ -105,15 +105,15 @@ const toNumber = (value: bigint | number) => {
 
 const candidateWhere = {
     syncStatus: TRACK_SYNC_STATUS.active,
-    MusicHate: { none: {} }
-} as const;
+    Recording: { MusicHate: null }
+} satisfies Prisma.MusicWhereInput;
 
 export const getLibraryRediscovery = async ({
     database = models,
     limit: requestedLimit,
     now = new Date()
 }: {
-    database?: typeof models;
+    database?: PrismaClient;
     limit?: number;
     now?: Date;
 } = {}): Promise<LibraryRediscoveryResult> => {
@@ -158,7 +158,10 @@ export const getLibraryRediscovery = async ({
         database.music.findMany({
             where: {
                 ...candidateWhere,
-                MusicLike: { some: {} },
+                Recording: {
+                    MusicHate: null,
+                    MusicLike: { isNot: null }
+                },
                 OR: [
                     { lastPlayedAt: null },
                     { lastPlayedAt: { lte: dormantLikedCutoff } }
@@ -179,7 +182,7 @@ export const getLibraryRediscovery = async ({
                 AND NOT EXISTS (
                     SELECT 1
                     FROM "MusicHate" hated
-                    WHERE hated."musicId" = music."id"
+                    WHERE hated."recordingId" = music."recordingId"
                 )
                 AND music."playCount"
                     <= ${LIBRARY_REDISCOVERY_THRESHOLDS.underplayedEquivalentListens}
@@ -205,7 +208,7 @@ export const getLibraryRediscovery = async ({
             where: {
                 ...candidateWhere,
                 OR: [
-                    { MusicLike: { some: {} } },
+                    { Recording: { MusicLike: { isNot: null } } },
                     { completionCount: { gt: 0 } }
                 ]
             },
@@ -243,7 +246,7 @@ export const getLibraryRediscovery = async ({
                 SUM(CASE WHEN EXISTS (
                     SELECT 1
                     FROM "MusicLike" liked
-                    WHERE liked."musicId" = music."id"
+                    WHERE liked."recordingId" = music."recordingId"
                 ) THEN 1 ELSE 0 END) AS "likedTrackCount"
             FROM "Music" music
             INNER JOIN "Album" album ON album."id" = music."albumId"
@@ -252,7 +255,7 @@ export const getLibraryRediscovery = async ({
                 AND NOT EXISTS (
                     SELECT 1
                     FROM "MusicHate" hated
-                    WHERE hated."musicId" = music."id"
+                    WHERE hated."recordingId" = music."recordingId"
                 )
             GROUP BY music."albumId", album."artistId", album."createdAt"
             HAVING MAX(music."lastPlayedAt") IS NULL
@@ -291,9 +294,13 @@ export const getLibraryRediscovery = async ({
             totalPlayedMs: true,
             skipCount: true,
             completionCount: true,
-            Genre: { select: { id: true } },
-            MusicLike: { select: { id: true } },
-            MusicTag: { select: { tagId: true } }
+            Recording: {
+                select: {
+                    RecordingGenre: { select: { genreId: true } },
+                    MusicLike: { select: { id: true } },
+                    MusicTag: { select: { tagId: true } }
+                }
+            }
         }
     });
     const tracks: LibraryRediscoveryTrackInput[] = trackRows.map(row => ({
@@ -302,14 +309,14 @@ export const getLibraryRediscovery = async ({
         completionCount: row.completionCount,
         createdAtMs: row.createdAt.getTime(),
         durationMs: row.duration * 1_000,
-        genreIds: row.Genre.map(genre => genre.id),
+        genreIds: row.Recording.RecordingGenre.map(genre => genre.genreId),
         id: row.id,
         isAffinitySeed: affinityIds.has(row.id),
-        isLiked: row.MusicLike.length > 0,
+        isLiked: row.Recording.MusicLike !== null,
         lastPlayedAtMs: row.lastPlayedAt?.getTime() ?? null,
         playCount: row.playCount,
         skipCount: row.skipCount,
-        tagIds: row.MusicTag.map(tag => tag.tagId),
+        tagIds: row.Recording.MusicTag.map(tag => tag.tagId),
         totalPlayedMs: row.totalPlayedMs
     }));
     const albums: LibraryRediscoveryAlbumInput[] = rawAlbums.map(row => ({

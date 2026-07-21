@@ -220,7 +220,7 @@ const normalizeRecord = async (
         return null;
     }
 
-    if (existing && existing.musicId !== music.id) {
+    if (existing && existing.releaseTrackId !== music.releaseTrackId) {
         throw new Error('Playback session identity belongs to another track.');
     }
 
@@ -390,17 +390,6 @@ const toResult = (
     deduped
 });
 
-const musicResultSelection = {
-    id: true,
-    playCount: true,
-    lastPlayedAt: true,
-    totalPlayedMs: true,
-    skipCount: true,
-    lastSkippedAt: true,
-    completionCount: true,
-    lastCompletedAt: true
-} as const;
-
 const recordNormalizedPlayback = async (
     input: PlaybackRecordInput,
     serverTime: Date
@@ -436,7 +425,7 @@ const recordNormalizedPlayback = async (
                 where: { clientSessionId: normalized.clientSessionId }
             })
             : null;
-        if (existing && existing.musicId !== normalized.music.id) {
+        if (existing && existing.releaseTrackId !== normalized.music.releaseTrackId) {
             throw new Error('Playback session identity belongs to another track.');
         }
 
@@ -460,7 +449,9 @@ const recordNormalizedPlayback = async (
             });
             const event = await transaction.playbackEvent.create({
                 data: {
-                    musicId: music.id,
+                    musicId: music.recordingId,
+                    releaseTrackId: music.releaseTrackId,
+                    physicalFileId: music.physicalFileId,
                     startedAt: normalized.startedAt,
                     endedAt: normalized.endedAt,
                     playedMs: normalized.playedMs,
@@ -482,8 +473,8 @@ const recordNormalizedPlayback = async (
                     } : undefined
                 }
             });
-            const updatedMusic = await transaction.music.update({
-                where: { id: music.id },
+            const updatedRecording = await transaction.recording.update({
+                where: { id: music.recordingId },
                 data: {
                     playCount: countedAsPlay ? { increment: 1 } : undefined,
                     lastPlayedAt: latestDate(music.lastPlayedAt, normalized.endedAt),
@@ -501,8 +492,17 @@ const recordNormalizedPlayback = async (
                         ? latestDate(music.lastCompletedAt, normalized.endedAt)
                         : undefined
                 },
-                select: musicResultSelection
+                select: {
+                    playCount: true,
+                    lastPlayedAt: true,
+                    totalPlayedMs: true,
+                    skipCount: true,
+                    lastSkippedAt: true,
+                    completionCount: true,
+                    lastCompletedAt: true
+                }
             });
+            const updatedMusic = { id: music.id, ...updatedRecording };
 
             return toResult(updatedMusic, event, false);
         }
@@ -623,29 +623,40 @@ const recordNormalizedPlayback = async (
         const becameCompleted = existing.outcome !== PLAYBACK_OUTCOMES.complete
             && outcome === PLAYBACK_OUTCOMES.complete;
         const updatedMusic = aggregateChanged
-            ? await transaction.music.update({
-                where: { id: music.id },
-                data: {
-                    playCount: countChanged ? { increment: 1 } : undefined,
-                    lastPlayedAt: playedDelta > 0
-                        ? latestDate(music.lastPlayedAt, normalized.endedAt)
-                        : undefined,
-                    totalPlayedMs: playedDelta > 0
-                        ? { increment: playedDelta }
-                        : undefined,
-                    skipCount: becameSkipped ? { increment: 1 } : undefined,
-                    lastSkippedAt: becameSkipped
-                        ? latestDate(music.lastSkippedAt, normalized.endedAt)
-                        : undefined,
-                    completionCount: becameCompleted
-                        ? { increment: 1 }
-                        : undefined,
-                    lastCompletedAt: becameCompleted
-                        ? latestDate(music.lastCompletedAt, normalized.endedAt)
-                        : undefined
-                },
-                select: musicResultSelection
-            })
+            ? {
+                id: music.id,
+                ...await transaction.recording.update({
+                    where: { id: music.recordingId },
+                    data: {
+                        playCount: countChanged ? { increment: 1 } : undefined,
+                        lastPlayedAt: playedDelta > 0
+                            ? latestDate(music.lastPlayedAt, normalized.endedAt)
+                            : undefined,
+                        totalPlayedMs: playedDelta > 0
+                            ? { increment: playedDelta }
+                            : undefined,
+                        skipCount: becameSkipped ? { increment: 1 } : undefined,
+                        lastSkippedAt: becameSkipped
+                            ? latestDate(music.lastSkippedAt, normalized.endedAt)
+                            : undefined,
+                        completionCount: becameCompleted
+                            ? { increment: 1 }
+                            : undefined,
+                        lastCompletedAt: becameCompleted
+                            ? latestDate(music.lastCompletedAt, normalized.endedAt)
+                            : undefined
+                    },
+                    select: {
+                        playCount: true,
+                        lastPlayedAt: true,
+                        totalPlayedMs: true,
+                        skipCount: true,
+                        lastSkippedAt: true,
+                        completionCount: true,
+                        lastCompletedAt: true
+                    }
+                })
+            }
             : music;
 
         return toResult(updatedMusic, event, false);

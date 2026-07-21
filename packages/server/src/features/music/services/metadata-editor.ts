@@ -2,9 +2,15 @@ import type { Prisma } from '@prisma/client';
 
 import models from '~/models';
 import {
+    createCompatibilityAlbumInTransaction,
+    updateCompatibilityAlbumInTransaction,
+    updateCompatibilityMusicInTransaction
+} from '~/models/music-compatibility';
+import {
     AudioMetadataWriteError,
     writeTrackMetadataToFile
 } from '~/modules/audio-metadata-writer';
+import { normalizeArtistName } from '~/modules/artist-identity';
 import { resolveMusicFilePath } from '~/modules/storage-paths';
 import type { MusicMetadataOverride } from '~/modules/track-metadata';
 
@@ -134,12 +140,23 @@ const normalizeInput = (input: UpdateMusicMetadataInput): MusicMetadataOverride 
     };
 };
 
-const findOrCreateArtist = (transaction: Prisma.TransactionClient, name: string) => {
-    return transaction.artist.upsert({
+const findOrCreateArtist = async (transaction: Prisma.TransactionClient, name: string) => {
+    const normalizedName = normalizeArtistName(name);
+    const existing = await transaction.artist.findFirst({
         where: { name },
-        update: {},
-        create: { name }
+        orderBy: { id: 'asc' }
     });
+
+    if (!existing) {
+        return transaction.artist.create({ data: { name, normalizedName } });
+    }
+
+    return existing.normalizedName === normalizedName
+        ? existing
+        : transaction.artist.update({
+            where: { id: existing.id },
+            data: { normalizedName }
+        });
 };
 
 export const updateMusicMetadata = async (
@@ -188,18 +205,20 @@ export const updateMusicMetadata = async (
                 }
             });
             const album = existingAlbum
-                ? await transaction.album.update({
-                    where: { id: existingAlbum.id },
-                    data: { publishedYear: metadata.year }
-                })
-                : await transaction.album.create({
-                    data: {
+                ? await updateCompatibilityAlbumInTransaction(
+                    transaction,
+                    existingAlbum.id,
+                    { publishedYear: metadata.year }
+                )
+                : await createCompatibilityAlbumInTransaction(
+                    transaction,
+                    {
                         name: metadata.album,
                         cover: '',
                         publishedYear: metadata.year,
                         artistId: albumArtist.id
                     }
-                });
+                );
             const genres = await Promise.all(metadata.genres.map((name) => {
                 return transaction.genre.upsert({
                     where: { name },
@@ -208,9 +227,10 @@ export const updateMusicMetadata = async (
                 });
             }));
 
-            return transaction.music.update({
-                where: { id: musicId },
-                data: {
+            return updateCompatibilityMusicInTransaction(
+                transaction,
+                musicId,
+                {
                     name: metadata.title,
                     artistId: artist.id,
                     albumId: album.id,
@@ -220,7 +240,7 @@ export const updateMusicMetadata = async (
                     hashVersion: writtenTrack.hashVersion,
                     Genre: { set: genres.map((genre) => ({ id: genre.id })) }
                 }
-            });
+            );
         });
     });
 };

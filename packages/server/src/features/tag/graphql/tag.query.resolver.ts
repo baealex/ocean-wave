@@ -64,7 +64,15 @@ export const tagQueryResolvers: TagQueryResolvers = {
                 ? {
                     MusicTag: {
                         none: {
-                            Music: { syncStatus: TRACK_SYNC_STATUS.active }
+                            Music: {
+                                ReleaseTrack: {
+                                    some: {
+                                        PhysicalFile: {
+                                            some: { syncStatus: TRACK_SYNC_STATUS.active }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     },
                     SmartViewTag: {

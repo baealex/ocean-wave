@@ -270,7 +270,11 @@ const validateInput = (input: ReportPlaybackStateInput) => {
 
 const historyUpdateData = (
     history: ReturnType<typeof validateInput>['playbackHistory'],
-    currentMusicId: number | null
+    currentMusic: {
+        recordingId: number;
+        releaseTrackId: number;
+        physicalFileId: number;
+    } | null
 ) => {
     if (history === undefined) {
         return {};
@@ -278,6 +282,8 @@ const historyUpdateData = (
     if (history === null) {
         return {
             historyMusicId: null,
+            historyReleaseTrackId: null,
+            historyPhysicalFileId: null,
             historySessionId: null,
             historyBranchId: null,
             historyParentBranchId: null,
@@ -290,7 +296,9 @@ const historyUpdateData = (
     }
 
     return {
-        historyMusicId: currentMusicId,
+        historyMusicId: currentMusic?.recordingId ?? null,
+        historyReleaseTrackId: currentMusic?.releaseTrackId ?? null,
+        historyPhysicalFileId: currentMusic?.physicalFileId ?? null,
         historySessionId: history.clientSessionId,
         historyBranchId: history.branchId,
         historyParentBranchId: history.parentBranchId,
@@ -324,7 +332,13 @@ export const reportPlaybackState = async (
                 id: normalized.currentMusicId,
                 syncStatus: TRACK_SYNC_STATUS.active
             },
-            select: { id: true, duration: true }
+            select: {
+                id: true,
+                recordingId: true,
+                releaseTrackId: true,
+                physicalFileId: true,
+                duration: true
+            }
         });
 
     if (normalized.currentMusicId !== null && !music) {
@@ -364,7 +378,7 @@ export const reportPlaybackState = async (
                     state: normalized.state,
                     activeDeviceId: normalized.deviceId,
                     activeDeviceSequence: normalized.sequence,
-                    currentMusicId: music?.id ?? null,
+                    currentMusicId: music?.releaseTrackId ?? null,
                     positionMs,
                     positionUpdatedAt: serverTime,
                     startedAt: normalized.state === PLAYBACK_STATES.playing
@@ -372,7 +386,7 @@ export const reportPlaybackState = async (
                         : null,
                     ...historyUpdateData(
                         normalized.playbackHistory ?? null,
-                        music?.id ?? null
+                        music
                     ),
                     revision: 1
                 }
@@ -413,11 +427,11 @@ export const reportPlaybackState = async (
         const continuesCurrentPlay = isActiveDevice
             && current.state === PLAYBACK_STATES.playing
             && normalized.state === PLAYBACK_STATES.playing
-            && current.currentMusicId === (music?.id ?? null);
+            && current.currentMusicId === (music?.releaseTrackId ?? null);
         const startedAt = normalized.state === PLAYBACK_STATES.playing
             ? (continuesCurrentPlay ? current.startedAt ?? serverTime : serverTime)
             : (normalized.state === PLAYBACK_STATES.paused ? current.startedAt : null);
-        const nextMusicId = music?.id ?? null;
+        const nextMusicId = music?.releaseTrackId ?? null;
         const playbackHistory = normalized.state === PLAYBACK_STATES.stopped
             ? null
             : normalized.playbackHistory !== undefined
@@ -427,7 +441,9 @@ export const reportPlaybackState = async (
                     : null;
         const mergedPlaybackHistory = playbackHistory
             && current.historySessionId === playbackHistory.clientSessionId
-            && current.historyMusicId === nextMusicId
+            && current.historyMusicId === music?.recordingId
+            && current.historyReleaseTrackId === music?.releaseTrackId
+            && current.historyPhysicalFileId === music?.physicalFileId
             && current.historyBranchId === playbackHistory.branchId
             && current.historyParentBranchId === playbackHistory.parentBranchId
             && current.historyBranchBasePlayedMs
@@ -457,11 +473,11 @@ export const reportPlaybackState = async (
                 state: normalized.state,
                 activeDeviceId: normalized.deviceId,
                 activeDeviceSequence: normalized.sequence,
-                currentMusicId: music?.id ?? null,
+                currentMusicId: music?.releaseTrackId ?? null,
                 positionMs,
                 positionUpdatedAt: serverTime,
                 startedAt,
-                ...historyUpdateData(mergedPlaybackHistory, nextMusicId),
+                ...historyUpdateData(mergedPlaybackHistory, music),
                 revision: { increment: 1 }
             }
         });
