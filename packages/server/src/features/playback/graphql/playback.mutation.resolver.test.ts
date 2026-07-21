@@ -1,5 +1,8 @@
 import { connectors } from '~/socket/connectors';
-import { PLAYBACK_STATE_UPDATED } from '~/socket/playback';
+import {
+    PLAYBACK_QUEUE_INVALIDATED,
+    PLAYBACK_STATE_UPDATED
+} from '~/socket/playback';
 import {
     PLAYBACK_ENDPOINTS_INVALIDATED,
     type PlaybackEndpointAuthorizedReportResult,
@@ -8,7 +11,8 @@ import {
 import type { PlaybackSessionReportResult } from '../services/playback-session';
 import {
     createRenamePlaybackDeviceMutationResolver,
-    createReportPlaybackStateMutationResolver
+    createReportPlaybackStateMutationResolver,
+    createSavePlaybackQueueMutationResolver
 } from './playback.mutation.resolver';
 
 const snapshot = {
@@ -22,6 +26,32 @@ const snapshot = {
     startedAt: '2026-07-14T00:00:00.000Z',
     revision: 1,
     serverTime: '2026-07-14T00:00:00.000Z'
+};
+
+const queueSnapshot = {
+    id: '1',
+    musicIds: ['42'],
+    sourceMusicIds: [],
+    currentIndex: 0,
+    contextType: 'queue' as const,
+    contextId: null,
+    contextTitle: null,
+    shuffle: false,
+    repeatMode: 'none' as const,
+    revision: 2,
+    updatedAt: '2026-07-14T00:00:00.000Z'
+};
+
+const queueInput = {
+    musicIds: ['42'],
+    sourceMusicIds: [],
+    currentIndex: 0,
+    contextType: 'queue' as const,
+    contextId: null,
+    contextTitle: null,
+    shuffle: false,
+    repeatMode: 'none' as const,
+    expectedRevision: 1
 };
 
 const authorizeReports = (authorized = true) => jest.fn(
@@ -265,6 +295,82 @@ describe('playback device mutation resolver', () => {
         })).resolves.toEqual({
             deviceId: 'browser-1',
             name: 'Listening Room'
+        });
+        expect(consoleErrorSpy).toHaveBeenCalledWith(error);
+    });
+});
+
+describe('playback queue mutation resolver', () => {
+    beforeEach(() => {
+        jest.restoreAllMocks();
+    });
+
+    it('invalidates other clients after an accepted queue save', async () => {
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
+        const save = jest.fn().mockResolvedValue({
+            type: 'accepted',
+            queue: queueSnapshot,
+            conflict: null,
+            changed: true
+        });
+        const resolver = createSavePlaybackQueueMutationResolver(save);
+
+        await expect(resolver(null, {
+            input: queueInput,
+            originClientId: 'origin-1'
+        })).resolves.toEqual({
+            type: 'accepted',
+            queue: queueSnapshot,
+            conflict: null
+        });
+        expect(save).toHaveBeenCalledWith(queueInput);
+        expect(notifySpy).toHaveBeenCalledWith(PLAYBACK_QUEUE_INVALIDATED, {
+            revision: 2,
+            originClientId: 'origin-1'
+        });
+    });
+
+    it('does not invalidate the queue when a stale save conflicts', async () => {
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
+        const conflict = {
+            reason: 'stale-revision' as const,
+            queue: queueSnapshot
+        };
+        const resolver = createSavePlaybackQueueMutationResolver(
+            jest.fn().mockResolvedValue({
+                type: 'conflict',
+                queue: queueSnapshot,
+                conflict,
+                changed: false
+            })
+        );
+
+        await expect(resolver(null, { input: queueInput })).resolves.toEqual({
+            type: 'conflict',
+            queue: queueSnapshot,
+            conflict
+        });
+        expect(notifySpy).not.toHaveBeenCalled();
+    });
+
+    it('keeps an accepted queue save successful when invalidation delivery fails', async () => {
+        const error = new Error('notification failed');
+        const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
+        jest.spyOn(connectors, 'notify').mockImplementation(() => {
+            throw error;
+        });
+        const resolver = createSavePlaybackQueueMutationResolver(
+            jest.fn().mockResolvedValue({
+                type: 'accepted',
+                queue: queueSnapshot,
+                conflict: null,
+                changed: true
+            })
+        );
+
+        await expect(resolver(null, { input: queueInput })).resolves.toMatchObject({
+            type: 'accepted',
+            queue: queueSnapshot
         });
         expect(consoleErrorSpy).toHaveBeenCalledWith(error);
     });

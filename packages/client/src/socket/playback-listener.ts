@@ -8,6 +8,11 @@ import {
 } from './socket';
 
 export const PLAYBACK_STATE_UPDATED = 'playback:state-updated';
+export const PLAYBACK_QUEUE_INVALIDATED = 'playback:queue-invalidated';
+
+export interface PlaybackQueueInvalidatedNotification extends OriginClientNotificationPayload {
+    revision: number;
+}
 
 export type PlaybackStateUpdatedPayload = PlaybackSessionSnapshot & OriginClientNotificationPayload;
 

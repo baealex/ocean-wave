@@ -272,6 +272,9 @@ model PlaybackQueue {
     id           Int                 @id @default(autoincrement())
     sessionId    Int                 @unique
     currentIndex Int?
+    contextType  String              @default("queue")
+    contextId    Int?
+    contextTitle String?
     shuffle      Boolean             @default(false)
     repeatMode   String              @default("none")
     revision     Int                 @default(0)

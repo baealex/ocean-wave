@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 
+import type { PlaybackQueueContext } from '~/api/playback-queue';
 import { useModal } from '~/components/app/ModalProvider';
 import {
     isRemotePlaybackOwnershipActive,
@@ -12,7 +13,10 @@ import { queueStore } from '~/store/queue';
 export default function useResetQueue() {
     const { confirm } = useModal();
 
-    return useCallback(async (ids: string[]) => {
+    return useCallback(async (
+        ids: string[],
+        context?: PlaybackQueueContext
+    ) => {
         if (isRemotePlaybackOwnershipActive(
             playbackSessionStore.state.snapshot,
             playbackSessionStore.endpointId
@@ -30,7 +34,7 @@ export default function useResetQueue() {
             return false;
         }
 
-        await queueStore.reset(ids);
+        await queueStore.reset(ids, context);
         return true;
     }, [confirm]);
 }

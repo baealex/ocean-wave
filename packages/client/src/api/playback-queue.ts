@@ -1,12 +1,26 @@
 import { graphQuery } from './graphql';
+import {
+    type OriginClientVariables,
+    withOriginClientId
+} from './origin-client';
 
 export type PlaybackQueueRepeatMode = 'none' | 'one' | 'all';
+export type PlaybackQueueContextType = 'album' | 'playlist' | 'queue';
+
+export interface PlaybackQueueContext {
+    type: PlaybackQueueContextType;
+    id: string | null;
+    title: string | null;
+}
 
 export interface PlaybackQueueSnapshot {
     id: string;
     musicIds: string[];
     sourceMusicIds: string[];
     currentIndex: number | null;
+    contextType: PlaybackQueueContextType;
+    contextId: string | null;
+    contextTitle: string | null;
     shuffle: boolean;
     repeatMode: PlaybackQueueRepeatMode;
     revision: number;
@@ -17,6 +31,9 @@ export interface SavePlaybackQueueInput {
     musicIds: string[];
     sourceMusicIds: string[];
     currentIndex: number | null;
+    contextType: PlaybackQueueContextType;
+    contextId: string | null;
+    contextTitle: string | null;
     shuffle: boolean;
     repeatMode: PlaybackQueueRepeatMode;
     expectedRevision: number;
@@ -36,6 +53,9 @@ const PLAYBACK_QUEUE_FIELDS = `
     musicIds
     sourceMusicIds
     currentIndex
+    contextType
+    contextId
+    contextTitle
     shuffle
     repeatMode
     revision
@@ -58,10 +78,16 @@ export const savePlaybackQueue = (input: SavePlaybackQueueInput) => graphQuery<{
     savePlaybackQueue: PlaybackQueueSaveResult;
 }, {
     input: SavePlaybackQueueInput;
-}>({
+} & OriginClientVariables>({
     operationName: 'SavePlaybackQueue',
-    query: `mutation SavePlaybackQueue($input: SavePlaybackQueueInput!) {
-        savePlaybackQueue(input: $input) {
+    query: `mutation SavePlaybackQueue(
+        $input: SavePlaybackQueueInput!
+        $originClientId: String
+    ) {
+        savePlaybackQueue(
+            input: $input
+            originClientId: $originClientId
+        ) {
             type
             queue {
                 ${PLAYBACK_QUEUE_FIELDS}
@@ -74,5 +100,5 @@ export const savePlaybackQueue = (input: SavePlaybackQueueInput) => graphQuery<{
             }
         }
     }`,
-    variables: { input }
+    variables: withOriginClientId({ input })
 });

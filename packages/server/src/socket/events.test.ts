@@ -14,7 +14,10 @@ import {
     PLAYLIST_REMOVE_MUSIC,
     PLAYLIST_UPDATE
 } from './playlist';
-import { PLAYBACK_STATE_UPDATED } from './playback';
+import {
+    PLAYBACK_QUEUE_INVALIDATED,
+    PLAYBACK_STATE_UPDATED
+} from './playback';
 import {
     PLAYBACK_ENDPOINT_HEARTBEAT,
     PLAYBACK_ENDPOINT_LEASE_EXPIRED,
@@ -43,6 +46,7 @@ describe('socket event names', () => {
             PLAYLIST_REMOVE_MUSIC,
             PLAYLIST_CHANGE_MUSIC_ORDER,
             PLAYBACK_STATE_UPDATED,
+            PLAYBACK_QUEUE_INVALIDATED,
             PLAYBACK_ENDPOINT_REGISTER,
             PLAYBACK_ENDPOINT_HEARTBEAT,
             PLAYBACK_ENDPOINT_LEASE_EXPIRED,
@@ -64,6 +68,7 @@ describe('socket event names', () => {
             PLAYLIST_REMOVE_MUSIC: 'playlist:music-removed',
             PLAYLIST_CHANGE_MUSIC_ORDER: 'playlist:music-order-updated',
             PLAYBACK_STATE_UPDATED: 'playback:state-updated',
+            PLAYBACK_QUEUE_INVALIDATED: 'playback:queue-invalidated',
             PLAYBACK_ENDPOINT_REGISTER: 'playback:endpoint-register',
             PLAYBACK_ENDPOINT_HEARTBEAT: 'playback:endpoint-heartbeat',
             PLAYBACK_ENDPOINT_LEASE_EXPIRED: 'playback:endpoint-lease-expired',

@@ -15,9 +15,22 @@ export type PlaybackQueueRepeatMode = typeof PLAYBACK_QUEUE_REPEAT_MODES[
     keyof typeof PLAYBACK_QUEUE_REPEAT_MODES
 ];
 
+export const PLAYBACK_QUEUE_CONTEXT_TYPES = {
+    album: 'album',
+    playlist: 'playlist',
+    queue: 'queue'
+} as const;
+
+export type PlaybackQueueContextType = typeof PLAYBACK_QUEUE_CONTEXT_TYPES[
+    keyof typeof PLAYBACK_QUEUE_CONTEXT_TYPES
+];
+
 interface PlaybackQueueRecord {
     id: number;
     currentIndex: number | null;
+    contextType: string;
+    contextId: number | null;
+    contextTitle: string | null;
     shuffle: boolean;
     repeatMode: string;
     revision: number;
@@ -36,6 +49,9 @@ export interface PlaybackQueueSnapshot {
     musicIds: string[];
     sourceMusicIds: string[];
     currentIndex: number | null;
+    contextType: PlaybackQueueContextType;
+    contextId: string | null;
+    contextTitle: string | null;
     shuffle: boolean;
     repeatMode: PlaybackQueueRepeatMode;
     revision: number;
@@ -46,6 +62,9 @@ export interface SavePlaybackQueueInput {
     musicIds: string[];
     sourceMusicIds: string[];
     currentIndex?: number | null;
+    contextType?: PlaybackQueueContextType;
+    contextId?: string | null;
+    contextTitle?: string | null;
     shuffle: boolean;
     repeatMode: PlaybackQueueRepeatMode;
     expectedRevision: number;
@@ -88,6 +107,19 @@ const toRepeatMode = (repeatMode: string): PlaybackQueueRepeatMode => {
     );
 };
 
+const toContextType = (contextType: string): PlaybackQueueContextType => {
+    if (Object.values(PLAYBACK_QUEUE_CONTEXT_TYPES).includes(
+        contextType as PlaybackQueueContextType
+    )) {
+        return contextType as PlaybackQueueContextType;
+    }
+
+    throw new PlaybackQueueServiceError(
+        'Playback queue context type must be album, playlist, or queue.',
+        'INVALID_PLAYBACK_QUEUE_CONTEXT'
+    );
+};
+
 const toSnapshot = (queue: PlaybackQueueRecord): PlaybackQueueSnapshot => {
     const orderedItems = [...queue.Item].sort((a, b) => a.order - b.order);
     const sourceItems = queue.shuffle
@@ -101,6 +133,9 @@ const toSnapshot = (queue: PlaybackQueueRecord): PlaybackQueueSnapshot => {
         musicIds: orderedItems.map(item => item.musicId.toString()),
         sourceMusicIds: sourceItems.map(item => item.musicId.toString()),
         currentIndex: queue.currentIndex,
+        contextType: toContextType(queue.contextType),
+        contextId: queue.contextId?.toString() ?? null,
+        contextTitle: queue.contextTitle,
         shuffle: queue.shuffle,
         repeatMode: toRepeatMode(queue.repeatMode),
         revision: queue.revision,
@@ -169,6 +204,31 @@ const validateInput = (input: SavePlaybackQueueInput) => {
     const sourceMusicIds = parseMusicIds(input.sourceMusicIds, 'sourceMusicIds');
     const repeatMode = toRepeatMode(input.repeatMode);
     const currentIndex = input.currentIndex ?? null;
+    const contextType = toContextType(input.contextType ?? 'queue');
+    const contextId = input.contextId === undefined || input.contextId === null
+        ? null
+        : Number(input.contextId);
+    const contextTitle = input.contextTitle?.trim() || null;
+
+    if (contextType === 'queue') {
+        if (contextId !== null || contextTitle !== null) {
+            throw new PlaybackQueueServiceError(
+                'A general queue context cannot include a collection id or title.',
+                'INVALID_PLAYBACK_QUEUE_CONTEXT'
+            );
+        }
+    } else if (
+        contextId === null
+        || !Number.isInteger(contextId)
+        || contextId <= 0
+        || !contextTitle
+        || contextTitle.length > 512
+    ) {
+        throw new PlaybackQueueServiceError(
+            'Album and playlist queue contexts require a positive id and title.',
+            'INVALID_PLAYBACK_QUEUE_CONTEXT'
+        );
+    }
 
     if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 0) {
         throw new PlaybackQueueServiceError(
@@ -217,6 +277,9 @@ const validateInput = (input: SavePlaybackQueueInput) => {
         musicIds,
         sourceMusicIds,
         currentIndex,
+        contextType,
+        contextId,
+        contextTitle,
         shuffle: input.shuffle === true,
         repeatMode,
         expectedRevision: input.expectedRevision
@@ -356,6 +419,9 @@ export const savePlaybackQueue = async (
                 },
                 data: {
                     currentIndex: normalized.currentIndex,
+                    contextType: normalized.contextType,
+                    contextId: normalized.contextId,
+                    contextTitle: normalized.contextTitle,
                     shuffle: normalized.shuffle,
                     repeatMode: normalized.repeatMode,
                     revision: { increment: 1 }
@@ -410,6 +476,9 @@ export const savePlaybackQueue = async (
                 data: {
                     sessionId: session.id,
                     currentIndex: normalized.currentIndex,
+                    contextType: normalized.contextType,
+                    contextId: normalized.contextId,
+                    contextTitle: normalized.contextTitle,
                     shuffle: normalized.shuffle,
                     repeatMode: normalized.repeatMode,
                     revision: 1,

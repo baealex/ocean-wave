@@ -13,6 +13,12 @@ export const playbackType = gql`
         all
     }
 
+    enum PlaybackQueueContextType {
+        album
+        playlist
+        queue
+    }
+
     type PlaybackSession {
         id: ID!
         state: PlaybackState!
@@ -42,6 +48,9 @@ export const playbackType = gql`
         musicIds: [ID!]!
         sourceMusicIds: [ID!]!
         currentIndex: Int
+        contextType: PlaybackQueueContextType!
+        contextId: ID
+        contextTitle: String
         shuffle: Boolean!
         repeatMode: PlaybackQueueRepeatMode!
         revision: Int!
@@ -119,6 +128,9 @@ export const playbackType = gql`
         musicIds: [ID!]!
         sourceMusicIds: [ID!]!
         currentIndex: Int
+        contextType: PlaybackQueueContextType
+        contextId: ID
+        contextTitle: String
         shuffle: Boolean!
         repeatMode: PlaybackQueueRepeatMode!
         expectedRevision: Int!
@@ -144,7 +156,10 @@ export const playbackMutation = gql`
             input: ReportPlaybackStateInput!
             originClientId: String
         ): PlaybackSessionReportResult!
-        savePlaybackQueue(input: SavePlaybackQueueInput!): PlaybackQueueSaveResult!
+        savePlaybackQueue(
+            input: SavePlaybackQueueInput!
+            originClientId: String
+        ): PlaybackQueueSaveResult!
         renamePlaybackDevice(
             input: RenamePlaybackDeviceInput!
             originClientId: String

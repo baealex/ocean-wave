@@ -1,12 +1,18 @@
 import {
     fetchPlaybackQueue,
+    type PlaybackQueueContext,
     type PlaybackQueueRepeatMode,
     type PlaybackQueueSnapshot,
     savePlaybackQueue
 } from '~/api/playback-queue';
 import { isPlaybackCommandBarrierActive } from '~/modules/playback-command-barrier';
 import { PLAYBACK_CONTROLLER_REFRESH_TIMEOUT_MS } from '~/modules/playback-controller';
-import { socket } from '~/socket';
+import {
+    isOwnRealtimeNotification,
+    PLAYBACK_QUEUE_INVALIDATED,
+    type PlaybackQueueInvalidatedNotification,
+    socket
+} from '~/socket';
 
 import { BaseStore } from './base-store';
 
@@ -14,6 +20,7 @@ export interface LocalPlaybackQueueSnapshot {
     musicIds: string[];
     sourceMusicIds: string[];
     currentIndex: number | null;
+    context: PlaybackQueueContext;
     shuffle: boolean;
     repeatMode: PlaybackQueueRepeatMode;
 }
@@ -84,6 +91,7 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
 
         this.connected = true;
         socket.on('connect', this.handleSocketConnect);
+        socket.on(PLAYBACK_QUEUE_INVALIDATED, this.handleQueueInvalidated);
         void this.refresh();
     }
 
@@ -95,6 +103,7 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
         this.connected = false;
         this.refreshSequence += 1;
         socket.off('connect', this.handleSocketConnect);
+        socket.off(PLAYBACK_QUEUE_INVALIDATED, this.handleQueueInvalidated);
     }
 
     async refresh(
@@ -234,7 +243,14 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
 
         try {
             const response = await savePlaybackQueue({
-                ...pending.local,
+                musicIds: pending.local.musicIds,
+                sourceMusicIds: pending.local.sourceMusicIds,
+                currentIndex: pending.local.currentIndex,
+                contextType: pending.local.context.type,
+                contextId: pending.local.context.id,
+                contextTitle: pending.local.context.title,
+                shuffle: pending.local.shuffle,
+                repeatMode: pending.local.repeatMode,
                 expectedRevision: pending.expectedRevision
             });
 
@@ -323,6 +339,23 @@ export class PlaybackQueueStore extends BaseStore<PlaybackQueueStoreState> {
     }
 
     private handleSocketConnect = () => {
+        void this.refresh();
+    };
+
+    private handleQueueInvalidated = (
+        notification: PlaybackQueueInvalidatedNotification
+    ) => {
+        if (
+            isOwnRealtimeNotification(notification)
+            || (
+                Number.isSafeInteger(notification.revision)
+                && this.state.snapshot
+                && this.state.snapshot.revision >= notification.revision
+            )
+        ) {
+            return;
+        }
+
         void this.refresh();
     };
 }

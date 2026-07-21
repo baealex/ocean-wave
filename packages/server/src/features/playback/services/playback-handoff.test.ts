@@ -125,6 +125,9 @@ describe('playback handoff service', () => {
                 musicIds: [firstMusicId.toString(), secondMusicId.toString()],
                 sourceMusicIds: [secondMusicId.toString(), firstMusicId.toString()],
                 currentIndex: 0,
+                contextType: 'queue',
+                contextId: null,
+                contextTitle: null,
                 shuffle: true,
                 repeatMode: 'all',
                 revision: 2

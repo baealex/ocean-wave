@@ -1,10 +1,10 @@
 import { useDeferredValue } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
+    LibraryPlaybackSurface,
     MusicActionPanelContent,
     MusicListItem,
     MusicTagFilterPanelContent,
-    RemotePlaybackOwnershipNotice,
     SmartMusicFilterPanelContent
 } from '~/components/music';
 
@@ -260,9 +260,7 @@ export default function Music() {
                     </Button>
                 </StickyHeaderActions>
             </CollectionHeader>
-            {remotePlaybackOwnership && (
-                <RemotePlaybackOwnershipNotice className="mx-[var(--b-spacing-lg)] mb-[var(--b-spacing-md)]" />
-            )}
+            <LibraryPlaybackSurface />
             {!loaded && (
                 <Loading />
             )}

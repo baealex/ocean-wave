@@ -85,14 +85,16 @@ vi.mock('~/modules/panel', () => ({
 }));
 
 vi.mock('~/components/music', () => ({
+    LibraryPlaybackSurface: () => createElement(
+        'section',
+        { id: 'remote-playback-ownership-notice' },
+        ui.remoteOwnership
+            ? 'Remote controls affect another device. Play Here moves playback to this browser.'
+            : null
+    ),
     MusicActionPanelContent: () => null,
     MusicListItem: () => null,
     MusicTagFilterPanelContent: () => null,
-    RemotePlaybackOwnershipNotice: () => createElement(
-        'div',
-        { id: 'remote-playback-ownership-notice' },
-        'Another device owns playback. Open the player for remote controls.'
-    ),
     SmartMusicFilterPanelContent: () => null
 }));
 
@@ -149,7 +151,7 @@ describe('MusicList remote ownership', () => {
     it('labels and disables Play while preserving visible remote-control guidance', () => {
         const markup = renderToStaticMarkup(createElement(MusicList));
 
-        expect(markup).toContain(REMOTE_PLAYBACK_OWNERSHIP_MESSAGE);
+        expect(markup).toContain('Remote controls affect another device');
         expect(markup).toContain('disabled=""');
         expect(markup).toContain(
             'aria-label="Play library unavailable while another device owns playback"'

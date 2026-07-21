@@ -768,6 +768,17 @@ export default function PlayerDetail() {
                             )}
 
                             <div className="flex w-full flex-wrap items-center justify-center gap-2.5 max-sm:gap-2 lg:justify-start">
+                                {!remotePlayback && (
+                                    <IconTextButton
+                                        size="sm"
+                                        shape="pill"
+                                        icon={<Icon.Square />}
+                                        label="Stop"
+                                        aria-label="Stop playback"
+                                        disabled={localControlsBlocked}
+                                        onClick={() => queueStore.stop()}
+                                    />
+                                )}
                                 <PlaybackDeviceMenu />
                                 <IconTextButton
                                     size="sm"

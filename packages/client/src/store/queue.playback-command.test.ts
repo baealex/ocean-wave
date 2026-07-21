@@ -50,6 +50,9 @@ const mocks = vi.hoisted(() => ({
             musicIds: ['1', '2'],
             sourceMusicIds: [],
             currentIndex: 0,
+            contextType: 'queue',
+            contextId: null,
+            contextTitle: null,
             shuffle: false,
             repeatMode: 'none',
             revision: 2,
@@ -202,6 +205,9 @@ const handoffSnapshot: PlaybackHandoffSnapshot = {
         musicIds: ['1', '2'],
         sourceMusicIds: [],
         currentIndex: 0,
+        contextType: 'queue',
+        contextId: null,
+        contextTitle: null,
         shuffle: false,
         repeatMode: 'none',
         revision: 2,
@@ -307,7 +313,12 @@ describe('queue playback command adapter', () => {
             currentTime: 1,
             progress: 1.67,
             items: ['1', '2'],
-            sourceItems: []
+            sourceItems: [],
+            context: {
+                type: 'queue',
+                id: null,
+                title: null
+            }
         });
     });
 
@@ -470,6 +481,67 @@ describe('queue playback command adapter', () => {
         expect(mocks.audio.load).toHaveBeenCalledWith(
             expect.objectContaining({ id: '2' })
         );
+    });
+
+    it('keeps collection origin until the queue structure is edited', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        mocks.musicMap.set('3', {
+            id: '3',
+            name: 'Third',
+            duration: 120,
+            artist: { name: 'Artist' }
+        });
+
+        await queueStore.reset(['1', '2'], {
+            type: 'album',
+            id: '7',
+            title: 'Tidal Memory'
+        });
+        expect(queueStore.state.context).toEqual({
+            type: 'album',
+            id: '7',
+            title: 'Tidal Memory'
+        });
+
+        await queueStore.add('3');
+        expect(queueStore.state.context).toEqual({
+            type: 'queue',
+            id: null,
+            title: null
+        });
+    });
+
+    it('reports the exact final duration so natural completion is not recoverable', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        await queueStore.set({
+            selected: 1,
+            currentTrackId: '2',
+            currentTime: 89.5,
+            progress: 99.44,
+            isPlaying: true
+        });
+        mocks.audio.stop.mockImplementationOnce(() => {
+            mocks.audioEventHandler?.onStop?.();
+        });
+
+        mocks.audioEventHandler?.onEnded();
+
+        expect(mocks.sessionReport).toHaveBeenCalledWith({
+            state: 'stopped',
+            currentMusicId: '2',
+            positionMs: 90_000,
+            playbackHistory: null
+        }, {
+            claimActive: false,
+            checkpoint: false
+        });
+        expect(queueStore.state).toMatchObject({
+            selected: 1,
+            currentTrackId: '2',
+            currentTime: 0,
+            progress: 0,
+            isPlaying: false
+        });
     });
 
     it('blocks delayed audio events from claiming or mixing during a controller command', () => {
