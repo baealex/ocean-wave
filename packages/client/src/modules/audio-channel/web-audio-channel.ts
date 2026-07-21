@@ -164,11 +164,13 @@ export class WebAudioChannel implements AudioChannel {
         if (useOriginal) {
             audioResource = `/api/audio/${music.id}?notranscode=true&profile=original`;
         } else {
-            const probe = document.createElement('audio');
+            const canPlay = typeof this.audio.canPlayType === 'function'
+                ? this.audio.canPlayType.bind(this.audio)
+                : () => '';
             const codecs = [
-                probe.canPlayType('audio/mpeg') ? 'mp3' : '',
-                probe.canPlayType('audio/aac') ? 'aac' : '',
-                probe.canPlayType('audio/ogg') ? 'ogg' : ''
+                canPlay('audio/mpeg') ? 'mp3' : '',
+                canPlay('audio/aac') ? 'aac' : '',
+                canPlay('audio/ogg') ? 'ogg' : ''
             ].filter(Boolean).join(',');
             audioResource = `/api/audio/${music.id}?profile=${profile}&format=${format}&bitrate=${bitrate}&codecs=${codecs}`;
         }
