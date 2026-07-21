@@ -2,6 +2,7 @@ import type { IResolvers } from '@graphql-tools/utils';
 
 import models, { type Music } from '~/models';
 import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
+import { getLibraryRediscovery } from '../services/library-rediscovery';
 
 type TagFilterMode = 'ALL' | 'ANY';
 
@@ -50,10 +51,19 @@ const buildMusicWhere = (filter?: MusicFilterInput) => {
 
 type MusicQueryResolvers = NonNullable<IResolvers['Query']>;
 
+type LibraryRediscoveryReader = typeof getLibraryRediscovery;
+
+export const createLibraryRediscoveryQueryResolver = (
+    readLibraryRediscovery: LibraryRediscoveryReader = getLibraryRediscovery
+) => (_: unknown, { limit }: { limit?: number } = {}) => (
+    readLibraryRediscovery({ limit })
+);
+
 export const musicQueryResolvers: MusicQueryResolvers = {
     allMusics: (_, { filter }: { filter?: MusicFilterInput } = {}) => models.music.findMany({
         where: buildMusicWhere(filter),
         orderBy: { playCount: 'desc' }
     }),
+    libraryRediscovery: createLibraryRediscoveryQueryResolver(),
     music: (_, { id }: Music) => models.music.findUnique({ where: { id: Number(id) } })
 };

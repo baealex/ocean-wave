@@ -150,6 +150,9 @@ does not infer skips or completions from old `source`, `completionRate`, or
 Rediscovery code can safely treat missing timestamps and zero counts as “no
 reliable signal” rather than negative preference.
 
+The deterministic consumer of these aggregates is documented in
+`docs/architecture/LIBRARY_REDISCOVERY.md`.
+
 ## 6. Failure Boundary
 
 History writes remain best effort from the audio player's perspective. A final

@@ -29,6 +29,43 @@ export const musicType: string = gql`
         tags: [Tag!]!
     }
 
+    enum LibraryRediscoveryReasonCode {
+        RECENTLY_ADDED
+        LIKED_NOT_RECENTLY_PLAYED
+        NEVER_PLAYED
+        RARELY_PLAYED
+        FORGOTTEN_ALBUM
+        FREQUENTLY_COMPLETED
+        TAG_AFFINITY
+        GENRE_AFFINITY
+        LIBRARY_FALLBACK
+    }
+
+    type LibraryRediscoveryTrackCandidate {
+        musicId: ID!
+        score: Int!
+        reasonCodes: [LibraryRediscoveryReasonCode!]!
+    }
+
+    type LibraryRediscoveryAlbumCandidate {
+        albumId: ID!
+        representativeMusicId: ID!
+        trackCount: Int!
+        lastPlayedAt: String
+        score: Int!
+        reasonCodes: [LibraryRediscoveryReasonCode!]!
+    }
+
+    type LibraryRediscovery {
+        generatedAt: String!
+        eligibleMusicCount: Int!
+        recentlyAdded: [LibraryRediscoveryTrackCandidate!]!
+        dormantLiked: [LibraryRediscoveryTrackCandidate!]!
+        underplayed: [LibraryRediscoveryTrackCandidate!]!
+        forgottenAlbums: [LibraryRediscoveryAlbumCandidate!]!
+        fallback: [LibraryRediscoveryTrackCandidate!]!
+    }
+
     type Genre {
         id: ID!
         name: String!
@@ -121,6 +158,7 @@ export const musicQuery = gql`
     type Query {
         allMusics(filter: MusicFilterInput): [Music!]!
         allHatedMusics: [Music!]!
+        libraryRediscovery(limit: Int): LibraryRediscovery!
         music(id: ID!): Music!
     }
 `;
