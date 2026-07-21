@@ -3,6 +3,12 @@ import type { IResolvers } from '@graphql-tools/utils';
 import models, { type Music, type Prisma } from '~/models';
 import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
 import { getLibraryRediscovery } from '../services/library-rediscovery';
+import {
+    isMusicMetadataServiceError,
+    listMusicMetadataOperations,
+    previewMusicMetadataUpdate,
+    type UpdateMusicMetadataInput
+} from '../services/metadata-editor';
 
 type TagFilterMode = 'ALL' | 'ANY';
 
@@ -57,6 +63,20 @@ type MusicQueryResolvers = NonNullable<IResolvers['Query']>;
 
 type LibraryRediscoveryReader = typeof getLibraryRediscovery;
 
+const withMetadataErrorHandling = async <T>(callback: () => Promise<T>) => {
+    try {
+        return await callback();
+    } catch (error) {
+        if (!isMusicMetadataServiceError(error)) throw error;
+
+        const graphQLError = new Error(error.message) as Error & {
+            extensions: { code: string };
+        };
+        graphQLError.extensions = { code: error.code };
+        throw graphQLError;
+    }
+};
+
 export const createLibraryRediscoveryQueryResolver = (
     readLibraryRediscovery: LibraryRediscoveryReader = getLibraryRediscovery
 ) => (_: unknown, { limit }: { limit?: number } = {}) => (
@@ -69,5 +89,12 @@ export const musicQueryResolvers: MusicQueryResolvers = {
         orderBy: { playCount: 'desc' }
     }),
     libraryRediscovery: createLibraryRediscoveryQueryResolver(),
-    music: (_, { id }: Music) => models.music.findUnique({ where: { id: Number(id) } })
+    music: (_, { id }: Music) => models.music.findUnique({ where: { id: Number(id) } }),
+    previewMusicMetadataUpdate: (
+        _: unknown,
+        { input }: { input: UpdateMusicMetadataInput }
+    ) => withMetadataErrorHandling(() => previewMusicMetadataUpdate(input)),
+    musicMetadataOperations: (_: unknown, { musicId }: { musicId: string }) => (
+        withMetadataErrorHandling(() => listMusicMetadataOperations(musicId))
+    )
 };

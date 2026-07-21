@@ -1,13 +1,26 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-
-import { createTrackContentHash } from './track-hash';
 import {
     AudioMetadataWriteError,
-    writeTrackMetadataToFile,
-    type AudioTagLibraryLoader
+    type AudioTagEditorLoader,
+    cleanupPreparedTrackMetadata,
+    installPreparedTrackMetadata,
+    isTrackMetadataOperationFilePath,
+    prepareTrackMetadataFile,
+    restorePreparedTrackMetadata,
+    type WritableTrackMetadata,
+    writeTrackMetadataToFile
 } from './audio-metadata-writer';
+import { createTrackContentHash } from './track-hash';
+import {
+    OCEAN_WAVE_RECORDING_VERSION_PROPERTY,
+    OCEAN_WAVE_RECORDING_VERSION_STATE_PROPERTY,
+    OCEAN_WAVE_RELEASE_VERSION_PROPERTY,
+    OCEAN_WAVE_RELEASE_VERSION_STATE_PROPERTY,
+    OCEAN_WAVE_VERSION_STATE_NONE,
+    OCEAN_WAVE_VERSION_STATE_VALUE
+} from './track-version';
 
 const createSilentWav = () => {
     const channelCount = 1;
@@ -35,6 +48,86 @@ const createSilentWav = () => {
     return buffer;
 };
 
+const metadata = (overrides: Partial<WritableTrackMetadata> = {}): WritableTrackMetadata => ({
+    title: 'Portable Track',
+    artist: 'Track Artist feat. Guest Artist',
+    artistCredits: [
+        {
+            name: 'Track Artist',
+            role: 'primary',
+            creditedName: null,
+            joinPhrase: ' feat. '
+        },
+        {
+            name: 'Guest Artist',
+            role: 'featured',
+            creditedName: null,
+            joinPhrase: ''
+        }
+    ],
+    album: 'Portable Album',
+    albumArtist: 'Album Artist',
+    albumArtistCredits: [{
+        name: 'Album Artist',
+        role: 'primary',
+        creditedName: null,
+        joinPhrase: ''
+    }],
+    year: '2026-07-21',
+    trackNumber: 3,
+    genres: ['Ambient', 'Electronic'],
+    releaseType: 'ep',
+    discNumber: 2,
+    totalDiscs: 3,
+    recordingVersionTitle: 'Live',
+    releaseVersionTitle: '2026 Remaster',
+    ...overrides
+});
+
+const propertyMap = (value: WritableTrackMetadata) => ({
+    title: [value.title],
+    artist: value.artistCredits.map(credit => credit.name),
+    album: [value.album],
+    albumArtist: value.albumArtistCredits?.map(credit => credit.name) ?? [],
+    date: value.year ? [value.year] : [],
+    trackNumber: value.trackNumber === null ? [] : [value.trackNumber.toString()],
+    genre: value.genres,
+    discNumber: value.discNumber ? [value.discNumber.toString()] : [],
+    totalDiscs: value.totalDiscs ? [value.totalDiscs.toString()] : [],
+    subtitle: [value.recordingVersionTitle, value.releaseVersionTitle]
+        .filter((entry): entry is string => Boolean(entry)),
+    [OCEAN_WAVE_RECORDING_VERSION_PROPERTY]: value.recordingVersionTitle
+        ? [value.recordingVersionTitle]
+        : [''],
+    [OCEAN_WAVE_RELEASE_VERSION_PROPERTY]: value.releaseVersionTitle
+        ? [value.releaseVersionTitle]
+        : [''],
+    [OCEAN_WAVE_RECORDING_VERSION_STATE_PROPERTY]: [
+        value.recordingVersionTitle
+            ? OCEAN_WAVE_VERSION_STATE_VALUE
+            : OCEAN_WAVE_VERSION_STATE_NONE
+    ],
+    [OCEAN_WAVE_RELEASE_VERSION_STATE_PROPERTY]: [
+        value.releaseVersionTitle
+            ? OCEAN_WAVE_VERSION_STATE_VALUE
+            : OCEAN_WAVE_VERSION_STATE_NONE
+    ],
+    OCEANWAVE_RELEASE_TYPE: [value.releaseType ?? 'unknown']
+});
+
+const createTagEditor = ({ fail = false } = {}): AudioTagEditorLoader => {
+    let properties: Record<string, string[]> = {};
+
+    return async () => ({
+        write: async (data, value) => {
+            if (fail) throw new Error('invalid audio');
+            properties = propertyMap(value);
+            return Buffer.concat([data, Buffer.from('updated')]);
+        },
+        read: async () => properties
+    });
+};
+
 describe('audio metadata writer', () => {
     const tempDirectories: string[] = [];
 
@@ -44,166 +137,178 @@ describe('audio metadata writer', () => {
         }
     });
 
-    it('writes portable tags and atomically replaces the audio file', async () => {
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'project441-metadata-writer-'));
-        const filePath = path.join(directory, 'track.wav');
+    const createFile = (name = 'track.wav') => {
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-metadata-writer-'));
+        const filePath = path.join(directory, name);
         tempDirectories.push(directory);
         fs.writeFileSync(filePath, createSilentWav());
+        return { directory, filePath };
+    };
 
-        const writtenTags: Record<string, unknown> = {};
-        const tagLibrary: AudioTagLibraryLoader = async () => ({
-            applyTags: async () => {
-                throw new Error('unexpected buffer write');
-            },
-            applyTagsToFile: async (targetFilePath, tags) => {
-                Object.assign(writtenTags, tags);
-                fs.appendFileSync(targetFilePath, 'updated');
-            },
-            readTags: async () => ({
-                title: [writtenTags.title as string],
-                artist: writtenTags.artist as string[],
-                album: [writtenTags.album as string],
-                albumArtist: writtenTags.albumArtist as string[],
-                date: writtenTags.date as string,
-                year: Number(writtenTags.date),
-                track: writtenTags.track as number,
-                genre: writtenTags.genre as string[],
-                comment: []
-            })
-        });
-        const result = await writeTrackMetadataToFile(filePath, {
-            title: 'Portable Track',
-            artist: 'Track Artist feat. Guest Artist',
-            artistCredits: [
-                {
-                    name: 'Track Artist',
-                    role: 'primary',
-                    creditedName: null,
-                    joinPhrase: ' feat. '
-                },
-                {
-                    name: 'Guest Artist',
-                    role: 'featured',
-                    creditedName: null,
-                    joinPhrase: ''
-                }
-            ],
-            album: 'Portable Album',
-            albumArtist: 'Album Artist & Album Partner',
-            albumArtistCredits: [
-                {
-                    name: 'Album Artist',
-                    role: 'primary',
-                    creditedName: null,
-                    joinPhrase: ' & '
-                },
-                {
-                    name: 'Album Partner',
-                    role: 'primary',
-                    creditedName: null,
-                    joinPhrase: ''
-                }
-            ],
-            year: '2026',
-            trackNumber: 3,
-            genres: ['Ambient', 'Electronic']
-        }, tagLibrary);
-        const writtenData = fs.readFileSync(filePath);
+    it('stages, installs, and cleans a verified replacement without touching the original early', async () => {
+        const { directory, filePath } = createFile();
+        const originalData = fs.readFileSync(filePath);
+        const prepared = await prepareTrackMetadataFile(
+            filePath,
+            metadata(),
+            'operation-1',
+            createTagEditor()
+        );
 
-        expect(result.contentHash).toBe(createTrackContentHash(writtenData));
-        expect(writtenTags.artist).toEqual(['Track Artist', 'Guest Artist']);
-        expect(writtenTags.albumArtist).toEqual(['Album Artist', 'Album Partner']);
-        expect(writtenData).not.toEqual(createSilentWav());
-        expect(fs.readdirSync(directory).filter((name) => name.includes('.project441.tmp')))
+        expect(fs.readFileSync(filePath)).toEqual(originalData);
+        expect(fs.existsSync(prepared.stagingPath)).toBe(true);
+        expect(prepared.stagingPath.endsWith('.ocean-wave.stage')).toBe(true);
+        expect(prepared.backupPath.endsWith('.ocean-wave.backup')).toBe(true);
+        expect(path.extname(prepared.stagingPath)).not.toBe('.wav');
+        expect(prepared.oldContentHash).toBe(createTrackContentHash(originalData));
+
+        await installPreparedTrackMetadata(prepared);
+
+        expect(fs.existsSync(prepared.backupPath)).toBe(true);
+        expect(createTrackContentHash(fs.readFileSync(filePath))).toBe(prepared.newContentHash);
+
+        await cleanupPreparedTrackMetadata(prepared);
+
+        expect(fs.existsSync(prepared.backupPath)).toBe(false);
+        expect(fs.readdirSync(directory).filter(name => name.includes('ocean-wave.')))
             .toEqual([]);
     });
 
-    it('uses the in-memory TagLib API for raw AAC files', async () => {
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'project441-metadata-aac-'));
-        const filePath = path.join(directory, 'track.aac');
-        const originalData = Buffer.from('raw AAC fixture');
-        tempDirectories.push(directory);
-        fs.writeFileSync(filePath, originalData);
+    it('restores the exact original after a prepared file was installed', async () => {
+        const { filePath } = createFile();
+        const originalData = fs.readFileSync(filePath);
+        const prepared = await prepareTrackMetadataFile(
+            filePath,
+            metadata(),
+            'operation-restore',
+            createTagEditor()
+        );
 
-        const applyTags = jest.fn(async (_data, tags) => {
-            return Buffer.concat([originalData, Buffer.from(JSON.stringify(tags))]);
-        });
-        const result = await writeTrackMetadataToFile(filePath, {
-            title: 'AAC Track',
-            artist: 'Track Artist',
-            artistCredits: [{
-                name: 'Track Artist',
-                role: 'primary',
-                creditedName: null,
-                joinPhrase: ''
-            }],
-            album: 'Portable Album',
-            albumArtist: null,
-            albumArtistCredits: null,
-            year: '2026',
-            trackNumber: 2,
-            genres: ['Ambient']
-        }, async () => ({
-            applyTags,
-            applyTagsToFile: async () => {
-                throw new Error('unexpected path-backed write');
-            },
-            readTags: async () => ({
-                title: ['AAC Track'],
-                artist: ['Track Artist'],
-                album: ['Portable Album'],
-                albumArtist: [],
-                date: '2026',
-                year: 2026,
-                track: 2,
-                genre: ['Ambient'],
-                comment: []
-            })
-        }));
-        const writtenData = fs.readFileSync(filePath);
+        await installPreparedTrackMetadata(prepared);
+        await restorePreparedTrackMetadata(prepared);
 
-        expect(applyTags).toHaveBeenCalledTimes(1);
-        expect(writtenData).not.toEqual(originalData);
-        expect(result.contentHash).toBe(createTrackContentHash(writtenData));
+        expect(fs.readFileSync(filePath)).toEqual(originalData);
+        expect(createTrackContentHash(fs.readFileSync(filePath)))
+            .toBe(prepared.oldContentHash);
     });
 
-    it('leaves the original file untouched when tag writing fails', async () => {
-        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'project441-metadata-invalid-'));
-        const filePath = path.join(directory, 'invalid.mp3');
-        const originalData = Buffer.from('not an audio file');
-        tempDirectories.push(directory);
-        fs.writeFileSync(filePath, originalData);
+    it('writes relational tag fields through the buffer adapter contract', async () => {
+        const { directory, filePath } = createFile();
+        const result = await writeTrackMetadataToFile(
+            filePath,
+            metadata(),
+            createTagEditor()
+        );
 
-        await expect(writeTrackMetadataToFile(filePath, {
-            title: 'Track',
-            artist: 'Artist',
-            artistCredits: [{
-                name: 'Artist',
-                role: 'primary',
-                creditedName: null,
-                joinPhrase: ''
-            }],
-            album: 'Album',
-            albumArtist: null,
-            albumArtistCredits: null,
-            year: '2026',
-            trackNumber: 1,
-            genres: []
-        }, async () => ({
-            applyTags: async () => {
-                throw new Error('invalid audio');
-            },
-            applyTagsToFile: async () => {
-                throw new Error('invalid audio');
-            },
-            readTags: async () => {
-                throw new Error('invalid audio');
-            }
-        }))).rejects.toEqual(expect.objectContaining<Partial<AudioMetadataWriteError>>({
+        expect(result.contentHash).toBe(createTrackContentHash(fs.readFileSync(filePath)));
+        expect(fs.readdirSync(directory).filter(name => name.includes('ocean-wave.')))
+            .toEqual([]);
+    });
+
+    it('allows an optional release date to be cleared', async () => {
+        const { filePath } = createFile();
+
+        await expect(writeTrackMetadataToFile(
+            filePath,
+            metadata({ year: '' }),
+            createTagEditor()
+        )).resolves.toEqual(expect.objectContaining({
+            contentHash: expect.any(String)
+        }));
+    });
+
+    it('accepts empty format values when version scopes are explicitly cleared', async () => {
+        const { filePath } = createFile();
+
+        await expect(writeTrackMetadataToFile(
+            filePath,
+            metadata({
+                recordingVersionTitle: null,
+                releaseVersionTitle: null
+            }),
+            createTagEditor()
+        )).resolves.toEqual(expect.objectContaining({
+            contentHash: expect.any(String)
+        }));
+    });
+
+    it('reserves current and legacy journal paths from library scans', () => {
+        expect(isTrackMetadataOperationFilePath(
+            '/music/.track.operation.ocean-wave.stage'
+        )).toBe(true);
+        expect(isTrackMetadataOperationFilePath(
+            '/music/.track.operation.ocean-wave.backup.wav'
+        )).toBe(true);
+        expect(isTrackMetadataOperationFilePath('/music/ocean-wave.stage-session.wav'))
+            .toBe(false);
+    });
+
+    it('leaves the original untouched when staged tag writing fails', async () => {
+        const { directory, filePath } = createFile('invalid.mp3');
+        const originalData = fs.readFileSync(filePath);
+
+        await expect(prepareTrackMetadataFile(
+            filePath,
+            metadata(),
+            'operation-invalid',
+            createTagEditor({ fail: true })
+        )).rejects.toEqual(expect.objectContaining<Partial<AudioMetadataWriteError>>({
             code: 'AUDIO_METADATA_WRITE_FAILED'
         }));
         expect(fs.readFileSync(filePath)).toEqual(originalData);
-        expect(fs.readdirSync(directory).filter((name) => name.includes('.project441.tmp')))
+        expect(fs.readdirSync(directory).filter(name => name.includes('ocean-wave.')))
             .toEqual([]);
+    });
+
+    it('rejects installation if the source changed after preparation', async () => {
+        const { filePath } = createFile();
+        const prepared = await prepareTrackMetadataFile(
+            filePath,
+            metadata(),
+            'operation-stale',
+            createTagEditor()
+        );
+        fs.appendFileSync(filePath, 'external change');
+
+        await expect(installPreparedTrackMetadata(prepared)).rejects.toMatchObject({
+            code: 'AUDIO_METADATA_SOURCE_CHANGED'
+        });
+    });
+
+    it('rejects preparation if the source changed after preview', async () => {
+        const { directory, filePath } = createFile();
+        const expectedContentHash = createTrackContentHash(fs.readFileSync(filePath));
+        fs.appendFileSync(filePath, 'external change');
+
+        await expect(prepareTrackMetadataFile(
+            filePath,
+            metadata(),
+            'operation-preview-stale',
+            createTagEditor(),
+            expectedContentHash
+        )).rejects.toMatchObject({
+            code: 'AUDIO_METADATA_SOURCE_CHANGED'
+        });
+        expect(fs.readdirSync(directory).filter(name => name.includes('ocean-wave.')))
+            .toEqual([]);
+    });
+
+    it('keeps backup evidence when the installed file changes before rollback', async () => {
+        const { filePath } = createFile();
+        const prepared = await prepareTrackMetadataFile(
+            filePath,
+            metadata(),
+            'operation-external-change',
+            createTagEditor()
+        );
+        await installPreparedTrackMetadata(prepared);
+        fs.appendFileSync(filePath, 'external change');
+        const changedData = fs.readFileSync(filePath);
+
+        await expect(restorePreparedTrackMetadata(prepared)).rejects.toMatchObject({
+            code: 'AUDIO_METADATA_RESTORE_FAILED'
+        });
+        expect(fs.readFileSync(filePath)).toEqual(changedData);
+        expect(fs.existsSync(prepared.backupPath)).toBe(true);
     });
 });

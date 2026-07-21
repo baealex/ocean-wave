@@ -2,6 +2,8 @@ import {
     compareReleaseTrackPositions,
     normalizePositiveInteger,
     normalizeReleaseType,
+    readPortableReleaseType,
+    readPortableTotalDiscs,
     toGraphQLReleaseType
 } from './release-metadata';
 
@@ -13,6 +15,12 @@ describe('release metadata', () => {
         expect(normalizeReleaseType({ values: 'album', compilation: true }))
             .toBe('compilation');
         expect(normalizeReleaseType({ values: ['Bootleg', 'Demo'] })).toBe('unknown');
+        expect(readPortableReleaseType({
+            'ID3v2.4': [{ id: 'TXXX:OCEANWAVE_RELEASE_TYPE', value: 'ep' }]
+        })).toBe('ep');
+        expect(readPortableTotalDiscs({
+            'ID3v2.4': [{ id: 'TXXX:DISCTOTAL', value: '3' }]
+        })).toBe(3);
     });
 
     it('accepts only positive bounded integer positions', () => {

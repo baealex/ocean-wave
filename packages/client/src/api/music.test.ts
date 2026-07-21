@@ -16,9 +16,13 @@ vi.mock('~/socket/socket', () => ({
 }));
 
 import {
+    getMusicMetadataOperations,
     groupMusicAsAlternateFile,
     linkMusicRecordings,
+    previewMusicMetadataUpdate,
     recordPlayback,
+    recoverMusicMetadataOperation,
+    retryMusicMetadataOperation,
     setPreferredMusicFile,
     setMusicHated,
     setMusicLiked,
@@ -168,18 +172,73 @@ describe('music API requests', () => {
             genres: ['Ambient', 'Electronic']
         };
 
-        await updateMusicMetadata(input);
+        await updateMusicMetadata(input, 'preview-token');
 
         const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
 
         expect(payload.variables).toEqual({
             input,
+            previewToken: 'preview-token',
             originClientId: 'client-1'
         });
         expect(payload.query).toContain(
-            'updateMusicMetadata(input: $input, originClientId: $originClientId)'
+            'updateMusicMetadata(input: $input, previewToken: $previewToken, originClientId: $originClientId)'
         );
         expect(payload.query).not.toContain('Edited Track');
+    });
+
+    it('previews and lists metadata operations through GraphQL variables', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({
+            data: {
+                data: {
+                    previewMusicMetadataUpdate: { token: 'preview-token' },
+                    musicMetadataOperations: []
+                }
+            }
+        });
+        const input = {
+            id: '7',
+            title: 'Edited Track',
+            album: 'Edited Album',
+            publishedYear: '2026-07-21',
+            trackNumber: null,
+            genres: ['Ambient']
+        };
+
+        await previewMusicMetadataUpdate(input);
+        await getMusicMetadataOperations('7');
+
+        const payloads = post.mock.calls.map(call => call[1] as GraphqlPayload);
+
+        expect(payloads[0]?.variables).toEqual({ input });
+        expect(payloads[0]?.query).toContain('previewMusicMetadataUpdate(input: $input)');
+        expect(payloads[0]?.query).not.toContain('Edited Track');
+        expect(payloads[1]).toMatchObject({ variables: { musicId: '7' } });
+        expect(payloads[1]?.query).toContain('musicMetadataOperations(musicId: $musicId)');
+    });
+
+    it('retries and recovers metadata operations through typed variables', async () => {
+        const post = vi.spyOn(axios, 'post').mockResolvedValue({
+            data: { data: { operation: { operationId: 'operation-1' } } }
+        });
+
+        await retryMusicMetadataOperation('operation-1');
+        await recoverMusicMetadataOperation('operation-2');
+
+        const payloads = post.mock.calls.map(call => call[1] as GraphqlPayload);
+
+        expect(payloads[0]).toMatchObject({
+            variables: { operationId: 'operation-1', originClientId: 'client-1' }
+        });
+        expect(payloads[0]?.query).toContain(
+            'retryMusicMetadataOperation(operationId: $operationId, originClientId: $originClientId)'
+        );
+        expect(payloads[1]).toMatchObject({
+            variables: { operationId: 'operation-2', originClientId: 'client-1' }
+        });
+        expect(payloads[1]?.query).toContain(
+            'recoverMusicMetadataOperation(operationId: $operationId, originClientId: $originClientId)'
+        );
     });
 
     it('sends every recording and file grouping control through typed variables', async () => {

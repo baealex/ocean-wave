@@ -1,6 +1,12 @@
 import type { ICommonTagsResult } from 'music-metadata';
 
 export const TRACK_TAG_SNAPSHOT_VERSION = 1;
+export const OCEAN_WAVE_RECORDING_VERSION_PROPERTY = 'OCEANWAVE_RECORDING_VERSION';
+export const OCEAN_WAVE_RELEASE_VERSION_PROPERTY = 'OCEANWAVE_RELEASE_VERSION';
+export const OCEAN_WAVE_RECORDING_VERSION_STATE_PROPERTY = 'OCEANWAVE_RECORDING_VERSION_STATE';
+export const OCEAN_WAVE_RELEASE_VERSION_STATE_PROPERTY = 'OCEANWAVE_RELEASE_VERSION_STATE';
+export const OCEAN_WAVE_VERSION_STATE_NONE = 'none';
+export const OCEAN_WAVE_VERSION_STATE_VALUE = 'value';
 
 export type TrackIdentifierScheme = 'musicbrainz-recording' | 'isrc' | 'acoustid';
 
@@ -12,6 +18,11 @@ export interface TrackIdentifier {
 export interface TrackVersionMetadata {
     recordingVersionTitle: string | null;
     releaseVersionTitle: string | null;
+}
+
+export interface PortableTrackVersionMetadata extends TrackVersionMetadata {
+    recordingVersionExplicit: boolean;
+    releaseVersionExplicit: boolean;
 }
 
 export interface TrackTagSnapshot {
@@ -69,24 +80,109 @@ export const resolveTrackVersionMetadata = ({
     subtitles?: string[];
     remixers?: string[];
 }): TrackVersionMetadata => {
-    const subtitle = normalizeVersionLabel(subtitles?.filter(Boolean).join(' / '));
+    const normalizedSubtitles = (subtitles ?? [])
+        .flatMap(value => value.split('\0'))
+        .map(normalizeVersionLabel)
+        .filter((value): value is string => Boolean(value));
     const titleVersion = extractTitleVersionLabel(title);
-    const label = subtitle ?? titleVersion?.label ?? (remixers?.length ? 'Remix' : null);
+    const explicit = normalizedSubtitles.reduce<TrackVersionMetadata>((result, label) => {
+        const scope = classifyVersionLabel(label);
 
-    if (!label) {
-        return {
-            recordingVersionTitle: null,
-            releaseVersionTitle: null
-        };
+        if (scope && !result[scope]) {
+            result[scope] = label;
+        } else if (!scope && !result.recordingVersionTitle) {
+            result.recordingVersionTitle = label;
+        }
+
+        return result;
+    }, {
+        recordingVersionTitle: null,
+        releaseVersionTitle: null
+    });
+
+    if (explicit.recordingVersionTitle || explicit.releaseVersionTitle) {
+        return explicit;
     }
 
-    const scope = classifyVersionLabel(label)
-        ?? titleVersion?.scope
-        ?? 'recordingVersionTitle';
+    const label = titleVersion?.label ?? (remixers?.length ? 'Remix' : null);
+    const scope = label
+        ? titleVersion?.scope ?? classifyVersionLabel(label) ?? 'recordingVersionTitle'
+        : null;
 
     return {
         recordingVersionTitle: scope === 'recordingVersionTitle' ? label : null,
         releaseVersionTitle: scope === 'releaseVersionTitle' ? label : null
+    };
+};
+
+type NativeTags = Record<string, Array<{ id: string; value: unknown }>> | undefined;
+
+const normalizeNativeTagId = (value: string) => value
+    .normalize('NFKC')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '');
+
+const readPortableProperty = (
+    nativeTags: NativeTags,
+    property: string
+) => {
+    const propertyId = normalizeNativeTagId(property);
+    let explicit = false;
+
+    for (const { id, value } of Object.values(nativeTags ?? {}).flat()) {
+        if (!normalizeNativeTagId(id).endsWith(propertyId)) continue;
+        explicit = true;
+
+        const values = Array.isArray(value) ? value : [value];
+
+        for (const entry of values) {
+            if (typeof entry !== 'string') continue;
+            const normalized = normalizeVersionLabel(entry);
+            if (normalized) return { value: normalized, explicit };
+        }
+    }
+
+    return { value: null, explicit };
+};
+
+const readPortableVersion = (
+    nativeTags: NativeTags,
+    property: string,
+    stateProperty: string
+) => {
+    const version = readPortableProperty(nativeTags, property);
+    const state = readPortableProperty(nativeTags, stateProperty).value?.toLowerCase();
+
+    if (state === OCEAN_WAVE_VERSION_STATE_NONE) {
+        return { value: null, explicit: true };
+    }
+
+    if (state === OCEAN_WAVE_VERSION_STATE_VALUE) {
+        return { value: version.value, explicit: true };
+    }
+
+    return version;
+};
+
+export const readPortableTrackVersionMetadata = (
+    nativeTags: NativeTags
+): PortableTrackVersionMetadata => {
+    const recording = readPortableVersion(
+        nativeTags,
+        OCEAN_WAVE_RECORDING_VERSION_PROPERTY,
+        OCEAN_WAVE_RECORDING_VERSION_STATE_PROPERTY
+    );
+    const release = readPortableVersion(
+        nativeTags,
+        OCEAN_WAVE_RELEASE_VERSION_PROPERTY,
+        OCEAN_WAVE_RELEASE_VERSION_STATE_PROPERTY
+    );
+
+    return {
+        recordingVersionTitle: recording.value,
+        releaseVersionTitle: release.value,
+        recordingVersionExplicit: recording.explicit,
+        releaseVersionExplicit: release.explicit
     };
 };
 

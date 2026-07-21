@@ -514,12 +514,12 @@ order. The audio endpoint additionally checks readability at request time and
 falls through to the next active file. A missing preferred file keeps rank `0`
 in the DB, is skipped while unavailable, and automatically resumes after a
 scan marks it active again. Grouped relational metadata editing remains locked
-Playback events, authoritative session history, commands, and handoffs resolve
-that same readable PhysicalFile and use its duration, so fallback playback
-never records the unavailable preferred file. Grouped relational metadata
-editing remains locked until the durable multi-file editor can update every
-active file atomically; users must separate alternate files and linked release
-appearances before using the current single-file metadata editor.
+until the durable operation journal has recovered any unfinished edit that owns
+one of its files. Playback events, authoritative session history, commands, and
+handoffs resolve that same readable PhysicalFile and use its duration, so
+fallback playback never records the unavailable preferred file. Alternate files
+and linked release appearances do not otherwise block editing: the relational
+editor resolves and updates their complete active-file target set.
 
 ## 9. Source of Truth
 
@@ -560,19 +560,23 @@ stale tag snapshot as a reconciliation item and never lets those tags overwrite
 the canonical relationships. An active but unreadable target fails preflight;
 the editor does not silently apply a partial shared-entity edit.
 
-SQLite and filesystem replacements cannot share one transaction. Before shared
-relational edits are enabled, the metadata editor must therefore use a durable
-operation journal with these steps:
+SQLite and filesystem replacements cannot share one transaction. The shared
+relational editor therefore uses a durable operation journal with these steps:
 
 1. Resolve target PhysicalFile stable ids and snapshot every affected entity's
    expected `metadataRevision`, old relational values, path, whole-file hash,
    and tag snapshot.
-2. Create a rewritten temporary copy for every target without replacing an
-   original. Verify its tags, readability, and whole-file hash, then flush the
-   files and parent directories to durable storage.
-3. Persist a `prepared` journal entry containing the requested relational
-   change, target stable ids, expected revisions, old and new hashes, and the
-   temporary and backup paths.
+2. Persist a `preparing` MusicMetadataOperation and one pending target record
+   for every file before staging begins. The journal contains the requested
+   relational change, target stable ids, expected revisions, and old evidence.
+   Each target also records its previous metadata-sync state so recovery can
+   restore `stale` instead of incorrectly declaring the old tags current.
+3. Create a rewritten same-filesystem temporary copy for every target without
+   replacing an original. Verify its tags, readability, and whole-file hash,
+   flush the file and parent directory, then persist its old/new hashes and
+   temporary/backup paths. Record the operation as `prepared` only after every
+   target is ready. Journal files use reserved, extensionless names, and scans
+   also exclude the legacy extension-bearing journal pattern.
 4. For each target, durably record `replacing` before the atomic same-filesystem
    renames, retain the original as a backup, and install the staged file. Verify
    the new hash, flush the installed file, and `fsync` every directory whose
@@ -591,29 +595,55 @@ operation journal with these steps:
 Every journal transition and the logical metadata commit uses SQLite's full
 durability setting; an in-memory marker or a transaction acknowledged before
 its journal/WAL is synced does not satisfy a state transition above.
+Metadata edits, explicit recovery, and library scans share one process-wide
+queue so a force scan cannot revise targets while a file replacement is active.
 
 Failure before replacement removes temporary files and leaves both originals
 and relational rows unchanged. A replacement failure restores every file
 already swapped from its retained backup while the DB remains unchanged. A DB
 transaction or revision-check failure after replacement also restores every
-original and requests a rescan. If any restoration cannot be verified, the
-operation becomes `reconcile-required`; later edits to its targets are blocked
-and recovery is surfaced explicitly rather than accepting split state.
+original. If any restoration cannot be verified, the operation becomes
+`reconcile-required`; later edits to its targets are blocked and recovery is
+surfaced explicitly rather than accepting split state.
 
-Startup recovery processes every unfinished journal entry. A `prepared`,
-`replacing`, or `replaced` operation is rolled back and is not closed until each
-restored file matches its old hash and the restored directory entries are
-synced. A `committed` operation may finish cleanup only when every target still
-matches its recorded new hash. If a committed target is absent or mismatched,
-recovery retains all backups and staging evidence and marks the operation
-`reconcile-required`; it never deletes the last known-good copy. A recovery
-service may either roll forward from a verified staged copy or restore every
-backup and, in one compensating DB transaction, restore the recorded old
-relational values while advancing metadata revisions again. Partial recovery is
-not accepted. The current single-file "replace, then update DB" flow is not
-sufficient for relational metadata edits. The metadata-editor work must add
-this journal and recovery path before it enables edits shared by multiple
-PhysicalFiles.
+Startup recovery processes every unfinished journal entry before the server
+accepts requests. A `preparing`, `prepared`, `replacing`, or `replaced`
+operation is rolled back and is not closed until each restored file matches its
+old hash and the restored directory entries are synced. A `committed` operation
+may finish cleanup only when every target still matches its recorded new hash.
+If a committed target is absent or mismatched, recovery retains all backups and
+staging evidence and marks both the operation and PhysicalFile
+`reconcile-required`; it never deletes the last known-good copy. Partial
+recovery is not accepted. The editor exposes failed targets, retryable
+operations, and explicit recovery actions instead of hiding them behind a
+generic save failure.
+
+The preview API returns a revision-bound token, owner-level changes, actual
+per-file tag differences, unavailable-file warnings, and the policies that will
+remain unchanged. Applying the edit requires that token; a changed relationship,
+path, availability state, revision, or source hash makes the preview stale.
+Credit participant names, titles, release data, nullable positions, genres, and
+recording/release version labels are written to supported audio tags. Release
+type and both version scopes use portable Ocean Wave properties in addition to
+the format's standard tags. Each scope also records whether its value was
+explicitly cleared, so arbitrary labels and null scopes survive independently
+without falling back to subtitle or title-suffix inference. Removing a release
+date leaves the date tag absent and imports as null rather than the current year.
+Total-disc values support the standard `DISCTOTAL` representation.
+Credit roles, credited spellings, join phrases, grouping, and preferred-file
+choices remain database-only and are labeled that way in the preview. The writer
+verifies embedded-artwork hashes before and after each metadata rewrite, and the
+existing artwork-cache policy remains unchanged.
+
+A forced scan of an already linked file refreshes its technical snapshot but
+does not replace canonical Recording, Release, or ReleaseTrack values. Matching
+tags clear the file's metadata sync state. A difference marks it `stale` and
+adds one reconciliation item to the persisted sync report. A missing target is
+marked stale when the edit commits and produces the same reconciliation item
+when it returns, including at a newly detected path; stale file tags never
+replace canonical relationships during move detection. A first import into an
+empty database still seeds the complete tag-encodable relationship model, which
+is covered by the edit/write/import and forced-rescan round-trip test.
 
 ## 10. Rescan, Move, and Delete Rules
 

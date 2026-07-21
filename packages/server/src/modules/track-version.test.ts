@@ -1,8 +1,13 @@
 import {
     extractTitleVersionLabel,
     normalizeCandidateTitle,
+    OCEAN_WAVE_RECORDING_VERSION_PROPERTY,
+    OCEAN_WAVE_RECORDING_VERSION_STATE_PROPERTY,
+    OCEAN_WAVE_RELEASE_VERSION_PROPERTY,
+    OCEAN_WAVE_RELEASE_VERSION_STATE_PROPERTY,
     parseTrackIdentifiers,
     parseTrackTagSnapshot,
+    readPortableTrackVersionMetadata,
     resolveTrackVersionMetadata,
     serializeTrackTagSnapshot
 } from './track-version';
@@ -35,6 +40,63 @@ describe('track version metadata', () => {
             baseTitle: 'Signal',
             label: 'Stereo',
             scope: 'releaseVersionTitle'
+        });
+        expect(resolveTrackVersionMetadata({
+            title: 'Signal',
+            subtitles: [['Live', '2026 Remaster'].join('\0')]
+        })).toEqual({
+            recordingVersionTitle: 'Live',
+            releaseVersionTitle: '2026 Remaster'
+        });
+    });
+
+    it('round-trips arbitrary recording and release version labels through portable tags', () => {
+        expect(readPortableTrackVersionMetadata({
+            RIFF: [
+                {
+                    id: `TXXX:${OCEAN_WAVE_RECORDING_VERSION_PROPERTY}`,
+                    value: ' Studio Cut '
+                },
+                {
+                    id: `TXXX:${OCEAN_WAVE_RELEASE_VERSION_PROPERTY}`,
+                    value: 'Archive Edition'
+                }
+            ]
+        })).toEqual({
+            recordingVersionTitle: 'Studio Cut',
+            releaseVersionTitle: 'Archive Edition',
+            recordingVersionExplicit: true,
+            releaseVersionExplicit: true
+        });
+    });
+
+    it('distinguishes explicitly cleared version scopes from absent portable tags', () => {
+        expect(readPortableTrackVersionMetadata({
+            RIFF: [
+                {
+                    id: OCEAN_WAVE_RECORDING_VERSION_STATE_PROPERTY,
+                    value: 'none'
+                },
+                {
+                    id: OCEAN_WAVE_RELEASE_VERSION_PROPERTY,
+                    value: 'Archive Edition'
+                },
+                {
+                    id: OCEAN_WAVE_RELEASE_VERSION_STATE_PROPERTY,
+                    value: 'value'
+                }
+            ]
+        })).toEqual({
+            recordingVersionTitle: null,
+            releaseVersionTitle: 'Archive Edition',
+            recordingVersionExplicit: true,
+            releaseVersionExplicit: true
+        });
+        expect(readPortableTrackVersionMetadata(undefined)).toEqual({
+            recordingVersionTitle: null,
+            releaseVersionTitle: null,
+            recordingVersionExplicit: false,
+            releaseVersionExplicit: false
         });
     });
 

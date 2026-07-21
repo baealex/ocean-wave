@@ -1,6 +1,10 @@
 import axios from 'axios';
 
-import type { ArtistCreditRole, Music } from '~/models/type';
+import type {
+    ArtistCreditRole,
+    Music,
+    ReleaseType
+} from '~/models/type';
 import { getOriginClientId } from '~/socket/socket';
 
 import { graphQuery } from './graphql';
@@ -55,6 +59,8 @@ export interface RecordPlaybackParams {
 export interface UpdateMusicMetadataInput {
     id: string;
     title: string;
+    titleOverride?: string | null;
+    recordingVersionTitle?: string | null;
     artist?: string | null;
     artistCredits?: Array<{
         name: string;
@@ -62,6 +68,8 @@ export interface UpdateMusicMetadataInput {
         creditedName?: string | null;
         joinPhrase?: string | null;
     }>;
+    recordingArtistCredits?: MusicMetadataArtistCreditInput[];
+    releaseTrackArtistCredits?: MusicMetadataArtistCreditInput[] | null;
     album: string;
     albumArtist?: string | null;
     albumArtistCredits?: Array<{
@@ -71,8 +79,76 @@ export interface UpdateMusicMetadataInput {
         joinPhrase?: string | null;
     }>;
     publishedYear: string;
-    trackNumber: number;
+    releaseType?: ReleaseType;
+    totalDiscs?: number | null;
+    releaseVersionTitle?: string | null;
+    discNumber?: number | null;
+    trackNumber: number | null;
     genres: string[];
+}
+
+export interface MusicMetadataArtistCreditInput {
+    name: string;
+    role: ArtistCreditRole;
+    creditedName?: string | null;
+    joinPhrase?: string | null;
+}
+
+export type MusicMetadataStorage = 'FILE_AND_DATABASE' | 'DATABASE_ONLY';
+export type MusicMetadataOwner = 'RECORDING' | 'RELEASE' | 'RELEASE_TRACK';
+
+export interface MusicMetadataChange {
+    field: string;
+    label: string;
+    before: string;
+    after: string;
+    owner: MusicMetadataOwner;
+    storage: MusicMetadataStorage;
+}
+
+export interface MusicMetadataFilePreview {
+    fileId: string;
+    stableId: string;
+    filePath: string;
+    syncStatus: string;
+    willWrite: boolean;
+    changes: MusicMetadataChange[];
+}
+
+export interface MusicMetadataPreviewIssue {
+    code: string;
+    message: string;
+    blocking: boolean;
+    fileId: string | null;
+}
+
+export interface MusicMetadataPreview {
+    token: string;
+    hasChanges: boolean;
+    changes: MusicMetadataChange[];
+    files: MusicMetadataFilePreview[];
+    issues: MusicMetadataPreviewIssue[];
+    preservedPolicies: string[];
+}
+
+export interface MusicMetadataOperationTarget {
+    fileId: string;
+    filePath: string;
+    status: string;
+    errorCode: string | null;
+    errorMessage: string | null;
+}
+
+export interface MusicMetadataOperation {
+    operationId: string;
+    status: string;
+    retryable: boolean;
+    errorCode: string | null;
+    errorMessage: string | null;
+    music: Pick<Music, 'id' | 'name'> | null;
+    targets: MusicMetadataOperationTarget[];
+    createdAt: string | null;
+    updatedAt: string | null;
 }
 
 export interface AlbumArtworkResult {
@@ -81,17 +157,173 @@ export interface AlbumArtworkResult {
     isCoverCustom: boolean;
 }
 
-export function updateMusicMetadata(input: UpdateMusicMetadataInput) {
+export function previewMusicMetadataUpdate(input: UpdateMusicMetadataInput) {
     return graphQuery<{
-        updateMusicMetadata: Pick<Music, 'id' | 'name'>;
-    }, { input: UpdateMusicMetadataInput } & OriginClientVariables>(
-        `mutation UpdateMusicMetadata($input: UpdateMusicMetadataInput!, $originClientId: String) {
-            updateMusicMetadata(input: $input, originClientId: $originClientId) {
-                id
-                name
+        previewMusicMetadataUpdate: MusicMetadataPreview;
+    }, { input: UpdateMusicMetadataInput }>(
+        `query PreviewMusicMetadataUpdate($input: UpdateMusicMetadataInput!) {
+            previewMusicMetadataUpdate(input: $input) {
+                token
+                hasChanges
+                changes {
+                    field
+                    label
+                    before
+                    after
+                    owner
+                    storage
+                }
+                files {
+                    fileId
+                    stableId
+                    filePath
+                    syncStatus
+                    willWrite
+                    changes {
+                        field
+                        label
+                        before
+                        after
+                        owner
+                        storage
+                    }
+                }
+                issues {
+                    code
+                    message
+                    blocking
+                    fileId
+                }
+                preservedPolicies
             }
         }`,
-        withOriginClientId({ input })
+        { input }
+    );
+}
+
+export function updateMusicMetadata(
+    input: UpdateMusicMetadataInput,
+    previewToken: string
+) {
+    return graphQuery<{
+        updateMusicMetadata: MusicMetadataOperation;
+    }, {
+        input: UpdateMusicMetadataInput;
+        previewToken: string;
+    } & OriginClientVariables>(
+        `mutation UpdateMusicMetadata($input: UpdateMusicMetadataInput!, $previewToken: String!, $originClientId: String) {
+            updateMusicMetadata(input: $input, previewToken: $previewToken, originClientId: $originClientId) {
+                operationId
+                status
+                retryable
+                errorCode
+                errorMessage
+                music {
+                    id
+                    name
+                }
+                targets {
+                    fileId
+                    filePath
+                    status
+                    errorCode
+                    errorMessage
+                }
+                createdAt
+                updatedAt
+            }
+        }`,
+        withOriginClientId({ input, previewToken })
+    );
+}
+
+export function getMusicMetadataOperations(musicId: string) {
+    return graphQuery<{
+        musicMetadataOperations: MusicMetadataOperation[];
+    }, { musicId: string }>(
+        `query MusicMetadataOperations($musicId: ID!) {
+            musicMetadataOperations(musicId: $musicId) {
+                operationId
+                status
+                retryable
+                errorCode
+                errorMessage
+                music {
+                    id
+                    name
+                }
+                targets {
+                    fileId
+                    filePath
+                    status
+                    errorCode
+                    errorMessage
+                }
+                createdAt
+                updatedAt
+            }
+        }`,
+        { musicId }
+    );
+}
+
+export function retryMusicMetadataOperation(operationId: string) {
+    return graphQuery<{
+        retryMusicMetadataOperation: MusicMetadataOperation;
+    }, { operationId: string } & OriginClientVariables>(
+        `mutation RetryMusicMetadataOperation($operationId: ID!, $originClientId: String) {
+            retryMusicMetadataOperation(operationId: $operationId, originClientId: $originClientId) {
+                operationId
+                status
+                retryable
+                errorCode
+                errorMessage
+                music {
+                    id
+                    name
+                }
+                targets {
+                    fileId
+                    filePath
+                    status
+                    errorCode
+                    errorMessage
+                }
+                createdAt
+                updatedAt
+            }
+        }`,
+        withOriginClientId({ operationId })
+    );
+}
+
+export function recoverMusicMetadataOperation(operationId: string) {
+    return graphQuery<{
+        recoverMusicMetadataOperation: MusicMetadataOperation;
+    }, { operationId: string } & OriginClientVariables>(
+        `mutation RecoverMusicMetadataOperation($operationId: ID!, $originClientId: String) {
+            recoverMusicMetadataOperation(operationId: $operationId, originClientId: $originClientId) {
+                operationId
+                status
+                retryable
+                errorCode
+                errorMessage
+                music {
+                    id
+                    name
+                }
+                targets {
+                    fileId
+                    filePath
+                    status
+                    errorCode
+                    errorMessage
+                }
+                createdAt
+                updatedAt
+            }
+        }`,
+        withOriginClientId({ operationId })
     );
 }
 

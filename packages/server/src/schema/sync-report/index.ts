@@ -28,10 +28,12 @@ export const syncReportType = gql`
         movedCount: Int!
         duplicateCount: Int!
         missingCount: Int!
+        reconcileCount: Int!
         created: [SyncReportItem!]!
         moved: [SyncReportItem!]!
         duplicate: [SyncReportItem!]!
         missing: [SyncReportItem!]!
+        reconcile: [SyncReportItem!]!
     }
 `;
 
@@ -70,6 +72,9 @@ export const syncReportResolvers: IResolvers = {
         },
         missing: (report: { Item?: Array<{ kind: string }> }) => {
             return filterItemsByKind(SYNC_REPORT_KIND.missing, report.Item);
+        },
+        reconcile: (report: { Item?: Array<{ kind: string }> }) => {
+            return filterItemsByKind(SYNC_REPORT_KIND.reconcile, report.Item);
         }
     },
     SyncReportItem: {

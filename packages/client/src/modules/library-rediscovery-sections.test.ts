@@ -63,6 +63,14 @@ const createMusic = ({
         creditedName: null,
         joinPhrase: ''
     }],
+    recordingArtistCredits: [{
+        artist: { id: `artist-${albumId}`, name: `Artist ${albumId}` },
+        role: 'PRIMARY',
+        position: 0,
+        creditedName: null,
+        joinPhrase: ''
+    }],
+    hasReleaseTrackArtistCredits: false,
     bitrate: 320_000,
     codec: 'FLAC',
     completionCount: 0,
@@ -79,6 +87,8 @@ const createMusic = ({
     lastPlayedAt,
     lastSkippedAt: null,
     name: `Track ${id}`,
+    recordingTitle: `Track ${id}`,
+    titleOverride: null,
     playCount: 0,
     recordingVersionTitle: null,
     releaseVersionTitle: null,

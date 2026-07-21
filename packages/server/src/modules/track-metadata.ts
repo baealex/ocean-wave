@@ -1,19 +1,22 @@
 import path from 'path';
 
 import {
+    type ArtistCreditValue,
     formatArtistCredits,
     normalizeArtistCredits,
-    parseArtistCredits,
-    type ArtistCreditValue
+    parseArtistCredits
 } from './artist-credits';
 import { parseBuffer } from './music-metadata';
 import {
     normalizePositiveInteger,
     normalizeReleaseType,
-    type ReleaseType
+    readPortableTotalDiscs,
+    type ReleaseType,
+    readPortableReleaseType
 } from './release-metadata';
 import {
     parseTrackIdentifiers,
+    readPortableTrackVersionMetadata,
     resolveTrackVersionMetadata,
     serializeTrackTagSnapshot,
     type TrackIdentifier
@@ -52,17 +55,19 @@ export interface MusicMetadataOverride {
     album: string;
     genres: string[];
     year: string;
-    trackNumber: number;
+    trackNumber: number | null;
     releaseType?: ReleaseType;
     discNumber?: number | null;
     totalDiscs?: number | null;
+    recordingVersionTitle?: string | null;
+    releaseVersionTitle?: string | null;
 }
 
 export const parseTrackMetadata = async (
     filePath: string,
     data: Buffer
 ): Promise<ParsedTrackMetadata> => {
-    const { format, common } = await parseBuffer(data);
+    const { format, common, native } = await parseBuffer(data);
     const {
         container = '',
         codec = '',
@@ -79,7 +84,9 @@ export const parseTrackMetadata = async (
         album = 'unknown',
         picture,
         genre = [],
-        year = (new Date()).getFullYear(),
+        year,
+        date,
+        releasedate,
         track,
         disk,
         totaldiscs,
@@ -101,11 +108,20 @@ export const parseTrackMetadata = async (
             fallbackName: artistCredits[0].name
         })
         : null;
-    const versionMetadata = resolveTrackVersionMetadata({
+    const inferredVersionMetadata = resolveTrackVersionMetadata({
         title,
         subtitles: subtitle,
         remixers: remixer
     });
+    const portableVersionMetadata = readPortableTrackVersionMetadata(native);
+    const versionMetadata = {
+        recordingVersionTitle: portableVersionMetadata.recordingVersionExplicit
+            ? portableVersionMetadata.recordingVersionTitle
+            : inferredVersionMetadata.recordingVersionTitle,
+        releaseVersionTitle: portableVersionMetadata.releaseVersionExplicit
+            ? portableVersionMetadata.releaseVersionTitle
+            : inferredVersionMetadata.releaseVersionTitle
+    };
 
     return {
         title,
@@ -116,11 +132,13 @@ export const parseTrackMetadata = async (
         album,
         pictureData: picture?.[0]?.data ? Buffer.from(picture[0].data) : null,
         genres: genre,
-        year: year.toString(),
-        releaseType: normalizeReleaseType({ values: releasetype, compilation }),
+        year: releasedate ?? date ?? year?.toString() ?? '',
+        releaseType: readPortableReleaseType(native)
+            ?? normalizeReleaseType({ values: releasetype, compilation }),
         discNumber: normalizePositiveInteger(disk?.no),
         totalDiscs: normalizePositiveInteger(disk?.of)
-            ?? normalizePositiveInteger(totaldiscs),
+            ?? normalizePositiveInteger(totaldiscs)
+            ?? readPortableTotalDiscs(native),
         trackNumber: normalizePositiveInteger(track?.no),
         ...versionMetadata,
         identifiers: parseTrackIdentifiers(common),

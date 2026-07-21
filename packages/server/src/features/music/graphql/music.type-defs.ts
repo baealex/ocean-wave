@@ -13,6 +13,8 @@ export const musicType: string = gql`
         sampleRate: Float!
         duration: Float!
         syncStatus: String!
+        metadataSyncStatus: String!
+        metadataSyncError: String
         isPreferred: Boolean!
         isSelected: Boolean!
         isPlayable: Boolean!
@@ -32,6 +34,8 @@ export const musicType: string = gql`
     type Music {
         id: ID!
         name: String!
+        recordingTitle: String!
+        titleOverride: String
         duration: Float!
         codec: String!
         bitrate: Float!
@@ -58,6 +62,8 @@ export const musicType: string = gql`
         artist: Artist! @deprecated(reason: "Use artistCredits or artistDisplayName; removal is planned for the next breaking schema version.")
         artistDisplayName: String!
         artistCredits: [ArtistCredit!]!
+        recordingArtistCredits: [ArtistCredit!]!
+        hasReleaseTrackArtistCredits: Boolean!
         album: Album!
         genres: [Genre!]!
         tags: [Tag!]!
@@ -175,14 +181,87 @@ export const musicType: string = gql`
     input UpdateMusicMetadataInput {
         id: ID!
         title: String!
+        titleOverride: String
+        recordingVersionTitle: String
         artist: String @deprecated(reason: "Use artistCredits; removal is planned for the next breaking schema version.")
         artistCredits: [ArtistCreditInput!]
+        recordingArtistCredits: [ArtistCreditInput!]
+        releaseTrackArtistCredits: [ArtistCreditInput!]
         album: String!
         albumArtist: String @deprecated(reason: "Use albumArtistCredits; removal is planned for the next breaking schema version.")
         albumArtistCredits: [ArtistCreditInput!]
         publishedYear: String!
-        trackNumber: Int!
+        releaseType: ReleaseType
+        totalDiscs: Int
+        releaseVersionTitle: String
+        discNumber: Int
+        trackNumber: Int
         genres: [String!]!
+    }
+
+    enum MusicMetadataStorage {
+        FILE_AND_DATABASE
+        DATABASE_ONLY
+    }
+
+    enum MusicMetadataOwner {
+        RECORDING
+        RELEASE
+        RELEASE_TRACK
+    }
+
+    type MusicMetadataChange {
+        field: String!
+        label: String!
+        before: String!
+        after: String!
+        owner: MusicMetadataOwner!
+        storage: MusicMetadataStorage!
+    }
+
+    type MusicMetadataFilePreview {
+        fileId: ID!
+        stableId: ID!
+        filePath: String!
+        syncStatus: String!
+        willWrite: Boolean!
+        changes: [MusicMetadataChange!]!
+    }
+
+    type MusicMetadataPreviewIssue {
+        code: String!
+        message: String!
+        blocking: Boolean!
+        fileId: ID
+    }
+
+    type MusicMetadataPreview {
+        token: String!
+        hasChanges: Boolean!
+        changes: [MusicMetadataChange!]!
+        files: [MusicMetadataFilePreview!]!
+        issues: [MusicMetadataPreviewIssue!]!
+        preservedPolicies: [String!]!
+    }
+
+    type MusicMetadataOperationTarget {
+        fileId: ID!
+        filePath: String!
+        status: String!
+        errorCode: String
+        errorMessage: String
+    }
+
+    type MusicMetadataOperation {
+        operationId: ID!
+        status: String!
+        retryable: Boolean!
+        errorCode: String
+        errorMessage: String
+        music: Music
+        targets: [MusicMetadataOperationTarget!]!
+        createdAt: String
+        updatedAt: String
     }
 
     ${artistType}
@@ -198,6 +277,8 @@ export const musicQuery = gql`
         allHatedMusics: [Music!]!
         libraryRediscovery(limit: Int): LibraryRediscovery!
         music(id: ID!): Music!
+        previewMusicMetadataUpdate(input: UpdateMusicMetadataInput!): MusicMetadataPreview!
+        musicMetadataOperations(musicId: ID!): [MusicMetadataOperation!]!
     }
 `;
 
@@ -205,7 +286,9 @@ export const musicMutation = gql`
     type Mutation {
         setMusicLiked(id: ID!, isLiked: Boolean!, originClientId: String): MusicLikedPayload!
         setMusicHated(id: ID!, isHated: Boolean!, originClientId: String): MusicHatedPayload!
-        updateMusicMetadata(input: UpdateMusicMetadataInput!, originClientId: String): Music!
+        updateMusicMetadata(input: UpdateMusicMetadataInput!, previewToken: String!, originClientId: String): MusicMetadataOperation!
+        retryMusicMetadataOperation(operationId: ID!, originClientId: String): MusicMetadataOperation!
+        recoverMusicMetadataOperation(operationId: ID!, originClientId: String): MusicMetadataOperation!
         setPreferredMusicFile(musicId: ID!, fileId: ID, originClientId: String): Music!
         groupMusicAsAlternateFile(musicId: ID!, targetMusicId: ID!, originClientId: String): Music!
         ungroupMusicFile(musicId: ID!, fileId: ID!, originClientId: String): Music!

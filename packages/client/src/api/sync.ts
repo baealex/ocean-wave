@@ -21,6 +21,7 @@ export function getLatestSyncReport() {
             'movedCount',
             'duplicateCount',
             'missingCount',
+            'reconcileCount',
             createQuery<SyncReportItem>('created', [
                 'id',
                 'kind',
@@ -49,6 +50,15 @@ export function getLatestSyncReport() {
                 'createdAt'
             ]),
             createQuery<SyncReportItem>('missing', [
+                'id',
+                'kind',
+                'musicId',
+                'musicName',
+                'filePath',
+                'previousFilePath',
+                'createdAt'
+            ]),
+            createQuery<SyncReportItem>('reconcile', [
                 'id',
                 'kind',
                 'musicId',

@@ -78,6 +78,8 @@ export function getMusic(id: string) {
         query: wrapper('query Music($id: ID!)', createQuery<Music>('music(id: $id)', [
             'id',
             'name',
+            'recordingTitle',
+            'titleOverride',
             'filePath',
             'codec',
             'bitrate',
@@ -90,6 +92,8 @@ export function getMusic(id: string) {
             'hasMetadataOverride',
             'artistDisplayName',
             createQuery('artistCredits', artistCreditFields),
+            createQuery('recordingArtistCredits', artistCreditFields),
+            'hasReleaseTrackArtistCredits',
             createQuery<Artist>('artist', [
                 'id',
                 'name'
@@ -121,6 +125,8 @@ export function getMusic(id: string) {
                 'sampleRate',
                 'duration',
                 'syncStatus',
+                'metadataSyncStatus',
+                'metadataSyncError',
                 'isPreferred',
                 'isSelected',
                 'isPlayable'

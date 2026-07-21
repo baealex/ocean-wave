@@ -14,6 +14,8 @@ const NOW_MS = Date.parse('2026-07-21T09:00:00.000Z');
 const music: Music = {
     id: 'track-1',
     name: 'Midnight Current',
+    recordingTitle: 'Midnight Current',
+    titleOverride: null,
     duration: 245,
     codec: 'FLAC',
     bitrate: 1_411,
@@ -44,6 +46,14 @@ const music: Music = {
         creditedName: null,
         joinPhrase: ''
     }],
+    recordingArtistCredits: [{
+        artist: { id: 'artist-1', name: 'Ocean Signals' },
+        role: 'PRIMARY',
+        position: 0,
+        creditedName: null,
+        joinPhrase: ''
+    }],
+    hasReleaseTrackArtistCredits: false,
     artist: {
         id: 'artist-1',
         name: 'Ocean Signals',
