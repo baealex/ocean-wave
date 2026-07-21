@@ -42,6 +42,18 @@ const mocks = vi.hoisted(() => ({
         receivedAtMs: Date.parse('2026-07-20T00:00:00.000Z')
     },
     endpointId: 'target-tab' as string | null,
+    sessionMutationFence: {
+        expectedPlaybackSessionRevision: 3,
+        registrationGeneration: 1,
+        registrationProof: 'proof-target-tab',
+        requestingEndpointId: 'target-tab'
+    } as null | {
+        expectedPlaybackSessionRevision: number;
+        registrationGeneration: number;
+        registrationProof: string;
+        requestingEndpointId: string;
+    },
+    sessionPendingReport: false,
     sessionQuiesce: vi.fn().mockReturnValue(true),
     queueQuiesce: vi.fn().mockReturnValue(true),
     queueState: {
@@ -67,6 +79,7 @@ const mocks = vi.hoisted(() => ({
     sessionReport: vi.fn(),
     sessionBufferDisconnectPause: vi.fn(),
     queueRefresh: vi.fn(),
+    queueSave: vi.fn(),
     musicSubscriber: null as null | ((state: { loaded: boolean }) => Promise<void>),
     queueSubscriber: null as null | ((
         state: unknown,
@@ -106,7 +119,12 @@ vi.mock('./playback-session', () => ({
         get endpointId() {
             return mocks.endpointId;
         },
-        hasPendingReport: false,
+        get mutationFence() {
+            return mocks.sessionMutationFence;
+        },
+        get hasPendingReport() {
+            return mocks.sessionPendingReport;
+        },
         report: mocks.sessionReport,
         bufferSocketDisconnectPause: mocks.sessionBufferDisconnectPause,
         refresh: mocks.sessionRefresh,
@@ -124,7 +142,7 @@ vi.mock('./playback-queue', () => ({
             mocks.queueSubscriber = subscriber;
             return vi.fn();
         },
-        save: vi.fn(),
+        save: mocks.queueSave,
         refresh: mocks.queueRefresh,
         quiesceForPlaybackCommandRecovery: mocks.queueQuiesce
     }
@@ -264,6 +282,13 @@ describe('queue playback command adapter', () => {
         queueStore.lastCheckpointPlayedMs = 0;
         beginPlaybackCommandBarrier('queue-adapter-test');
         mocks.endpointId = 'target-tab';
+        mocks.sessionMutationFence = {
+            expectedPlaybackSessionRevision: 3,
+            registrationGeneration: 1,
+            registrationProof: 'proof-target-tab',
+            requestingEndpointId: 'target-tab'
+        };
+        mocks.sessionPendingReport = false;
         mocks.sessionQuiesce.mockReturnValue(true);
         mocks.queueQuiesce.mockReturnValue(true);
         mocks.audio.playWithResult.mockResolvedValue(undefined);
@@ -339,6 +364,27 @@ describe('queue playback command adapter', () => {
             code: 'TARGET_STATE_MISMATCH',
             retryable: true
         }));
+    });
+
+    it('blocks personal sessions until playback authority is initialized and idle', () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        mocks.sessionMutationFence = null;
+
+        expect(queueStore.getPersonalListeningSessionStartBlocker())
+            .toBe('playback-sync');
+
+        mocks.sessionMutationFence = {
+            expectedPlaybackSessionRevision: 3,
+            registrationGeneration: 1,
+            registrationProof: 'proof-target-tab',
+            requestingEndpointId: 'target-tab'
+        };
+        mocks.sessionPendingReport = true;
+        expect(queueStore.getPersonalListeningSessionStartBlocker())
+            .toBe('playback-sync');
+
+        mocks.sessionPendingReport = false;
+        expect(queueStore.getPersonalListeningSessionStartBlocker()).toBeNull();
     });
 
     it('plays, pauses, seeks, and switches queue items through resolved transitions', async () => {
@@ -542,6 +588,70 @@ describe('queue playback command adapter', () => {
             progress: 0,
             isPlaying: false
         });
+    });
+
+    it('replays and publishes a natural track end after a failed session request', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const commandKey = 'personal-listening-session-test';
+        vi.useFakeTimers();
+
+        try {
+            beginPlaybackCommandBarrier(commandKey);
+            mocks.audioEventHandler?.onEnded();
+            expect(queueStore.state.currentTrackId).toBe('1');
+
+            endPlaybackCommandBarrier(commandKey);
+            queueStore.settlePersonalListeningSessionPlaybackBarrier('failed');
+            await vi.advanceTimersByTimeAsync(1_000);
+
+            expect(queueStore.state.currentTrackId).toBe('2');
+            expect(mocks.audio.play).toHaveBeenCalled();
+            expect(mocks.queueSave).toHaveBeenCalledOnce();
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+        }
+    });
+
+    it('replays a conflict track end without overwriting the adopted queue', async () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const commandKey = 'personal-listening-session-test';
+        vi.useFakeTimers();
+
+        try {
+            beginPlaybackCommandBarrier(commandKey);
+            mocks.audioEventHandler?.onEnded();
+            endPlaybackCommandBarrier(commandKey);
+            queueStore.settlePersonalListeningSessionPlaybackBarrier('conflict');
+            await vi.advanceTimersByTimeAsync(5_000);
+
+            expect(queueStore.state.currentTrackId).toBe('2');
+            expect(mocks.audio.play).toHaveBeenCalled();
+            expect(mocks.queueSave).not.toHaveBeenCalled();
+
+            queueStore.next();
+            await vi.advanceTimersByTimeAsync(5_000);
+            expect(mocks.queueSave).not.toHaveBeenCalled();
+        } finally {
+            vi.clearAllTimers();
+            vi.useRealTimers();
+            await queueStore.activatePersonalListeningSession(
+                handoffSnapshot.queue
+            );
+        }
+    });
+
+    it('discards a deferred track end when the personal session replaces the queue', () => {
+        endPlaybackCommandBarrier('queue-adapter-test');
+        const commandKey = 'personal-listening-session-test';
+        beginPlaybackCommandBarrier(commandKey);
+
+        mocks.audioEventHandler?.onEnded();
+        endPlaybackCommandBarrier(commandKey);
+        queueStore.settlePersonalListeningSessionPlaybackBarrier('accepted');
+
+        expect(queueStore.state.currentTrackId).toBe('1');
+        expect(mocks.audio.play).not.toHaveBeenCalled();
     });
 
     it('blocks delayed audio events from claiming or mixing during a controller command', () => {

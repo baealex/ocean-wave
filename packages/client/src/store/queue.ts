@@ -15,6 +15,7 @@ import {
     savePlaybackCheckpoint
 } from '~/modules/playback-checkpoint-store';
 import {
+    getPlaybackCommandBarrierKey,
     isLocalPlaybackMutationBarrierActive,
     isPlaybackCommandBarrierActive,
     isPlaybackCommandExecutionBarrierActive,
@@ -27,6 +28,7 @@ import {
     type PlaybackSessionEndReason,
     PlaybackSessionTracker
 } from '~/modules/playback-session';
+import { PERSONAL_LISTENING_SESSION_COMMAND_PREFIX } from '~/modules/personal-listening-session';
 import { getNextSelectedIndexAfterRemovingCurrent } from '~/modules/queue-selection';
 import {
     GENERAL_PLAYBACK_QUEUE_CONTEXT,
@@ -83,6 +85,18 @@ interface QueueStoreState {
     sourceItems: string[];
     context: PlaybackQueueContext;
 }
+
+export type PersonalListeningSessionStartBlocker =
+    | 'library-loading'
+    | 'playback-sync'
+    | 'playback-transition'
+    | 'queue-sync'
+    | 'remote-playback';
+
+export type PersonalListeningSessionBarrierSettlement =
+    | 'accepted'
+    | 'conflict'
+    | 'failed';
 
 const getMusic = (id: string) => {
     const musicMap = musicStore.state.musicMap;
@@ -153,6 +167,8 @@ class QueueStore extends BaseStore<QueueStoreState> {
     private handoffPlaybackSessionId: string | null = null;
     private audioBuffering = false;
     private pageUnloading = false;
+    private deferredPersonalListeningSessionEnd = false;
+    private personalListeningSessionQueueDiverged = false;
 
     constructor() {
         super();
@@ -263,46 +279,15 @@ class QueueStore extends BaseStore<QueueStoreState> {
                 this.reportSharedPlaybackState('stopped');
             },
             onEnded: () => {
-                if (this.handoffAudioMode || this.pageUnloading) return;
-                if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
-                if (this.state.selected === null) return;
-
-                if (this.state.repeatMode === 'one') {
-                    this.commitPlaybackEvent('queue-repeat-one', 'ended');
-                    this.select(this.state.selected);
-                    return;
-                }
-                if (this.state.repeatMode === 'all') {
-                    this.commitPlaybackEvent('queue-track-change', 'ended');
-                    this.select((this.state.selected + 1) % this.state.items.length);
-                    this.audioChannel.play();
-                    return;
-                }
-                if (this.state.repeatMode === 'none') {
-                    if (this.state.selected + 1 < this.state.items.length) {
-                        this.commitPlaybackEvent('queue-track-change', 'ended');
-                        this.select(this.state.selected + 1);
-                        this.audioChannel.play();
-                    } else {
-                        this.commitPlaybackEvent('queue-ended', 'ended');
-                        const duration = this.state.currentTrackId
-                            ? getMusic(this.state.currentTrackId)?.duration
-                            : undefined;
-                        if (duration !== undefined) {
-                            this.set({
-                                currentTime: duration,
-                                progress: 100,
-                                isPlaying: false
-                            });
-                        }
-                        this.audioChannel.stop();
-                        this.set({
-                            currentTime: 0,
-                            progress: 0,
-                            isPlaying: false
-                        });
+                if (isLocalPlaybackMutationBarrierActive()) {
+                    const commandKey = getPlaybackCommandBarrierKey();
+                    if (commandKey?.startsWith(PERSONAL_LISTENING_SESSION_COMMAND_PREFIX)) {
+                        this.deferredPersonalListeningSessionEnd = true;
                     }
+                    return;
                 }
+
+                this.handlePlaybackEnded();
             },
             onCrossfadeStart: () => {
                 const now = Date.now();
@@ -477,6 +462,53 @@ class QueueStore extends BaseStore<QueueStoreState> {
         window.addEventListener('pagehide', this.handlePageHide);
         window.addEventListener('pageshow', this.handlePageShow);
         document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    }
+
+    private handlePlaybackEnded() {
+        if (
+            this.handoffAudioMode
+            || this.pageUnloading
+            || remotePlaybackOwnsAudio()
+            || this.state.selected === null
+        ) {
+            return;
+        }
+
+        if (this.state.repeatMode === 'one') {
+            this.commitPlaybackEvent('queue-repeat-one', 'ended');
+            this.select(this.state.selected);
+            return;
+        }
+        if (this.state.repeatMode === 'all') {
+            this.commitPlaybackEvent('queue-track-change', 'ended');
+            this.select((this.state.selected + 1) % this.state.items.length);
+            this.audioChannel.play();
+            return;
+        }
+        if (this.state.selected + 1 < this.state.items.length) {
+            this.commitPlaybackEvent('queue-track-change', 'ended');
+            this.select(this.state.selected + 1);
+            this.audioChannel.play();
+            return;
+        }
+
+        this.commitPlaybackEvent('queue-ended', 'ended');
+        const duration = this.state.currentTrackId
+            ? getMusic(this.state.currentTrackId)?.duration
+            : undefined;
+        if (duration !== undefined) {
+            this.set({
+                currentTime: duration,
+                progress: 100,
+                isPlaying: false
+            });
+        }
+        this.audioChannel.stop();
+        this.set({
+            currentTime: 0,
+            progress: 0,
+            isPlaying: false
+        });
     }
 
     commitPlaybackEvent(
@@ -694,6 +726,83 @@ class QueueStore extends BaseStore<QueueStoreState> {
         if (isLocalPlaybackMutationBarrierActive() || remotePlaybackOwnsAudio()) return;
         if (this.state.selected !== null) {
             this.audioChannel.play();
+        }
+    }
+
+    getPersonalListeningSessionStartBlocker(): PersonalListeningSessionStartBlocker | null {
+        if (
+            isPlaybackCommandBarrierActive()
+            || isPlaybackControllerCommandBarrierActive()
+        ) {
+            return 'playback-transition';
+        }
+        if (!this.musicLoaded || this.applyingQueueSnapshot) {
+            return 'library-loading';
+        }
+        if (
+            !playbackSessionStore.mutationFence
+            || playbackSessionStore.hasPendingReport
+        ) {
+            return 'playback-sync';
+        }
+        if (remotePlaybackOwnsAudio()) {
+            return 'remote-playback';
+        }
+        if (
+            !playbackQueueStore.state.initialized
+            || playbackQueueStore.state.loading
+            || playbackQueueStore.hasPendingSave
+            || this.serverQueueSaveTimer
+        ) {
+            return 'queue-sync';
+        }
+
+        return null;
+    }
+
+    settlePersonalListeningSessionPlaybackBarrier(
+        settlement: PersonalListeningSessionBarrierSettlement
+    ) {
+        const replayEnded = this.deferredPersonalListeningSessionEnd
+            && settlement !== 'accepted';
+        this.deferredPersonalListeningSessionEnd = false;
+
+        if (settlement === 'conflict') {
+            this.personalListeningSessionQueueDiverged = true;
+            if (this.serverQueueSaveTimer) {
+                clearTimeout(this.serverQueueSaveTimer);
+                this.serverQueueSaveTimer = null;
+            }
+        }
+
+        if (replayEnded) {
+            this.handlePlaybackEnded();
+        }
+    }
+
+    async activatePersonalListeningSession(
+        snapshot: PlaybackQueueSnapshot
+    ): Promise<'playing' | 'ready' | 'blocked'> {
+        if (this.getPersonalListeningSessionStartBlocker()) {
+            this.personalListeningSessionQueueDiverged = true;
+            return 'blocked';
+        }
+
+        if (this.state.isPlaying) {
+            this.audioChannel.pause();
+        }
+
+        await this.restoreServerQueue(snapshot, true);
+
+        if (this.state.selected === null) {
+            return 'ready';
+        }
+
+        try {
+            await this.audioChannel.playWithResult();
+            return 'playing';
+        } catch {
+            return 'ready';
         }
     }
 
@@ -1813,6 +1922,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
         if (
             this.musicLoaded
             && !this.applyingQueueSnapshot
+            && !this.personalListeningSessionQueueDiverged
             && !isLocalPlaybackMutationBarrierActive()
             && this.hasServerQueueChange(state, previousState)
         ) {
@@ -2081,7 +2191,11 @@ class QueueStore extends BaseStore<QueueStoreState> {
     }
 
     private saveServerQueue() {
-        if (!this.musicLoaded || this.applyingQueueSnapshot) {
+        if (
+            !this.musicLoaded
+            || this.applyingQueueSnapshot
+            || this.personalListeningSessionQueueDiverged
+        ) {
             return;
         }
 
@@ -2100,6 +2214,7 @@ class QueueStore extends BaseStore<QueueStoreState> {
             return;
         }
 
+        this.personalListeningSessionQueueDiverged = false;
         this.applyingQueueSnapshot = true;
 
         try {

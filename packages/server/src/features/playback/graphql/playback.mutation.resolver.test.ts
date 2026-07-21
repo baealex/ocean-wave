@@ -9,7 +9,9 @@ import {
     type PlaybackEndpointReportAuthorization
 } from '~/socket/playback-endpoints';
 import type { PlaybackSessionReportResult } from '../services/playback-session';
+import type { PersonalListeningSessionResult } from '../services/personal-listening-session';
 import {
+    createPersonalListeningSessionMutationResolver,
     createRenamePlaybackDeviceMutationResolver,
     createReportPlaybackStateMutationResolver,
     createSavePlaybackQueueMutationResolver
@@ -66,6 +68,22 @@ const authorizeReports = (authorized = true) => jest.fn(
         return {
             authorized: true,
             result: await report()
+        };
+    }
+);
+
+const authorizePersonalSessions = (authorized = true) => jest.fn(
+    async (
+        _authorization: PlaybackEndpointReportAuthorization,
+        createSession: () => Promise<PersonalListeningSessionResult>
+    ): Promise<PlaybackEndpointAuthorizedReportResult<PersonalListeningSessionResult>> => {
+        if (!authorized) {
+            return { authorized: false };
+        }
+
+        return {
+            authorized: true,
+            result: await createSession()
         };
     }
 );
@@ -373,5 +391,116 @@ describe('playback queue mutation resolver', () => {
             queue: queueSnapshot
         });
         expect(consoleErrorSpy).toHaveBeenCalledWith(error);
+    });
+
+    it('invalidates the queue after an accepted personal session is created', async () => {
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
+        const createSession = jest.fn().mockResolvedValue({
+            type: 'accepted',
+            queue: queueSnapshot,
+            conflict: null,
+            changed: true,
+            generatedAt: '2026-07-21T00:00:00.000Z',
+            items: [{ musicId: '42', reasonCodes: ['START_TRACK'] }]
+        });
+        const runAuthorized = authorizePersonalSessions();
+        const resolver = createPersonalListeningSessionMutationResolver(
+            createSession,
+            runAuthorized
+        );
+        const sessionInput = {
+            startMusicId: '42',
+            length: 'standard' as const,
+            scope: 'explore' as const,
+            expectedRevision: 1,
+            expectedPlaybackSessionRevision: 4,
+            requestingEndpointId: 'web-tab-1'
+        };
+
+        await expect(resolver(null, {
+            input: {
+                ...sessionInput,
+                registrationGeneration: 3,
+                registrationProof: 'proof-3'
+            },
+            originClientId: 'origin-1'
+        })).resolves.toEqual({
+            type: 'accepted',
+            queue: queueSnapshot,
+            conflict: null,
+            generatedAt: '2026-07-21T00:00:00.000Z',
+            items: [{ musicId: '42', reasonCodes: ['START_TRACK'] }]
+        });
+        expect(createSession).toHaveBeenCalledWith(sessionInput);
+        expect(runAuthorized).toHaveBeenCalledWith({
+            endpointId: 'web-tab-1',
+            registrationGeneration: 3,
+            registrationProof: 'proof-3'
+        }, expect.any(Function));
+        expect(notifySpy).toHaveBeenCalledWith(PLAYBACK_QUEUE_INVALIDATED, {
+            revision: 2,
+            originClientId: 'origin-1'
+        });
+    });
+
+    it('does not invalidate the queue when personal session creation conflicts', async () => {
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
+        const conflict = {
+            reason: 'stale-revision' as const,
+            queue: queueSnapshot
+        };
+        const resolver = createPersonalListeningSessionMutationResolver(
+            jest.fn().mockResolvedValue({
+                type: 'conflict',
+                queue: queueSnapshot,
+                conflict,
+                changed: false,
+                generatedAt: '2026-07-21T00:00:00.000Z',
+                items: [{ musicId: '42', reasonCodes: ['START_TRACK'] }]
+            }),
+            authorizePersonalSessions()
+        );
+
+        await expect(resolver(null, {
+            input: {
+                startMusicId: '42',
+                length: 'short',
+                scope: 'focused',
+                expectedRevision: 1,
+                expectedPlaybackSessionRevision: 4,
+                requestingEndpointId: 'web-tab-1',
+                registrationGeneration: 3,
+                registrationProof: 'proof-3'
+            }
+        })).resolves.toMatchObject({
+            type: 'conflict',
+            queue: queueSnapshot,
+            conflict
+        });
+        expect(notifySpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects personal sessions without current endpoint authority', async () => {
+        const createSession = jest.fn();
+        const resolver = createPersonalListeningSessionMutationResolver(
+            createSession,
+            authorizePersonalSessions(false)
+        );
+
+        await expect(resolver(null, {
+            input: {
+                startMusicId: '42',
+                length: 'short',
+                scope: 'focused',
+                expectedRevision: 1,
+                expectedPlaybackSessionRevision: 4,
+                requestingEndpointId: 'web-tab-1',
+                registrationGeneration: 3,
+                registrationProof: 'stale-proof'
+            }
+        })).rejects.toMatchObject({
+            extensions: { code: 'PLAYBACK_ENDPOINT_REGISTRATION_REQUIRED' }
+        });
+        expect(createSession).not.toHaveBeenCalled();
     });
 });

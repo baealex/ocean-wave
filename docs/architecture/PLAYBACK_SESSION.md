@@ -254,6 +254,59 @@ The Library page owns the compact cross-device continuation surface. It does not
 - Session notifications, queue invalidations, and endpoint-registry invalidations update the surface in place. When an interrupted session stops, the active view becomes a recovery view; when an endpoint expires, its status becomes offline.
 - The surface renders below the sticky Library header, stays compact on small screens, and disappears when there is no active output or usable recovery data.
 
+### Track-started personal listening sessions
+
+The web track action panel can build a playable queue from one owned track
+without external charts, recommendation services, audio embeddings, or random
+sampling. **Start a session** uses the default standard length and exploratory
+range in one action. **Session options** exposes only two choices: short,
+standard, or long length (8, 15, or 25 tracks), and focused or exploratory
+range.
+
+`createPersonalListeningSession` performs candidate selection and the
+revision-guarded full queue replacement inside one database transaction. The
+input includes the start track, length preset, range, and last observed queue
+revision. It also carries the last observed playback-session revision and the
+current registered endpoint authority. The server rejects stale or remote-owned
+playback before changing the queue. The start track is always first. Follow-up
+candidates can be related by artist, album, genre, tag, or a saved Smart View
+that both tracks match. Missing and hated tracks are ineligible. Tracks played
+within the previous seven days and tracks already present in the prior queue are
+skipped. Candidate reads continue in deterministic pages until the requested
+length is available or all related candidates are exhausted. The selector keeps
+identifiers unique, avoids consecutive artists when alternatives exist, allows
+at most two tracks from one artist or album, and returns a shorter session rather
+than filling it with repeated choices.
+
+Every returned item carries stable internal reason codes:
+
+- `START_TRACK`
+- `SAME_ALBUM`
+- `SAME_ARTIST`
+- `SHARED_SMART_VIEW`
+- `SHARED_TAG`
+- `SHARED_GENRE`
+
+The originating client maps the strongest code to short queue copy while the
+returned item order still matches the exact committed queue revision. A later
+queue edit, reload, or revision change removes that temporary explanation
+instead of showing stale reasons. Reason codes are not persisted in the queue
+schema.
+
+If the expected queue revision is stale, the mutation returns the newest
+authoritative queue and does not change playback. The action remains open,
+shows the newest queue size, and retries against that observed revision. A
+conflicted local player cannot publish ordinary queue saves until a retry or
+authoritative restore aligns it with the server queue. A
+successful result is adopted without an extra queue save, then the local player
+loads the committed snapshot and attempts playback. Browser autoplay rejection
+leaves the session ready and paused rather than rolling back the server queue.
+The action waits for endpoint registration plus the initial playback and queue
+reads, and its request has a bounded timeout. Explicit playback changes are
+barred during that request; if the current track ends naturally, the transition
+is replayed after an error or conflict and discarded only when the accepted
+session replaces the queue.
+
 ## 10. Failure and Security Rules
 
 - GraphQL and Socket.IO use the existing installation authentication boundary.

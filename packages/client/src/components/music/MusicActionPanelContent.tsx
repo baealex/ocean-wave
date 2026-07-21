@@ -5,13 +5,16 @@ import { Image, PanelContent } from '~/components/shared';
 import { PanelHeaderAction, panelContentClass } from '~/components/shared/PanelContent';
 import { PlaylistPanelContent } from '~/components/playlist';
 import MusicTagPanelContent from './MusicTagPanelContent';
+import PersonalListeningSessionOptionsPanelContent from './PersonalListeningSessionOptionsPanelContent';
 
 import * as Icon from '~/icon';
 
 import { panel } from '~/modules/panel';
 import { toast } from '~/modules/toast';
 import { makePlayTime } from '~/modules/time';
+import { DEFAULT_PERSONAL_LISTENING_SESSION_OPTIONS } from '~/modules/personal-listening-session';
 import { MusicListener, PlaylistListener } from '~/socket';
+import { usePersonalListeningSessionStarter } from '~/hooks/usePersonalListeningSessionStarter';
 
 import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
@@ -29,6 +32,7 @@ export default function MusicActionPanelContent({
 }: MusicActionPanelContentProps) {
     const navigate = useNavigate();
     const [{ musicMap }] = useStore(musicStore);
+    const sessionStarter = usePersonalListeningSessionStarter();
 
     const music = musicMap.get(id);
 
@@ -87,6 +91,39 @@ export default function MusicActionPanelContent({
                     filled: music.isLiked,
                     active: music.isLiked,
                     onClick: () => MusicListener.like(music.id, !music.isLiked)
+                },
+                {
+                    id: 'start-session',
+                    icon: <Icon.ListMusic />,
+                    text: sessionStarter.starting
+                        ? 'Starting session…'
+                        : sessionStarter.message ? 'Retry session' : 'Start a session',
+                    description: sessionStarter.message
+                        ?? 'Play a balanced session related to this track.',
+                    descriptionRole: sessionStarter.message ? 'alert' : undefined,
+                    disabled: sessionStarter.starting,
+                    onClick: () => void sessionStarter.start({
+                        ...DEFAULT_PERSONAL_LISTENING_SESSION_OPTIONS,
+                        startMusicId: music.id
+                    })
+                },
+                {
+                    id: 'session-options',
+                    icon: <Icon.Shuffle />,
+                    text: 'Session options',
+                    description: 'Choose the length and how closely tracks should match.',
+                    disabled: sessionStarter.starting,
+                    onClick: () => {
+                        panel.open({
+                            title: 'Session options',
+                            content: (
+                                <PersonalListeningSessionOptionsPanelContent
+                                    musicName={music.name}
+                                    startMusicId={music.id}
+                                />
+                            )
+                        });
+                    }
                 },
                 {
                     icon: <Icon.Play />,

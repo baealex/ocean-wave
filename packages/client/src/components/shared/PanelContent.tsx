@@ -9,6 +9,8 @@ interface PanelContentProps {
         icon: ReactNode;
         text: string;
         description?: string;
+        descriptionRole?: 'alert' | 'status';
+        disabled?: boolean;
         filled?: boolean;
         active?: boolean;
         onClick: () => void;
@@ -101,17 +103,21 @@ export default function PanelContent({ header, items, footer }: PanelContentProp
             )}
             {items && (
                 <div className="m-0 flex list-none flex-col border-b border-[var(--b-color-border)] py-4">
-                    {items.map(({ id, icon, text, description, filled, active, onClick }) => (
+                    {items.map(({ id, icon, text, description, descriptionRole, disabled, filled, active, onClick }) => (
                         <button
                             key={id ?? text}
                             className={panelActionClass({ active, filled })}
                             aria-pressed={active}
+                            disabled={disabled}
                             onClick={onClick}>
                             {icon}
                             <span className="flex min-w-0 flex-col gap-1">
                                 <span className="min-w-0 truncate text-base font-medium">{text}</span>
                                 {description && (
-                                    <span className="text-sm leading-snug text-[var(--b-color-text-muted)]">
+                                    <span
+                                        className="text-sm leading-snug text-[var(--b-color-text-muted)]"
+                                        role={descriptionRole}
+                                        aria-live={descriptionRole ? 'assertive' : undefined}>
                                         {description}
                                     </span>
                                 )}

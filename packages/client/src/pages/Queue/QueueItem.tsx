@@ -32,6 +32,7 @@ interface QueueItemProps {
     isSelectMode: boolean;
     isSelected: boolean;
     playbackDisabled?: boolean;
+    sessionReason?: string | null;
     onSelect: () => void;
     onClick: () => void;
     onOpenActions: () => void;
@@ -48,6 +49,7 @@ export default function QueueItem({
     isSelectMode,
     isSelected,
     playbackDisabled = false,
+    sessionReason = null,
     onSelect,
     onClick,
     onOpenActions,
@@ -136,6 +138,7 @@ export default function QueueItem({
 
                     <Text as="span" variant="secondary" size="sm" className="truncate">
                         {music.artist.name}
+                        {sessionReason ? ` · ${sessionReason}` : ''}
                     </Text>
                 </div>
             </button>

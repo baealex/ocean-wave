@@ -19,6 +19,26 @@ export const playbackType = gql`
         queue
     }
 
+    enum PersonalListeningSessionLength {
+        short
+        standard
+        long
+    }
+
+    enum PersonalListeningSessionScope {
+        focused
+        explore
+    }
+
+    enum PersonalListeningSessionReasonCode {
+        START_TRACK
+        SAME_ALBUM
+        SAME_ARTIST
+        SHARED_SMART_VIEW
+        SHARED_TAG
+        SHARED_GENRE
+    }
+
     type PlaybackSession {
         id: ID!
         state: PlaybackState!
@@ -66,6 +86,19 @@ export const playbackType = gql`
         type: String!
         queue: PlaybackQueue!
         conflict: PlaybackQueueConflict
+    }
+
+    type PersonalListeningSessionItem {
+        musicId: ID!
+        reasonCodes: [PersonalListeningSessionReasonCode!]!
+    }
+
+    type PersonalListeningSessionResult {
+        type: String!
+        queue: PlaybackQueue!
+        conflict: PlaybackQueueConflict
+        items: [PersonalListeningSessionItem!]!
+        generatedAt: String!
     }
 
     type PlaybackEndpoint {
@@ -136,6 +169,17 @@ export const playbackType = gql`
         expectedRevision: Int!
     }
 
+    input CreatePersonalListeningSessionInput {
+        startMusicId: ID!
+        length: PersonalListeningSessionLength!
+        scope: PersonalListeningSessionScope!
+        expectedRevision: Int!
+        expectedPlaybackSessionRevision: Int!
+        requestingEndpointId: ID!
+        registrationGeneration: Int!
+        registrationProof: String!
+    }
+
     input RenamePlaybackDeviceInput {
         deviceId: ID!
         name: String!
@@ -160,6 +204,10 @@ export const playbackMutation = gql`
             input: SavePlaybackQueueInput!
             originClientId: String
         ): PlaybackQueueSaveResult!
+        createPersonalListeningSession(
+            input: CreatePersonalListeningSessionInput!
+            originClientId: String
+        ): PersonalListeningSessionResult!
         renamePlaybackDevice(
             input: RenamePlaybackDeviceInput!
             originClientId: String

@@ -19,6 +19,10 @@ import * as Icon from '~/icon';
 import type { Music } from '~/models/type';
 import { panel } from '~/modules/panel';
 import {
+    getPersonalListeningSessionReasonLabel,
+    personalListeningSessionMatchesQueue
+} from '~/modules/personal-listening-session';
+import {
     buildQueueVirtualLayout,
     findQueueDropSlot,
     findQueueTrackRow,
@@ -35,6 +39,8 @@ import { toast } from '~/modules/toast';
 import { PlaylistListener } from '~/socket';
 import { useAppStore as useStore } from '~/store/base-store';
 import { musicStore } from '~/store/music';
+import { personalListeningSessionStore } from '~/store/personal-listening-session';
+import { playbackQueueStore } from '~/store/playback-queue';
 import { queueStore } from '~/store/queue';
 import type { QueueTone } from './Queue/QueueDndItem';
 import QueueItem from './Queue/QueueItem';
@@ -89,6 +95,8 @@ export default function Queue() {
     const [items] = useStoreValue(queueStore, 'items');
     const [selected] = useStoreValue(queueStore, 'selected');
     const [{ musicMap }] = useStore(musicStore);
+    const [{ active: personalSession }] = useStore(personalListeningSessionStore);
+    const [{ snapshot: playbackQueue }] = useStore(playbackQueueStore);
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
@@ -131,6 +139,21 @@ export default function Queue() {
 
         return findQueueTrackRow(virtualLayout.rows, selected);
     }, [selected, virtualLayout.rows]);
+    const personalSessionReasons = useMemo(() => {
+        if (!personalSession || !personalListeningSessionMatchesQueue({
+            items: personalSession.items,
+            musicIds: items,
+            queueRevision: personalSession.queueRevision,
+            revision: playbackQueue?.revision ?? null
+        })) {
+            return new Map<string, string>();
+        }
+
+        return new Map(personalSession.items.flatMap((item) => {
+            const label = getPersonalListeningSessionReasonLabel(item.reasonCodes);
+            return label ? [[item.musicId, label] as const] : [];
+        }));
+    }, [items, personalSession, playbackQueue?.revision]);
     const dragIndicatorTop = dragState
         ? getQueueDropIndicatorTop(virtualLayout.rows, dragState.dropSlot)
         : null;
@@ -470,6 +493,7 @@ export default function Queue() {
             className: options?.className,
             isSelected: selectedItems.includes(id),
             playbackDisabled: Boolean(remotePlaybackOwnership),
+            sessionReason: personalSessionReasons.get(id),
             onSelect: () => toggleSelectedItem(id),
             onClick: () => {
                 if (!remotePlaybackOwnership) {

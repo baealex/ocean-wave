@@ -1,4 +1,5 @@
 export { default as MusicActionPanelContent } from './MusicActionPanelContent';
+export { default as PersonalListeningSessionOptionsPanelContent } from './PersonalListeningSessionOptionsPanelContent';
 export { default as LibraryPlaybackSurface } from './LibraryPlaybackSurface';
 export { default as LibraryRediscoverySections } from './LibraryRediscoverySections';
 export { default as MusicListItem } from './MusicListItem';

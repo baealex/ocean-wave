@@ -28,6 +28,12 @@ import {
     savePlaybackQueue,
     type SavePlaybackQueueInput
 } from '../services/playback-queue';
+import {
+    type CreatePersonalListeningSessionInput,
+    createPersonalListeningSession,
+    isPersonalListeningSessionServiceError,
+    type PersonalListeningSessionResult
+} from '../services/personal-listening-session';
 
 class PlaybackGraphQLError extends Error {
     extensions: { code: string };
@@ -40,6 +46,10 @@ class PlaybackGraphQLError extends Error {
 }
 
 const toGraphQLError = (error: unknown) => {
+    if (isPersonalListeningSessionServiceError(error)) {
+        return new PlaybackGraphQLError(error.message, error.code);
+    }
+
     if (isPlaybackDeviceServiceError(error)) {
         return new PlaybackGraphQLError(error.message, error.code);
     }
@@ -67,6 +77,11 @@ type RunAuthorizedPlaybackReport = (
     authorization: PlaybackEndpointReportAuthorization,
     report: () => Promise<PlaybackSessionReportResult>
 ) => Promise<PlaybackEndpointAuthorizedReportResult<PlaybackSessionReportResult>>;
+
+type RunAuthorizedPersonalListeningSession = (
+    authorization: PlaybackEndpointReportAuthorization,
+    createSession: () => Promise<PersonalListeningSessionResult>
+) => Promise<PlaybackEndpointAuthorizedReportResult<PersonalListeningSessionResult>>;
 
 export const createReportPlaybackStateMutationResolver = (
     report = reportPlaybackState,
@@ -173,6 +188,68 @@ export const createSavePlaybackQueueMutationResolver = (
     };
 };
 
+export const createPersonalListeningSessionMutationResolver = (
+    createSession = createPersonalListeningSession,
+    runAuthorized: RunAuthorizedPersonalListeningSession = (
+        authorization,
+        operation
+    ) => playbackEndpointRegistry.runAuthorizedReport(authorization, operation)
+) => {
+    return async (_: unknown, {
+        input,
+        originClientId
+    }: {
+        input: CreatePersonalListeningSessionInput & {
+            registrationGeneration: number;
+            registrationProof: string;
+        };
+        originClientId?: string | null;
+    }) => {
+        try {
+            const {
+                registrationGeneration,
+                registrationProof,
+                ...sessionInput
+            } = input;
+            const authorized = await runAuthorized({
+                endpointId: sessionInput.requestingEndpointId.trim(),
+                registrationGeneration,
+                registrationProof
+            }, () => createSession(sessionInput));
+
+            if (!authorized.authorized) {
+                throw new PlaybackGraphQLError(
+                    'A current playback endpoint registration is required.',
+                    'PLAYBACK_ENDPOINT_REGISTRATION_REQUIRED'
+                );
+            }
+
+            const result = authorized.result;
+
+            if (result.type === 'accepted') {
+                notifySafely(() => {
+                    connectors.notify(
+                        PLAYBACK_QUEUE_INVALIDATED,
+                        withOriginClientId({
+                            revision: result.queue.revision
+                        }, originClientId)
+                    );
+                });
+            }
+
+            return {
+                type: result.type,
+                queue: result.queue,
+                conflict: result.conflict,
+                items: result.items,
+                generatedAt: result.generatedAt
+            };
+        } catch (error) {
+            throw toGraphQLError(error);
+        }
+    };
+};
+
 export const createRenamePlaybackDeviceMutationResolver = (
     rename = renamePlaybackDevice
 ) => {
@@ -211,5 +288,6 @@ type PlaybackMutationResolvers = NonNullable<IResolvers['Mutation']>;
 export const playbackMutationResolvers: PlaybackMutationResolvers = {
     reportPlaybackState: createReportPlaybackStateMutationResolver(),
     savePlaybackQueue: createSavePlaybackQueueMutationResolver(),
+    createPersonalListeningSession: createPersonalListeningSessionMutationResolver(),
     renamePlaybackDevice: createRenamePlaybackDeviceMutationResolver()
 };
