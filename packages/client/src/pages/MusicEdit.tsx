@@ -1,308 +1,54 @@
 import axios from 'axios';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-    useEffect,
-    useState,
-    type FormEvent,
-    type ReactNode
-} from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { getMusic } from '~/api/library';
+import {
+    getMusicMetadataOperations,
+    groupMusicAsAlternateFile,
+    linkMusicRecordings,
+    previewMusicMetadataUpdate,
+    recoverMusicMetadataOperation,
+    restoreMusicArtwork,
+    retryMusicMetadataOperation,
+    setPreferredMusicFile,
+    ungroupMusicFile,
+    unlinkMusicRecording,
+    updateMusicMetadata,
+    uploadMusicArtwork,
+    type MusicMetadataOperation,
+    type MusicMetadataPreview
+} from '~/api/music';
+import { queryKeys } from '~/api/query-keys';
+import MusicMetadataFields from '~/components/music/MusicMetadataFields';
+import MusicMetadataOperationNotice, {
+    metadataOperationNeedsAttention
+} from '~/components/music/MusicMetadataOperationNotice';
+import MusicMetadataPreviewPanel from '~/components/music/MusicMetadataPreviewPanel';
+import MusicVersionManager from '~/components/music/MusicVersionManager';
 import {
     Badge,
     Button,
     Image,
-    Input,
     Loading,
     StateMessage,
     Surface,
     Text
 } from '~/components/shared';
-import { getMusic } from '~/api/library';
-import {
-    groupMusicAsAlternateFile,
-    linkMusicRecordings,
-    restoreMusicArtwork,
-    setPreferredMusicFile,
-    ungroupMusicFile,
-    unlinkMusicRecording,
-    updateMusicMetadata,
-    uploadMusicArtwork
-} from '~/api/music';
-import { queryKeys } from '~/api/query-keys';
 import { Music, Pencil } from '~/icon';
-import type {
-    ArtistCreditRole,
-    Music as MusicModel,
-    MusicGroupingCandidate
-} from '~/models/type';
+import type { MusicGroupingCandidate } from '~/models/type';
+import {
+    musicNeedsMetadataRepair,
+    toMusicMetadataEditorValues,
+    toUpdateMusicMetadataInput,
+    type MusicMetadataEditorValues
+} from '~/modules/music-metadata-editor';
 import { toast } from '~/modules/toast';
 import { musicStore } from '~/store/music';
-import MusicVersionManager from '~/components/music/MusicVersionManager';
 
 const MAX_ARTWORK_SIZE = 10 * 1024 * 1024;
 const SUPPORTED_ARTWORK_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-
-interface EditorValues {
-    title: string;
-    artistCredits: CreditEditorValue[];
-    album: string;
-    albumArtistCredits: CreditEditorValue[];
-    publishedYear: string;
-    trackNumber: string;
-    genres: string;
-}
-
-interface CreditEditorValue {
-    name: string;
-    role: ArtistCreditRole;
-    creditedName: string;
-    joinPhrase: string;
-}
-
-const CREDIT_ROLE_OPTIONS: Array<{ value: ArtistCreditRole; label: string }> = [
-    { value: 'PRIMARY', label: 'Primary' },
-    { value: 'FEATURED', label: 'Featured' },
-    { value: 'REMIXER', label: 'Remixer' },
-    { value: 'PERFORMER', label: 'Performer' },
-    { value: 'COMPOSER', label: 'Composer' },
-    { value: 'CONDUCTOR', label: 'Conductor' },
-    { value: 'UNKNOWN', label: 'Unknown' }
-];
-
-const toCreditEditorValues = (
-    credits: MusicModel['artistCredits'],
-    fallbackName: string
-): CreditEditorValue[] => {
-    if (!credits.length) {
-        return [{
-            name: fallbackName,
-            role: 'PRIMARY',
-            creditedName: '',
-            joinPhrase: ''
-        }];
-    }
-
-    return credits.map(credit => ({
-        name: credit.artist.name,
-        role: credit.role,
-        creditedName: credit.creditedName ?? '',
-        joinPhrase: credit.joinPhrase
-    }));
-};
-
-const toEditorValues = (music: MusicModel): EditorValues => ({
-    title: music.name,
-    artistCredits: toCreditEditorValues(music.artistCredits, music.artist.name),
-    album: music.album.name,
-    albumArtistCredits: toCreditEditorValues(
-        music.album.artistCredits,
-        music.album.artist.name
-    ),
-    publishedYear: music.album.publishedYear,
-    trackNumber: music.trackNumber?.toString() ?? '',
-    genres: music.genres.map((genre) => genre.name).join(', ')
-});
-
-const Field = ({
-    label,
-    hint,
-    children
-}: {
-    label: string;
-    hint?: string;
-    children: ReactNode;
-}) => (
-    <label className="grid min-w-0 content-start gap-2">
-        <span className="text-xs font-semibold text-[var(--b-color-text-secondary)]">{label}</span>
-        {children}
-        {hint && (
-            <span className="text-xs leading-relaxed text-[var(--b-color-text-muted)]">{hint}</span>
-        )}
-    </label>
-);
-
-const ArtistCreditEditor = ({
-    label,
-    credits,
-    disabled,
-    featuredByDefault,
-    onChange
-}: {
-    label: string;
-    credits: CreditEditorValue[];
-    disabled: boolean;
-    featuredByDefault?: boolean;
-    onChange: (credits: CreditEditorValue[]) => void;
-}) => {
-    const updateCredit = <Key extends keyof CreditEditorValue>(
-        index: number,
-        key: Key,
-        value: CreditEditorValue[Key]
-    ) => {
-        onChange(credits.map((credit, creditIndex) => (
-            creditIndex === index
-                ? { ...credit, [key]: value }
-                : credit
-        )));
-    };
-
-    const addCredit = () => {
-        const nextCredits = credits.map((credit, index) => (
-            index === credits.length - 1 && !credit.joinPhrase
-                ? {
-                    ...credit,
-                    joinPhrase: featuredByDefault ? ' feat. ' : ' & '
-                }
-                : credit
-        ));
-
-        onChange([
-            ...nextCredits,
-            {
-                name: '',
-                role: featuredByDefault ? 'FEATURED' : 'PRIMARY',
-                creditedName: '',
-                joinPhrase: ''
-            }
-        ]);
-    };
-
-    const removeCredit = (index: number) => {
-        const nextCredits = credits.filter((_, creditIndex) => creditIndex !== index);
-
-        if (nextCredits.length) {
-            nextCredits[nextCredits.length - 1] = {
-                ...nextCredits[nextCredits.length - 1],
-                joinPhrase: ''
-            };
-        }
-
-        onChange(nextCredits);
-    };
-
-    const moveCredit = (index: number, offset: -1 | 1) => {
-        const targetIndex = index + offset;
-
-        if (targetIndex < 0 || targetIndex >= credits.length) return;
-
-        const joinPhrases = credits.map(credit => credit.joinPhrase);
-        const nextCredits = [...credits];
-        [nextCredits[index], nextCredits[targetIndex]] = [
-            nextCredits[targetIndex],
-            nextCredits[index]
-        ];
-        onChange(nextCredits.map((credit, creditIndex) => ({
-            ...credit,
-            joinPhrase: joinPhrases[creditIndex]
-        })));
-    };
-
-    return (
-        <section className="grid gap-3 sm:col-span-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                    <Text as="h3" size="sm" weight="semibold">{label}</Text>
-                    <Text as="p" variant="muted" size="xs" className="mt-1 leading-relaxed">
-                        Order controls display. “Join after” keeps text such as “ feat. ” or “ &amp; ”.
-                    </Text>
-                </div>
-                <Button
-                    type="button"
-                    size="xs"
-                    disabled={disabled}
-                    onClick={addCredit}>
-                    Add artist
-                </Button>
-            </div>
-            <div className="grid gap-3">
-                {credits.map((credit, index) => (
-                    <div
-                        key={`${label}-${index}`}
-                        className="grid gap-3 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] p-3 md:grid-cols-[minmax(0,1.5fr)_minmax(140px,0.75fr)_minmax(0,1fr)_minmax(110px,0.65fr)_minmax(128px,auto)]">
-                        <Field label={`Artist ${index + 1}`}>
-                            <Input
-                                required
-                                value={credit.name}
-                                disabled={disabled}
-                                onChange={(event) => updateCredit(index, 'name', event.target.value)}
-                            />
-                        </Field>
-                        <Field label="Role">
-                            <select
-                                value={credit.role}
-                                disabled={disabled}
-                                aria-label={`${label} artist ${index + 1} role`}
-                                onChange={(event) => updateCredit(
-                                    index,
-                                    'role',
-                                    event.target.value as ArtistCreditRole
-                                )}
-                                className="min-h-10 w-full rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-input)] px-3 text-sm text-[var(--b-color-text)] focus-visible:border-[var(--b-color-focus)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--b-color-focus-ring)] disabled:opacity-40">
-                                {CREDIT_ROLE_OPTIONS.map(option => (
-                                    <option key={option.value} value={option.value}>
-                                        {option.label}
-                                    </option>
-                                ))}
-                            </select>
-                        </Field>
-                        <Field label="Credited as" hint="Optional display alias.">
-                            <Input
-                                value={credit.creditedName}
-                                disabled={disabled}
-                                placeholder={credit.name || 'Artist name'}
-                                onChange={(event) => updateCredit(
-                                    index,
-                                    'creditedName',
-                                    event.target.value
-                                )}
-                            />
-                        </Field>
-                        <Field label="Join after">
-                            <Input
-                                value={credit.joinPhrase}
-                                disabled={disabled}
-                                placeholder={index === credits.length - 1 ? 'None' : ' & '}
-                                onChange={(event) => updateCredit(
-                                    index,
-                                    'joinPhrase',
-                                    event.target.value
-                                )}
-                            />
-                        </Field>
-                        <div className="flex flex-wrap items-end gap-1">
-                            <Button
-                                type="button"
-                                size="xs"
-                                disabled={disabled || index === 0}
-                                aria-label={`Move ${label.toLowerCase()} artist ${index + 1} up`}
-                                onClick={() => moveCredit(index, -1)}>
-                                ↑
-                            </Button>
-                            <Button
-                                type="button"
-                                size="xs"
-                                disabled={disabled || index === credits.length - 1}
-                                aria-label={`Move ${label.toLowerCase()} artist ${index + 1} down`}
-                                onClick={() => moveCredit(index, 1)}>
-                                ↓
-                            </Button>
-                            <Button
-                                type="button"
-                                size="xs"
-                                variant="danger"
-                                disabled={disabled || credits.length === 1}
-                                aria-label={`Remove ${label.toLowerCase()} artist ${index + 1}`}
-                                onClick={() => removeCredit(index)}>
-                                Remove
-                            </Button>
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </section>
-    );
-};
 
 const getRequestErrorMessage = (error: unknown) => {
     if (axios.isAxiosError<{ message?: string }>(error)) {
@@ -312,17 +58,31 @@ const getRequestErrorMessage = (error: unknown) => {
     return error instanceof Error ? error.message : 'Track update failed.';
 };
 
+const responseErrorMessage = (
+    response: { errors: Array<{ message: string }> },
+    fallback: string
+) => response.errors[0]?.message ?? fallback;
+
 export default function MusicEdit() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { id } = useParams<{ id: string }>();
-    const [values, setValues] = useState<EditorValues | null>(null);
+    const [values, setValues] = useState<MusicMetadataEditorValues | null>(null);
+    const [preview, setPreview] = useState<MusicMetadataPreview | null>(null);
+    const [lastOperation, setLastOperation] = useState<MusicMetadataOperation | null>(null);
     const [artworkFile, setArtworkFile] = useState<File | null>(null);
     const [restoreArtwork, setRestoreArtwork] = useState(false);
+    const [isPreviewing, setIsPreviewing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [versionAction, setVersionAction] = useState<string | null>(null);
+    const [operationAction, setOperationAction] = useState<string | null>(null);
 
-    const { data: music, isError, isLoading, refetch } = useQuery({
+    const {
+        data: music,
+        isError,
+        isLoading,
+        refetch
+    } = useQuery({
         queryKey: queryKeys.music.detail(id),
         queryFn: async () => {
             const { data } = await getMusic(id!);
@@ -331,10 +91,32 @@ export default function MusicEdit() {
         enabled: Boolean(id)
     });
 
+    const {
+        data: operations = [],
+        isError: isOperationsError,
+        refetch: refetchOperations
+    } = useQuery({
+        queryKey: queryKeys.music.metadataOperations(id),
+        queryFn: async () => {
+            const response = await getMusicMetadataOperations(id!);
+
+            if (response.type === 'error') {
+                throw new Error(responseErrorMessage(
+                    response,
+                    'Metadata operation history could not be loaded.'
+                ));
+            }
+
+            return response.musicMetadataOperations;
+        },
+        enabled: Boolean(id)
+    });
+
     useEffect(() => {
-        if (music) {
-            setValues(toEditorValues(music));
-        }
+        if (!music) return;
+
+        setValues(toMusicMetadataEditorValues(music));
+        setPreview(null);
     }, [music]);
 
     if (isLoading || !values && !isError) {
@@ -359,28 +141,96 @@ export default function MusicEdit() {
         );
     }
 
-    const initialValues = toEditorValues(music);
-    const hasRelationalMetadataGroup = (music.files?.length ?? 0) > 1
-        || (music.recordingAppearances?.length ?? 0) > 0;
+    const initialValues = toMusicMetadataEditorValues(music);
     const metadataChanged = JSON.stringify(values) !== JSON.stringify(initialValues);
-    const shouldWriteMetadata = !hasRelationalMetadataGroup
-        && (metadataChanged || music.hasMetadataOverride);
+    const needsMetadataRepair = musicNeedsMetadataRepair(music);
+    const shouldReviewMetadata = metadataChanged || needsMetadataRepair;
     const artworkChanged = Boolean(artworkFile) || restoreArtwork;
-    const hasChanges = shouldWriteMetadata || artworkChanged;
+    const hasChanges = shouldReviewMetadata || artworkChanged;
     const artworkSource = restoreArtwork ? '' : music.album.cover;
-    const isBusy = isSaving || Boolean(versionAction);
+    const isBusy = isSaving
+        || isPreviewing
+        || Boolean(versionAction)
+        || Boolean(operationAction);
+    const blockingPreview = preview?.issues.some(issue => issue.blocking) ?? false;
+    const canSubmit = preview
+        ? preview.hasChanges || artworkChanged
+        : hasChanges;
+    const latestOperation = lastOperation ?? operations[0] ?? null;
+    const attentionOperation = latestOperation
+        && metadataOperationNeedsAttention(latestOperation.status)
+        ? latestOperation
+        : null;
 
-    const refreshVersionSurfaces = async () => {
+    const refreshLibrarySurfaces = async () => {
         await Promise.all([
             musicStore.sync(),
-            queryClient.invalidateQueries({ queryKey: queryKeys.albums.all() }),
-            queryClient.invalidateQueries({ queryKey: ['album'] }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.artists.all() }),
-            queryClient.invalidateQueries({ queryKey: ['artist'] }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all() }),
-            queryClient.invalidateQueries({ queryKey: ['playlist'] })
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.albums.all(),
+                exact: true
+            }),
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.albums.detailAll(),
+                exact: false
+            }),
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.artists.all(),
+                exact: true
+            }),
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.artists.detailAll(),
+                exact: false
+            }),
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.playlists.all(),
+                exact: true
+            }),
+            queryClient.invalidateQueries({
+                queryKey: queryKeys.playlists.detailAll(),
+                exact: false
+            })
         ]);
         await refetch();
+    };
+
+    const refreshOperationHistory = async () => {
+        await queryClient.invalidateQueries({
+            queryKey: queryKeys.music.metadataOperations(music.id),
+            exact: true
+        });
+        await refetchOperations();
+    };
+
+    const saveArtwork = async () => {
+        if (artworkFile) {
+            await uploadMusicArtwork(music.id, artworkFile);
+        } else if (restoreArtwork) {
+            await restoreMusicArtwork(music.id);
+        }
+    };
+
+    const finishSuccessfulMetadataUpdate = async () => {
+        setPreview(null);
+        await refreshLibrarySurfaces();
+
+        if (artworkChanged) {
+            try {
+                await saveArtwork();
+                setArtworkFile(null);
+                setRestoreArtwork(false);
+                await refreshLibrarySurfaces();
+            } catch (error) {
+                toast.error(`Metadata was updated, but artwork was not: ${getRequestErrorMessage(error)}`);
+                return;
+            }
+        }
+
+        toast('Track updated');
+    };
+
+    const refreshVersionSurfaces = async () => {
+        setPreview(null);
+        await refreshLibrarySurfaces();
     };
 
     const runVersionAction = async (
@@ -401,7 +251,7 @@ export default function MusicEdit() {
             const response = await action();
 
             if (response.type === 'error') {
-                throw new Error(response.errors[0]?.message ?? 'Version update failed.');
+                throw new Error(responseErrorMessage(response, 'Version update failed.'));
             }
 
             await refreshVersionSurfaces();
@@ -436,21 +286,13 @@ export default function MusicEdit() {
         );
     };
 
-    const updateValue = (key: keyof EditorValues, value: string) => {
-        setValues((current) => current ? { ...current, [key]: value } : current);
-    };
-
-    const updateCredits = (
-        key: 'artistCredits' | 'albumArtistCredits',
-        credits: CreditEditorValue[]
-    ) => {
-        setValues((current) => current ? { ...current, [key]: credits } : current);
+    const handleValuesChange = (nextValues: MusicMetadataEditorValues) => {
+        setValues(nextValues);
+        setPreview(null);
     };
 
     const handleArtworkChange = (file: File | undefined) => {
-        if (!file) {
-            return;
-        }
+        if (!file) return;
 
         if (!SUPPORTED_ARTWORK_TYPES.has(file.type)) {
             toast.error('Choose a JPEG, PNG, or WebP image.');
@@ -466,70 +308,151 @@ export default function MusicEdit() {
         setRestoreArtwork(false);
     };
 
-    const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
+    const createPreview = async () => {
+        const input = toUpdateMusicMetadataInput(music.id, values);
+        const response = await previewMusicMetadataUpdate(input);
 
-        if (!hasChanges || isBusy) {
+        if (response.type === 'error') {
+            throw new Error(responseErrorMessage(response, 'Metadata preview failed.'));
+        }
+
+        setPreview(response.previewMusicMetadataUpdate);
+
+        if (!response.previewMusicMetadataUpdate.hasChanges && !artworkChanged) {
+            toast('No metadata changes found');
+        }
+    };
+
+    const applyPreview = async () => {
+        if (!preview) return;
+
+        if (!preview.hasChanges) {
+            if (artworkChanged) {
+                await saveArtwork();
+                setArtworkFile(null);
+                setRestoreArtwork(false);
+                setPreview(null);
+                await refreshLibrarySurfaces();
+                toast('Artwork updated');
+            }
             return;
         }
 
-        const trackNumber = Number(values.trackNumber);
+        const input = toUpdateMusicMetadataInput(music.id, values);
+        const response = await updateMusicMetadata(input, preview.token);
 
-        if (shouldWriteMetadata
-            && (!Number.isInteger(trackNumber) || trackNumber < 1 || trackNumber > 9999)) {
-            toast.error('Track number must be between 1 and 9999.');
+        if (response.type === 'error') {
+            if (response.errors.some(error => error.code === 'MUSIC_METADATA_PREVIEW_STALE')) {
+                setPreview(null);
+            }
+            throw new Error(responseErrorMessage(response, 'Metadata update failed.'));
+        }
+
+        const operation = response.updateMusicMetadata;
+        setLastOperation(operation);
+        setPreview(null);
+        await refreshOperationHistory();
+
+        if (operation.status === 'cleaned') {
+            await finishSuccessfulMetadataUpdate();
+            return;
+        }
+
+        if (operation.music) {
+            await refreshLibrarySurfaces();
+        }
+
+        toast.error(operation.errorMessage ?? 'Metadata update needs recovery.');
+    };
+
+    const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        if (!canSubmit || isBusy || blockingPreview) return;
+
+        if (!preview && shouldReviewMetadata) {
+            setIsPreviewing(true);
+
+            try {
+                await createPreview();
+            } catch (error) {
+                toast.error(getRequestErrorMessage(error));
+            } finally {
+                setIsPreviewing(false);
+            }
             return;
         }
 
         setIsSaving(true);
 
         try {
-            if (shouldWriteMetadata) {
-                const response = await updateMusicMetadata({
-                    id: music.id,
-                    title: values.title,
-                    artistCredits: values.artistCredits.map(credit => ({
-                        ...credit,
-                        creditedName: credit.creditedName || null
-                    })),
-                    album: values.album,
-                    albumArtistCredits: values.albumArtistCredits.map(credit => ({
-                        ...credit,
-                        creditedName: credit.creditedName || null
-                    })),
-                    publishedYear: values.publishedYear,
-                    trackNumber,
-                    genres: values.genres.split(',')
-                });
-
-                if (response.type === 'error') {
-                    throw new Error(response.errors[0]?.message ?? 'Track metadata update failed.');
-                }
+            if (preview) {
+                await applyPreview();
+            } else {
+                await saveArtwork();
+                setArtworkFile(null);
+                setRestoreArtwork(false);
+                await refreshLibrarySurfaces();
+                toast('Artwork updated');
             }
-
-            if (artworkFile) {
-                await uploadMusicArtwork(music.id, artworkFile);
-            } else if (restoreArtwork) {
-                await restoreMusicArtwork(music.id);
-            }
-
-            await Promise.all([
-                musicStore.sync(),
-                queryClient.invalidateQueries({ queryKey: queryKeys.albums.all() }),
-                queryClient.invalidateQueries({ queryKey: ['album'] }),
-                queryClient.invalidateQueries({ queryKey: queryKeys.artists.all() }),
-                queryClient.invalidateQueries({ queryKey: ['artist'] })
-            ]);
-            await refetch();
-            setArtworkFile(null);
-            setRestoreArtwork(false);
-            toast('Track updated');
         } catch (error) {
             toast.error(getRequestErrorMessage(error));
         } finally {
             setIsSaving(false);
         }
     };
+
+    const runOperationAction = async (
+        operationId: string,
+        action: typeof retryMusicMetadataOperation | typeof recoverMusicMetadataOperation
+    ) => {
+        if (isBusy) return;
+
+        setOperationAction(operationId);
+
+        try {
+            const response = await action(operationId);
+
+            if (response.type === 'error') {
+                throw new Error(responseErrorMessage(response, 'Metadata recovery failed.'));
+            }
+
+            const operation = 'retryMusicMetadataOperation' in response
+                ? response.retryMusicMetadataOperation
+                : response.recoverMusicMetadataOperation;
+            setLastOperation(operation);
+            await refreshOperationHistory();
+
+            if (operation.status === 'cleaned') {
+                setPreview(null);
+                await refreshLibrarySurfaces();
+                toast('Metadata operation completed');
+            } else if (operation.music) {
+                await refreshLibrarySurfaces();
+                toast.error(operation.errorMessage ?? 'Metadata recovery still needs attention.');
+            } else {
+                toast.error(operation.errorMessage ?? 'Metadata recovery still needs attention.');
+            }
+        } catch (error) {
+            toast.error(getRequestErrorMessage(error));
+        } finally {
+            setOperationAction(null);
+        }
+    };
+
+    const submitLabel = isPreviewing
+        ? 'Reviewing…'
+        : isSaving
+            ? 'Applying…'
+            : preview
+                ? preview.hasChanges
+                    ? 'Apply changes'
+                    : artworkChanged
+                        ? 'Save artwork'
+                        : 'No changes'
+                : shouldReviewMetadata
+                    ? 'Review changes'
+                    : 'Save artwork';
 
     return (
         <form onSubmit={handleSubmit} className="flex flex-col gap-6 pb-8">
@@ -538,12 +461,36 @@ export default function MusicEdit() {
                     <Text as="h1" size="2xl" weight="bold" className="leading-tight tracking-normal">
                         Edit track
                     </Text>
-                    {music.hasMetadataOverride && <Badge tone="accent">File update pending</Badge>}
+                    {needsMetadataRepair && <Badge tone="warning">File repair pending</Badge>}
                 </div>
-                <Text as="p" variant="tertiary" size="sm" className="max-w-[640px] leading-relaxed">
-                    Metadata changes are written to the audio file so they survive rescans and move with your library.
+                <Text as="p" variant="tertiary" size="sm" className="max-w-[680px] leading-relaxed">
+                    Review relationship changes and every affected audio file before they are applied.
                 </Text>
             </div>
+
+            {isOperationsError && (
+                <Surface variant="subtle" padding="responsive" className="flex flex-wrap items-center justify-between gap-3">
+                    <Text as="p" size="sm">Previous metadata operations could not be loaded.</Text>
+                    <Button type="button" size="xs" onClick={() => void refetchOperations()}>
+                        Try again
+                    </Button>
+                </Surface>
+            )}
+
+            {attentionOperation && (
+                <MusicMetadataOperationNotice
+                    operation={attentionOperation}
+                    busy={operationAction === attentionOperation.operationId}
+                    onRecover={operationId => void runOperationAction(
+                        operationId,
+                        recoverMusicMetadataOperation
+                    )}
+                    onRetry={operationId => void runOperationAction(
+                        operationId,
+                        retryMusicMetadataOperation
+                    )}
+                />
+            )}
 
             <div className="grid items-start gap-6 lg:grid-cols-[minmax(220px,300px)_minmax(0,1fr)]">
                 <Surface as="section" variant="panel" padding="responsive" className="grid gap-4">
@@ -555,14 +502,14 @@ export default function MusicEdit() {
                     </div>
                     <Image
                         src={artworkSource}
-                        alt={`${values.album} cover`}
+                        alt={`${values.releaseTitle} cover`}
                         className="aspect-square w-full rounded-[var(--b-radius-xl)] object-cover shadow-[0_12px_32px_var(--b-color-overlay-strong)]"
                     />
                     <input
                         type="file"
                         accept="image/jpeg,image/png,image/webp"
                         disabled={isBusy}
-                        onChange={(event) => handleArtworkChange(event.target.files?.[0])}
+                        onChange={event => handleArtworkChange(event.target.files?.[0])}
                         className="block w-full cursor-pointer rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] text-xs font-semibold text-[var(--b-color-text-secondary)] file:mr-3 file:min-h-9 file:border-0 file:border-r file:border-[var(--b-color-border-subtle)] file:bg-[var(--b-color-secondary-button)] file:px-3 file:text-xs file:font-semibold file:text-[var(--b-color-text-secondary)]"
                     />
                     {artworkFile && (
@@ -571,7 +518,7 @@ export default function MusicEdit() {
                         </Text>
                     )}
                     <Text as="p" variant="muted" size="xs" className="leading-relaxed">
-                        JPEG, PNG, or WebP up to 10 MB. Artwork is shared by every track in this album.
+                        JPEG, PNG, or WebP up to 10 MB. Artwork stays separate from audio tag updates.
                     </Text>
                     {music.album.isCoverCustom && (
                         <Button
@@ -581,7 +528,7 @@ export default function MusicEdit() {
                             disabled={isBusy}
                             onClick={() => {
                                 setArtworkFile(null);
-                                setRestoreArtwork((current) => !current);
+                                setRestoreArtwork(current => !current);
                             }}>
                             {restoreArtwork ? 'Keep custom artwork' : 'Restore artwork from audio file'}
                         </Button>
@@ -591,88 +538,27 @@ export default function MusicEdit() {
                 <Surface as="section" variant="panel" padding="responsive" className="grid gap-5">
                     <div className="flex items-center gap-2">
                         <Pencil className="h-4 w-4 text-[var(--b-color-text-muted)]" />
-                        <Text as="h2" size="sectionTitle" weight="semibold">Metadata</Text>
+                        <Text as="h2" size="sectionTitle" weight="semibold">Relational metadata</Text>
                     </div>
-                    {hasRelationalMetadataGroup && (
-                        <Text as="p" variant="muted" size="xs" className="leading-relaxed">
-                            Shared metadata editing is locked while alternate files or release appearances are linked. Separate them first so one file cannot be updated only partially.
-                        </Text>
-                    )}
-                    <div className="grid gap-5 sm:grid-cols-2">
-                        <Field label="Title">
-                            <Input
-                                required
-                                value={values.title}
-                                disabled={isBusy || hasRelationalMetadataGroup}
-                                onChange={(event) => updateValue('title', event.target.value)}
-                            />
-                        </Field>
-                        <Field label="Album">
-                            <Input
-                                required
-                                value={values.album}
-                                disabled={isBusy || hasRelationalMetadataGroup}
-                                onChange={(event) => updateValue('album', event.target.value)}
-                            />
-                        </Field>
-                        <Field label="Release year">
-                            <Input
-                                required
-                                inputMode="numeric"
-                                maxLength={4}
-                                pattern="\d{4}"
-                                value={values.publishedYear}
-                                disabled={isBusy || hasRelationalMetadataGroup}
-                                onChange={(event) => updateValue('publishedYear', event.target.value)}
-                            />
-                        </Field>
-                        <Field label="Track number">
-                            <Input
-                                required
-                                type="number"
-                                min="1"
-                                max="9999"
-                                value={values.trackNumber}
-                                disabled={isBusy || hasRelationalMetadataGroup}
-                                onChange={(event) => updateValue('trackNumber', event.target.value)}
-                            />
-                        </Field>
-                        <div className="sm:col-span-2">
-                            <Field label="Genres" hint="Separate multiple genres with commas.">
-                                <Input
-                                    value={values.genres}
-                                    disabled={isBusy || hasRelationalMetadataGroup}
-                                    placeholder="Electronic, Ambient"
-                                    onChange={(event) => updateValue('genres', event.target.value)}
-                                />
-                            </Field>
-                        </div>
-                        <ArtistCreditEditor
-                            label="Track artists"
-                            credits={values.artistCredits}
-                            disabled={isBusy || hasRelationalMetadataGroup}
-                            featuredByDefault
-                            onChange={(credits) => updateCredits('artistCredits', credits)}
-                        />
-                        <ArtistCreditEditor
-                            label="Album artists"
-                            credits={values.albumArtistCredits}
-                            disabled={isBusy || hasRelationalMetadataGroup}
-                            onChange={(credits) => updateCredits('albumArtistCredits', credits)}
-                        />
-                    </div>
+                    <MusicMetadataFields
+                        values={values}
+                        disabled={isBusy}
+                        onChange={handleValuesChange}
+                    />
                 </Surface>
             </div>
+
+            {preview && <MusicMetadataPreviewPanel preview={preview} />}
 
             <MusicVersionManager
                 music={music}
                 busy={isBusy}
-                onSetPreferred={(fileId) => void runVersionAction(
+                onSetPreferred={fileId => void runVersionAction(
                     `preferred-${fileId ?? 'automatic'}`,
                     () => setPreferredMusicFile({ musicId: music.id, fileId }),
                     fileId ? 'Preferred file updated' : 'Quality fallback restored'
                 )}
-                onUngroupFile={(fileId) => void runVersionAction(
+                onUngroupFile={fileId => void runVersionAction(
                     `ungroup-${fileId}`,
                     () => ungroupMusicFile({ musicId: music.id, fileId }),
                     'File separated into its own track'
@@ -687,7 +573,7 @@ export default function MusicEdit() {
 
             <Surface variant="subtle" padding="responsive" className="grid gap-2 sm:grid-cols-2">
                 <div>
-                    <Text as="span" variant="muted" size="xs">Audio file</Text>
+                    <Text as="span" variant="muted" size="xs">Selected audio file</Text>
                     <Text as="p" size="sm" className="mt-1 break-all">{music.filePath}</Text>
                 </div>
                 <div className="grid grid-cols-3 gap-3 sm:text-right">
@@ -714,8 +600,11 @@ export default function MusicEdit() {
                 <Button type="button" variant="ghost" disabled={isBusy} onClick={() => navigate(-1)}>
                     Cancel
                 </Button>
-                <Button type="submit" variant="primary" disabled={!hasChanges || isBusy}>
-                    {isSaving ? 'Saving…' : 'Save changes'}
+                <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={!canSubmit || isBusy || blockingPreview}>
+                    {submitLabel}
                 </Button>
             </div>
         </form>

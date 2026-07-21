@@ -1,5 +1,10 @@
 import { parseBuffer } from './music-metadata';
 import { parseTrackMetadata } from './track-metadata';
+import {
+    OCEAN_WAVE_RECORDING_VERSION_STATE_PROPERTY,
+    OCEAN_WAVE_RELEASE_VERSION_PROPERTY,
+    OCEAN_WAVE_RELEASE_VERSION_STATE_PROPERTY
+} from './track-version';
 
 jest.mock('./music-metadata', () => ({ parseBuffer: jest.fn() }));
 
@@ -59,7 +64,43 @@ describe('track release metadata parsing', () => {
                 releaseType: 'unknown',
                 discNumber: null,
                 totalDiscs: null,
-                trackNumber: null
+                trackNumber: null,
+                year: ''
+            });
+    });
+
+    it('keeps explicitly cleared recording versions separate from release labels', async () => {
+        parseBufferMock.mockResolvedValue({
+            format: {},
+            common: {
+                title: 'Signal (Live)',
+                artist: 'Artist',
+                album: 'Archive',
+                subtitle: ['Archive Edition']
+            },
+            native: {
+                RIFF: [
+                    {
+                        id: OCEAN_WAVE_RECORDING_VERSION_STATE_PROPERTY,
+                        value: 'none'
+                    },
+                    {
+                        id: OCEAN_WAVE_RELEASE_VERSION_PROPERTY,
+                        value: 'Archive Edition'
+                    },
+                    {
+                        id: OCEAN_WAVE_RELEASE_VERSION_STATE_PROPERTY,
+                        value: 'value'
+                    }
+                ]
+            }
+        } as never);
+
+        await expect(parseTrackMetadata('/music/signal.flac', Buffer.from('audio')))
+            .resolves.toMatchObject({
+                recordingVersionTitle: null,
+                releaseVersionTitle: 'Archive Edition',
+                year: ''
             });
     });
 });

@@ -117,6 +117,8 @@ model PhysicalFile {
   preferenceRank         Int?
   isExplicitlyActivated  Boolean           @default(false)
   metadataRevision       Int               @default(0)
+  metadataSyncStatus     String            @default("current")
+  metadataSyncError      String?
   lastSeenAt             DateTime?
   missingSinceAt         DateTime?
   syncStatus             String            @default("active")
@@ -131,6 +133,59 @@ model PhysicalFile {
   @@index([releaseTrackId, syncStatus, preferenceRank])
   @@index([hashVersion, contentHash])
   @@index([syncStatus, missingSinceAt])
+}
+
+model MusicMetadataOperation {
+  id                           String                         @id @default(uuid())
+  selectedReleaseTrackStableId String
+  status                       String                         @default("preparing")
+  previewToken                 String
+  requestedJson                String
+  oldRelationalJson            String
+  expectedRevisionsJson        String
+  errorCode                    String?
+  errorMessage                 String?
+  retryOfId                    String?
+  preparedAt                   DateTime?
+  replacedAt                   DateTime?
+  committedAt                  DateTime?
+  completedAt                  DateTime?
+  createdAt                    DateTime                       @default(now())
+  updatedAt                    DateTime                       @updatedAt
+  Target                       MusicMetadataOperationTarget[]
+
+  @@index([selectedReleaseTrackStableId, createdAt])
+  @@index([status, updatedAt])
+}
+
+model MusicMetadataOperationTarget {
+  id                    Int                    @id @default(autoincrement())
+  operationId           String
+  physicalFileStableId  String
+  releaseTrackStableId  String
+  filePath              String
+  status                String                 @default("pending")
+  oldContentHash        String
+  newContentHash        String?
+  hashVersion           Int
+  oldFileSizeBytes      BigInt?
+  newFileSizeBytes      BigInt?
+  oldTagSnapshotJson    String?
+  newTagSnapshotJson    String?
+  oldMetadataSyncStatus String                 @default("current")
+  oldMetadataSyncError  String?
+  stagingPath           String?
+  backupPath            String?
+  errorCode             String?
+  errorMessage          String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  Operation             MusicMetadataOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+
+  @@unique([operationId, physicalFileStableId])
+  @@index([physicalFileStableId, status])
+  @@index([releaseTrackStableId, operationId])
+  @@index([operationId, status])
 }
 
 model ArtistCredit {
@@ -258,6 +313,7 @@ model SyncReport {
   movedCount     Int              @default(0)
   duplicateCount Int              @default(0)
   missingCount   Int              @default(0)
+  reconcileCount Int              @default(0)
   Item           SyncReportItem[]
 
   @@index([createdAt])

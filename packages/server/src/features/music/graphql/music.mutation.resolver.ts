@@ -8,11 +8,13 @@ import {
     MUSIC_UPDATED
 } from '~/socket/music';
 import { withOriginClientId } from '~/socket/origin-client';
-import { recordPlayback } from '../services/playback-records';
 import {
     isMusicMetadataServiceError,
+    recoverMusicMetadataOperation,
+    retryMusicMetadataOperation,
     updateMusicMetadata
 } from '../services/metadata-editor';
+import { recordPlayback } from '../services/playback-records';
 import {
     isMusicPreferenceServiceError,
     setMusicHated,
@@ -127,20 +129,64 @@ export const createUpdateMusicMetadataMutationResolver = (
 ) => {
     return async (_: unknown, {
         input,
+        previewToken,
         originClientId
     }: {
         input: Parameters<typeof updateMusicMetadata>[0];
+        previewToken: string;
         originClientId?: string | null;
     }) => withMusicErrorHandling(async () => {
-        const result = await updateMetadata(input);
+        const result = await updateMetadata(input, previewToken);
 
-        await notifySafely(() => connectors.notify(MUSIC_UPDATED, withOriginClientId({
-            musicId: result.id.toString()
-        }, originClientId)));
+        if (result.music) {
+            await notifySafely(() => connectors.notify(MUSIC_UPDATED, withOriginClientId({
+                musicId: result.music!.id.toString()
+            }, originClientId)));
+        }
 
         return result;
     });
 };
+
+export const createRetryMusicMetadataOperationMutationResolver = (
+    retryOperation = retryMusicMetadataOperation
+) => async (_: unknown, {
+    operationId,
+    originClientId
+}: {
+    operationId: string;
+    originClientId?: string | null;
+}) => withMusicErrorHandling(async () => {
+    const result = await retryOperation(operationId);
+
+    if (result.music) {
+        await notifySafely(() => connectors.notify(MUSIC_UPDATED, withOriginClientId({
+            musicId: result.music!.id.toString()
+        }, originClientId)));
+    }
+
+    return result;
+});
+
+export const createRecoverMusicMetadataOperationMutationResolver = (
+    recoverOperation = recoverMusicMetadataOperation
+) => async (_: unknown, {
+    operationId,
+    originClientId
+}: {
+    operationId: string;
+    originClientId?: string | null;
+}) => withMusicErrorHandling(async () => {
+    const result = await recoverOperation(operationId);
+
+    if (result.music) {
+        await notifySafely(() => connectors.notify(MUSIC_UPDATED, withOriginClientId({
+            musicId: result.music!.id.toString()
+        }, originClientId)));
+    }
+
+    return result;
+});
 
 const createMusicVersionMutationResolver = <Input extends object>(
     mutate: (input: Input) => Promise<{ id: number }>
@@ -165,6 +211,8 @@ export const musicMutationResolvers: MusicMutationResolvers = {
     setMusicLiked: createSetMusicLikedMutationResolver(),
     setMusicHated: createSetMusicHatedMutationResolver(),
     updateMusicMetadata: createUpdateMusicMetadataMutationResolver(),
+    retryMusicMetadataOperation: createRetryMusicMetadataOperationMutationResolver(),
+    recoverMusicMetadataOperation: createRecoverMusicMetadataOperationMutationResolver(),
     setPreferredMusicFile: createMusicVersionMutationResolver(setPreferredMusicFile),
     groupMusicAsAlternateFile: createMusicVersionMutationResolver(groupMusicAsAlternateFile),
     ungroupMusicFile: createMusicVersionMutationResolver(ungroupMusicFile),

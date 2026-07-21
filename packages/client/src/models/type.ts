@@ -1,6 +1,8 @@
 export interface Music {
     id: string;
     name: string;
+    recordingTitle?: string;
+    titleOverride?: string | null;
     duration: number;
     codec: string;
     bitrate: number;
@@ -27,6 +29,8 @@ export interface Music {
     artist: Artist;
     artistDisplayName: string;
     artistCredits: ArtistCredit[];
+    recordingArtistCredits?: ArtistCredit[];
+    hasReleaseTrackArtistCredits?: boolean;
     album: Album;
     genres: {
         name: string;
@@ -43,6 +47,8 @@ export interface MusicFileVersion {
     sampleRate: number;
     duration: number;
     syncStatus: string;
+    metadataSyncStatus: string;
+    metadataSyncError: string | null;
     isPreferred: boolean;
     isSelected: boolean;
     isPlayable: boolean;
@@ -149,7 +155,7 @@ export interface Playlist {
 
 export interface SyncReportItem {
     id: string;
-    kind: 'created' | 'moved' | 'duplicate' | 'missing';
+    kind: 'created' | 'moved' | 'duplicate' | 'missing' | 'reconcile';
     musicId: string | null;
     musicName: string;
     filePath: string;
@@ -170,8 +176,10 @@ export interface SyncReport {
     movedCount: number;
     duplicateCount: number;
     missingCount: number;
+    reconcileCount: number;
     created: SyncReportItem[];
     moved: SyncReportItem[];
     duplicate: SyncReportItem[];
     missing: SyncReportItem[];
+    reconcile: SyncReportItem[];
 }

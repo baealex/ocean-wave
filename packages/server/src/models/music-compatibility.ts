@@ -166,7 +166,7 @@ export const createCompatibilityAlbumInTransaction = async (
         data: {
             ...(data.id === undefined ? {} : { id: data.id }),
             title: data.name,
-            releaseDate: data.publishedYear,
+            releaseDate: data.publishedYear || null,
             releaseType: 'unknown',
             totalDiscs: 1,
             cover: data.cover,
@@ -281,7 +281,9 @@ export const updateCompatibilityAlbumInTransaction = async (
         where: { id },
         data: {
             ...(data.name === undefined ? {} : { title: data.name }),
-            ...(data.publishedYear === undefined ? {} : { releaseDate: data.publishedYear }),
+            ...(data.publishedYear === undefined
+                ? {}
+                : { releaseDate: data.publishedYear || null }),
             ...(data.cover === undefined ? {} : { cover: data.cover }),
             ...(data.isCoverCustom === undefined ? {} : { isCoverCustom: data.isCoverCustom }),
             ...(data.createdAt === undefined ? {} : { createdAt: data.createdAt }),

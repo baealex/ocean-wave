@@ -26,6 +26,8 @@ const createFile = (
     preferenceRank: null,
     isExplicitlyActivated: false,
     metadataRevision: 0,
+    metadataSyncStatus: 'current',
+    metadataSyncError: null,
     lastSeenAt: null,
     missingSinceAt: null,
     syncStatus: 'active',

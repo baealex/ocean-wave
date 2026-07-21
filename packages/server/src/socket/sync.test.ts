@@ -233,6 +233,48 @@ describe('sync music identity', () => {
         }
     });
 
+    it('ignores current and legacy metadata journal files during scans', async () => {
+        const contents = createTrackFixture({ fingerprint: 'journal-filter' });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-journal-'));
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+        const trackPath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/track.mp3',
+            contents
+        });
+        const legacyStagePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/.track.operation.ocean-wave.stage.mp3',
+            contents
+        });
+        const legacyBackupPath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/.track.operation.ocean-wave.backup.mp3',
+            contents
+        });
+        const currentStagePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/.track.operation.ocean-wave.stage',
+            contents
+        });
+        walkMock.mockResolvedValue([
+            legacyStagePath,
+            trackPath,
+            currentStagePath,
+            legacyBackupPath
+        ]);
+
+        const result = await syncMusic({ emit: jest.fn() } as never);
+
+        expect(result).toMatchObject({ scannedFiles: 1, indexedFiles: 1 });
+        expect(result?.created).toHaveLength(1);
+        expect(parseBufferMock).toHaveBeenCalledTimes(1);
+        await expect(models.physicalFile.findMany()).resolves.toEqual([
+            expect.objectContaining({ filePath: 'library/track.mp3' })
+        ]);
+    });
+
     it('moves a track to a new path without losing linked data', async () => {
         const contents = createTrackFixture();
         const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-move-'));
@@ -298,6 +340,58 @@ describe('sync music identity', () => {
                 previousFilePath: previousRelativePath
             })
         ]));
+    });
+
+    it('keeps canonical metadata when a stale missing file returns at a new path', async () => {
+        const contents = createTrackFixture({ fingerprint: 'stale-move' });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-stale-move-'));
+        const previousPath = path.join(tempDirectory, 'library/old/track-a.mp3');
+        const movedRelativePath = 'library/new/track-a.mp3';
+        const movedPath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: movedRelativePath,
+            contents
+        });
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+        const music = await createExistingMusic({ filePath: previousPath, contents });
+        await models.recording.update({
+            where: { id: music.recordingId },
+            data: {
+                title: 'Canonical Track',
+                metadataRevision: { increment: 1 }
+            }
+        });
+        await models.physicalFile.update({
+            where: { id: music.physicalFileId },
+            data: {
+                syncStatus: TRACK_SYNC_STATUS.missing,
+                missingSinceAt: new Date(),
+                metadataSyncStatus: 'stale',
+                metadataSyncError: 'Canonical metadata changed while unavailable.'
+            }
+        });
+        walkMock.mockResolvedValue([movedPath]);
+
+        const result = await syncMusic({ emit: jest.fn() } as never);
+
+        expect(result).toMatchObject({
+            moved: [expect.objectContaining({ filePath: movedRelativePath })],
+            reconcile: [expect.objectContaining({
+                physicalFileId: music.physicalFileId,
+                filePath: movedRelativePath
+            })]
+        });
+        await expect(models.recording.findUniqueOrThrow({
+            where: { id: music.recordingId }
+        })).resolves.toMatchObject({ title: 'Canonical Track' });
+        await expect(models.physicalFile.findUniqueOrThrow({
+            where: { id: music.physicalFileId }
+        })).resolves.toMatchObject({
+            filePath: movedRelativePath,
+            syncStatus: TRACK_SYNC_STATUS.active,
+            metadataSyncStatus: 'stale'
+        });
     });
 
     it('attaches an exact duplicate to the same release track while keeping it hidden', async () => {
@@ -545,7 +639,7 @@ describe('sync music identity', () => {
             .map(({ Genre: genre }) => genre.name)).toEqual(['Ambient']);
     });
 
-    it('seeds missing canonical version evidence when force-scanning an existing track', async () => {
+    it('reports external version evidence without overwriting canonical metadata', async () => {
         const contents = createTrackFixture({
             title: 'Signal',
             subtitle: 'Live at the Harbor',
@@ -562,15 +656,87 @@ describe('sync music identity', () => {
         const music = await createExistingMusic({ filePath, contents });
         walkMock.mockResolvedValue([filePath]);
 
-        await syncMusic({ emit: jest.fn() }, true);
+        const result = await syncMusic({ emit: jest.fn() }, true);
 
         await expect(models.recording.findUniqueOrThrow({
             where: { id: music.recordingId }
-        })).resolves.toMatchObject({ versionTitle: 'Live at the Harbor' });
+        })).resolves.toMatchObject({ versionTitle: null });
         await expect(models.physicalFile.findUniqueOrThrow({
             where: { id: music.physicalFileId }
         })).resolves.toMatchObject({
-            tagSnapshotJson: expect.stringContaining('Live at the Harbor')
+            tagSnapshotJson: expect.stringContaining('Live at the Harbor'),
+            metadataSyncStatus: 'stale'
+        });
+        expect(result?.reconcile).toEqual([
+            expect.objectContaining({ physicalFileId: music.physicalFileId })
+        ]);
+    });
+
+    it('does not clear an unresolved operation recovery during a forced scan', async () => {
+        const contents = createTrackFixture({
+            albumArtist: 'Artist A',
+            albumArtists: ['Artist A'],
+            fingerprint: 'recovery-blocked'
+        });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-recovery-'));
+        const filePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/recovery-blocked.mp3',
+            contents
+        });
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+        const music = await createExistingMusic({ filePath, contents });
+        await models.physicalFile.update({
+            where: { id: music.physicalFileId },
+            data: {
+                metadataSyncStatus: 'reconcile-required',
+                metadataSyncError: 'Restore the retained audio backup.'
+            }
+        });
+        walkMock.mockResolvedValue([filePath]);
+
+        const result = await syncMusic({ emit: jest.fn() }, true);
+
+        expect(result?.reconcile).toEqual([
+            expect.objectContaining({ physicalFileId: music.physicalFileId })
+        ]);
+        await expect(models.physicalFile.findUniqueOrThrow({
+            where: { id: music.physicalFileId }
+        })).resolves.toMatchObject({
+            metadataSyncStatus: 'reconcile-required',
+            metadataSyncError: 'Restore the retained audio backup.'
+        });
+    });
+
+    it('clears a stale marker when forced-scan tags match inferred canonical credits', async () => {
+        const contents = createTrackFixture({ fingerprint: 'matching-canonical-tags' });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-current-'));
+        const filePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/current.mp3',
+            contents
+        });
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+        const music = await createExistingMusic({ filePath, contents });
+        await models.physicalFile.update({
+            where: { id: music.physicalFileId },
+            data: {
+                metadataSyncStatus: 'stale',
+                metadataSyncError: 'Previous mismatch'
+            }
+        });
+        walkMock.mockResolvedValue([filePath]);
+
+        const result = await syncMusic({ emit: jest.fn() }, true);
+
+        expect(result?.reconcile).toEqual([]);
+        await expect(models.physicalFile.findUniqueOrThrow({
+            where: { id: music.physicalFileId }
+        })).resolves.toMatchObject({
+            metadataSyncStatus: 'current',
+            metadataSyncError: null
         });
     });
 
@@ -850,5 +1016,57 @@ describe('sync music identity', () => {
                 musicName: existingMusic.name
             })
         ]));
+    });
+
+    it('reports a returning stale file for explicit metadata reconciliation', async () => {
+        const contents = createTrackFixture({ fingerprint: 'returning-stale-hash' });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-stale-return-'));
+        const relativePath = 'library/returning-stale.mp3';
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+        const filePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath,
+            contents
+        });
+        const music = await createExistingMusic({ filePath, contents });
+        await models.physicalFile.update({
+            where: { id: music.physicalFileId },
+            data: {
+                syncStatus: TRACK_SYNC_STATUS.missing,
+                missingSinceAt: new Date(),
+                metadataSyncStatus: 'stale',
+                metadataSyncError: 'Canonical metadata changed while unavailable.'
+            }
+        });
+        walkMock.mockResolvedValue([filePath]);
+
+        const result = await syncMusic({ emit: jest.fn() } as never);
+        const report = await models.syncReport.findFirstOrThrow({
+            orderBy: { createdAt: 'desc' },
+            include: { Item: true }
+        });
+
+        expect(result?.reconcile).toEqual([
+            expect.objectContaining({
+                musicId: music.id,
+                physicalFileId: music.physicalFileId,
+                filePath: relativePath
+            })
+        ]);
+        await expect(models.physicalFile.findUniqueOrThrow({
+            where: { id: music.physicalFileId }
+        })).resolves.toMatchObject({
+            syncStatus: TRACK_SYNC_STATUS.active,
+            metadataSyncStatus: 'stale'
+        });
+        expect(report).toMatchObject({ reconcileCount: 1 });
+        expect(report.Item).toEqual([
+            expect.objectContaining({
+                kind: SYNC_REPORT_KIND.reconcile,
+                musicId: music.physicalFileId,
+                filePath: relativePath
+            })
+        ]);
     });
 });

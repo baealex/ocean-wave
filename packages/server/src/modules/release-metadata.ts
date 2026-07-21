@@ -7,6 +7,8 @@ export const RELEASE_TYPES = [
     'unknown'
 ] as const;
 
+export const OCEAN_WAVE_RELEASE_TYPE_PROPERTY = 'OCEANWAVE_RELEASE_TYPE';
+
 export type ReleaseType = typeof RELEASE_TYPES[number];
 
 const RELEASE_TYPE_ALIASES = new Map<string, ReleaseType>([
@@ -32,6 +34,21 @@ const normalizeReleaseTypeToken = (value: string) => {
     return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
 };
 
+type NativeTags = Record<string, Array<{ id: string; value: unknown }>> | undefined;
+
+const normalizeNativeTagId = (value: string) => value
+    .normalize('NFKC')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '');
+
+const nativeTagValues = (
+    nativeTags: NativeTags,
+    matchesId: (normalizedId: string) => boolean
+) => Object.values(nativeTags ?? {})
+    .flat()
+    .filter(({ id }) => matchesId(normalizeNativeTagId(id)))
+    .flatMap(({ value }) => Array.isArray(value) ? value : [value]);
+
 export const normalizeReleaseType = ({
     values,
     compilation = false
@@ -51,6 +68,20 @@ export const normalizeReleaseType = ({
     return RELEASE_TYPE_PRECEDENCE.find(value => resolvedTypes.has(value)) ?? 'unknown';
 };
 
+export const readPortableReleaseType = (
+    nativeTags: NativeTags
+): ReleaseType | null => {
+    const propertyId = normalizeNativeTagId(OCEAN_WAVE_RELEASE_TYPE_PROPERTY);
+    const values = nativeTagValues(
+        nativeTags,
+        id => id.endsWith(propertyId)
+    ).filter((value): value is string => typeof value === 'string');
+
+    if (!values.length) return null;
+
+    return normalizeReleaseType({ values });
+};
+
 export const normalizePositiveInteger = (value: unknown): number | null => {
     if (value === null || value === undefined || value === '') return null;
 
@@ -59,6 +90,21 @@ export const normalizePositiveInteger = (value: unknown): number | null => {
     return Number.isInteger(number) && number > 0 && number <= 9999
         ? number
         : null;
+};
+
+export const readPortableTotalDiscs = (nativeTags: NativeTags): number | null => {
+    const values = nativeTagValues(
+        nativeTags,
+        id => id.endsWith('DISCTOTAL') || id.endsWith('TOTALDISCS')
+    );
+
+    for (const value of values) {
+        const normalized = normalizePositiveInteger(value);
+
+        if (normalized !== null) return normalized;
+    }
+
+    return null;
 };
 
 export interface ReleaseTrackPosition {

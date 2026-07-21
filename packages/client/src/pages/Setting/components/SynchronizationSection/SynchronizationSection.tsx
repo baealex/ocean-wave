@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
-
-import { Badge, Button, SettingSection, SettingItem, Text } from '~/components/shared';
-import { getLatestSyncReport } from '~/api/sync';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { queryKeys } from '~/api/query-keys';
+import { getLatestSyncReport } from '~/api/sync';
+import { Badge, Button, SettingItem, SettingSection, Text } from '~/components/shared';
+import type { SyncReport } from '~/models/type';
 import { toast } from '~/modules/toast';
 import { socket } from '~/socket';
-import type { SyncReport } from '~/models/type';
 
 
 export interface SynchronizationSectionProps {
@@ -147,6 +147,38 @@ export const SynchronizationSection = ({ onSyncMusic }: SynchronizationSectionPr
                         <Text as="span" size="xs" variant="muted">
                             {latestSyncReport.scannedFiles} scanned · {latestSyncReport.indexedFiles} indexed · {latestSyncReport.completedAt ? `Completed ${formatTimestamp(latestSyncReport.completedAt)}` : 'Completion unavailable'}
                         </Text>
+                        {latestSyncReport.reconcileCount > 0 && (
+                            <div className="grid gap-1.5 pt-1">
+                                <Text
+                                    as="span"
+                                    size="xs"
+                                    variant="secondary"
+                                    className="text-[var(--b-color-badge-danger-text)]">
+                                    {latestSyncReport.reconcileCount} file{latestSyncReport.reconcileCount === 1 ? '' : 's'} need metadata reconciliation
+                                </Text>
+                                {latestSyncReport.reconcile.slice(0, 5).map(item => (
+                                    <div
+                                        key={item.id}
+                                        className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                        <span className="min-w-0 break-all text-[var(--b-color-text-muted)]">
+                                            {item.filePath}
+                                        </span>
+                                        {item.musicId && (
+                                            <Link
+                                                to={`/music/${item.musicId}/edit`}
+                                                className="font-semibold text-[var(--b-color-point-light)] hover:underline">
+                                                Review
+                                            </Link>
+                                        )}
+                                    </div>
+                                ))}
+                                {latestSyncReport.reconcileCount > 5 && (
+                                    <Text as="span" size="xs" variant="muted">
+                                        +{latestSyncReport.reconcileCount - 5} more
+                                    </Text>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <Badge tone={syncStatusTone(latestSyncReport.status)}>
                         {latestSyncReport.status}

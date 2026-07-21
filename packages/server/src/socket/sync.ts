@@ -1,62 +1,61 @@
 import fs from 'fs';
 import path from 'path';
 import type { Socket } from 'socket.io';
-
-import { connectors } from './connectors';
-
-import {
-    hasHealthyAlbumCoverCache,
-    syncAlbumCoverCache
-} from '../modules/album-cover-cache';
-import {
-    findOrCreateArtist,
-    getEffectiveMusicArtistCredits,
-    preserveArtistCreditPresentation,
-    replaceArtistCredits,
-    resolveArtistCreditArtists,
-    type ArtistCreditValue
-} from '../modules/artist-credits';
-import { walk } from '../modules/file';
-import {
-    normalizeMusicFilePath,
-    resolveCachePath,
-    resolveMusicPath
-} from '../modules/storage-paths';
-import {
-    applyMusicMetadataOverride,
-    createTrackTagSnapshot,
-    parseTrackMetadata,
-    type ParsedTrackMetadata
-} from '../modules/track-metadata';
-import { TRACK_TAG_SNAPSHOT_VERSION } from '../modules/track-version';
-import {
-    TRACK_CONTENT_HASH_VERSION,
-    createTrackContentHash,
-    shouldRefreshTrackContentHash
-} from '../modules/track-hash';
-import {
-    TRACK_SYNC_STATUS,
-    classifyTrackIdentityCandidate,
-    deriveTrackPresenceUpdates,
-    type TrackIdentityRecord,
-    type TrackSyncStatus
-} from '../modules/track-identity';
-import {
-    SYNC_REPORT_KIND,
-    SYNC_REPORT_STATUS,
-    type SyncReportStatus
-} from '../modules/sync-report';
-import {
-    createCompatibilityMusicInTransaction,
-    updateCompatibilityMusicInTransaction
-} from '../models/music-compatibility';
-
 import models, {
     type Album,
     type Genre,
     type Music,
     type PhysicalFile
 } from '~/models';
+import {
+    createCompatibilityMusicInTransaction,
+    updateCompatibilityMusicInTransaction
+} from '../models/music-compatibility';
+import {
+    hasHealthyAlbumCoverCache,
+    syncAlbumCoverCache
+} from '../modules/album-cover-cache';
+import {
+    type ArtistCreditValue,
+    findOrCreateArtist,
+    getEffectiveMusicArtistCredits,
+    preserveArtistCreditPresentation,
+    replaceArtistCredits,
+    resolveArtistCreditArtists
+} from '../modules/artist-credits';
+import { walk } from '../modules/file';
+import { isTrackMetadataOperationFilePath } from '../modules/audio-metadata-writer';
+import { withLibraryMetadataLock } from '../modules/library-metadata-lock';
+import {
+    normalizeMusicFilePath,
+    resolveCachePath,
+    resolveMusicPath
+} from '../modules/storage-paths';
+import {
+    SYNC_REPORT_KIND,
+    SYNC_REPORT_STATUS,
+    type SyncReportStatus
+} from '../modules/sync-report';
+import {
+    createTrackContentHash,
+    shouldRefreshTrackContentHash,
+    TRACK_CONTENT_HASH_VERSION
+} from '../modules/track-hash';
+import {
+    classifyTrackIdentityCandidate,
+    deriveTrackPresenceUpdates,
+    TRACK_SYNC_STATUS,
+    type TrackIdentityRecord,
+    type TrackSyncStatus
+} from '../modules/track-identity';
+import {
+    applyMusicMetadataOverride,
+    createTrackTagSnapshot,
+    type ParsedTrackMetadata,
+    parseTrackMetadata
+} from '../modules/track-metadata';
+import { TRACK_TAG_SNAPSHOT_VERSION } from '../modules/track-version';
+import { connectors } from './connectors';
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set([
     '.mp3',
@@ -83,6 +82,7 @@ export interface SyncMusicResult {
     moved: SyncResultEntry[];
     duplicate: SyncResultEntry[];
     missing: SyncResultEntry[];
+    reconcile: SyncResultEntry[];
 }
 
 const ensureDirectory = (directoryPath: string) => {
@@ -96,7 +96,8 @@ const emitSyncMessage = (socket: Pick<Socket, 'emit'>, message: string) => {
 };
 
 const isSupportedAudioFile = (filePath: string) => {
-    return SUPPORTED_AUDIO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+    return !isTrackMetadataOperationFilePath(filePath)
+        && SUPPORTED_AUDIO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
 };
 
 const toTrackIdentityRecord = (file: PhysicalFile): TrackIdentityRecord => {
@@ -128,11 +129,12 @@ const findOrCreateAlbum = async ({
     preferredReleaseId?: number;
 }): Promise<Album> => {
     return models.$transaction(async (transaction) => {
+        const releaseDate = publishedYear || null;
         const artists = await resolveArtistCreditArtists(transaction, artistCredits);
         const releases = await transaction.release.findMany({
             where: {
                 title: name,
-                releaseDate: publishedYear
+                releaseDate
             },
             include: {
                 ArtistCredit: {
@@ -172,7 +174,7 @@ const findOrCreateAlbum = async ({
             ? await transaction.release.update({
                 where: { id: existingRelease.id },
                 data: {
-                    releaseDate: publishedYear,
+                    releaseDate,
                     ...(canSeedMissingReleaseMetadata
                         && existingRelease.releaseType === 'unknown'
                         && releaseType !== 'unknown'
@@ -186,7 +188,7 @@ const findOrCreateAlbum = async ({
             : await transaction.release.create({
                 data: {
                     title: name,
-                    releaseDate: publishedYear,
+                    releaseDate,
                     releaseType,
                     totalDiscs,
                     cover: ''
@@ -213,6 +215,145 @@ const findOrCreateGenres = async (genreNames: string[]): Promise<Genre[]> => {
 
         return models.genre.create({ data: { name } });
     }));
+};
+
+const sameStringSet = (left: string[], right: string[]) => (
+    [...new Set(left)].sort().join('\0') === [...new Set(right)].sort().join('\0')
+);
+
+const sameStringList = (left: string[], right: string[]) => left.join('\0') === right.join('\0');
+
+const sameDiscPosition = (canonical: number | null, embedded: number | null) => (
+    canonical === embedded || canonical === 1 && embedded === null
+);
+
+const getCanonicalFileMetadata = async (releaseTrackId: number) => {
+    const track = await models.releaseTrack.findUniqueOrThrow({
+        where: { id: releaseTrackId },
+        include: {
+            ArtistCredit: {
+                include: { Artist: true },
+                orderBy: [{ position: 'asc' }, { id: 'asc' }]
+            },
+            Recording: {
+                include: {
+                    ArtistCredit: {
+                        include: { Artist: true },
+                        orderBy: [{ position: 'asc' }, { id: 'asc' }]
+                    },
+                    RecordingGenre: { include: { Genre: true } }
+                }
+            },
+            Release: {
+                include: {
+                    ArtistCredit: {
+                        include: { Artist: true },
+                        orderBy: [{ position: 'asc' }, { id: 'asc' }]
+                    }
+                }
+            }
+        }
+    });
+    const toCredits = (rows: typeof track.ArtistCredit) => rows.map(credit => ({
+        name: credit.Artist.name,
+        role: credit.role,
+        creditedName: credit.creditedName,
+        joinPhrase: credit.joinPhrase
+    }));
+    const recordingCredits = toCredits(track.Recording.ArtistCredit);
+    const effectiveCredits = track.ArtistCredit.length
+        ? toCredits(track.ArtistCredit)
+        : recordingCredits;
+    const releaseCredits = toCredits(track.Release.ArtistCredit);
+
+    return {
+        title: track.titleOverride ?? track.Recording.title,
+        artistNames: effectiveCredits.map(credit => credit.name),
+        album: track.Release.title,
+        albumArtistNames: releaseCredits.map(credit => credit.name),
+        releaseDate: track.Release.releaseDate ?? '',
+        releaseType: track.Release.releaseType,
+        totalDiscs: track.Release.totalDiscs,
+        recordingVersionTitle: track.Recording.versionTitle,
+        releaseVersionTitle: track.versionTitle,
+        discNumber: track.discNumber,
+        trackNumber: track.trackNumber,
+        genres: track.Recording.RecordingGenre.map(({ Genre }) => Genre.name)
+    };
+};
+
+const matchesCanonicalFileMetadata = async (
+    releaseTrackId: number,
+    metadata: ParsedTrackMetadata
+) => {
+    const canonical = await getCanonicalFileMetadata(releaseTrackId);
+
+    return canonical.title === metadata.title
+        && sameStringList(canonical.artistNames, metadata.artistCredits.map(credit => credit.name))
+        && canonical.album === metadata.album
+        && sameStringList(
+            canonical.albumArtistNames,
+            (metadata.albumArtistCredits ?? metadata.artistCredits)
+                .map(credit => credit.name)
+        )
+        && canonical.releaseDate === metadata.year
+        && canonical.releaseType === metadata.releaseType
+        && sameDiscPosition(canonical.totalDiscs, metadata.totalDiscs)
+        && canonical.recordingVersionTitle === metadata.recordingVersionTitle
+        && canonical.releaseVersionTitle === metadata.releaseVersionTitle
+        && sameDiscPosition(canonical.discNumber, metadata.discNumber)
+        && canonical.trackNumber === metadata.trackNumber
+        && sameStringSet(canonical.genres, metadata.genres);
+};
+
+const refreshKnownPhysicalFile = async ({
+    file,
+    filePath,
+    contentHash,
+    metadata,
+    observedAt,
+    fileSizeBytes,
+    metadataMatches
+}: {
+    file: PhysicalFile;
+    filePath: string;
+    contentHash: string;
+    metadata: ParsedTrackMetadata;
+    observedAt: Date;
+    fileSizeBytes: bigint;
+    metadataMatches: boolean;
+}) => {
+    const recoveryBlocked = file.metadataSyncStatus === 'reconcile-required';
+
+    return models.physicalFile.update({
+        where: { id: file.id },
+        data: {
+            filePath,
+            contentHash,
+            hashVersion: TRACK_CONTENT_HASH_VERSION,
+            durationMs: Math.round(metadata.duration * 1_000),
+            codec: metadata.codec,
+            container: metadata.container,
+            bitrate: Math.round(metadata.bitrate),
+            sampleRate: Math.round(metadata.sampleRate),
+            fileSizeBytes,
+            tagSnapshotJson: createTrackTagSnapshot(metadata),
+            tagSnapshotVersion: TRACK_TAG_SNAPSHOT_VERSION,
+            lastSeenAt: observedAt,
+            missingSinceAt: null,
+            syncStatus: TRACK_SYNC_STATUS.active,
+            metadataSyncStatus: recoveryBlocked
+                ? 'reconcile-required'
+                : metadataMatches ? 'current' : 'stale',
+            metadataSyncError: recoveryBlocked
+                ? file.metadataSyncError
+                    ?? 'An unfinished metadata operation must be recovered.'
+                : metadataMatches
+                    ? null
+                    : 'Embedded tags differ from canonical relational metadata.',
+            metadataRevision: { increment: 1 }
+        }
+    });
 };
 
 const upsertMusicFromMetadata = async ({
@@ -486,6 +627,45 @@ const updateLinkedPhysicalFileFromMetadata = async ({
     return { music: updatedMusic, file: updatedFile };
 };
 
+const syncLinkedAlbumCoverFromMetadata = async ({
+    file,
+    music,
+    metadata,
+    cachePath,
+    resizedPath,
+    albumById
+}: {
+    file: PhysicalFile;
+    music: Music;
+    metadata: ParsedTrackMetadata;
+    cachePath: string;
+    resizedPath: string;
+    albumById: Map<number, Album>;
+}) => {
+    const fileCount = await models.physicalFile.count({
+        where: { releaseTrackId: file.releaseTrackId }
+    });
+    const album = albumById.get(music.albumId);
+
+    if (fileCount !== 1 || !album || album.isCoverCustom) return;
+
+    const cover = await syncAlbumCoverCache({
+        albumId: album.id,
+        currentCoverPath: album.cover,
+        pictureData: metadata.pictureData,
+        cachePath,
+        resizedPath
+    });
+
+    if (cover !== album.cover) {
+        const updatedAlbum = await models.album.update({
+            where: { id: album.id },
+            data: { cover }
+        });
+        albumById.set(album.id, updatedAlbum);
+    }
+};
+
 const repairAlbumCoverCacheIfNeeded = async ({
     music,
     filePath,
@@ -531,7 +711,8 @@ const flattenSyncReportEntries = (result: SyncMusicResult) => {
         [SYNC_REPORT_KIND.created, result.created],
         [SYNC_REPORT_KIND.moved, result.moved],
         [SYNC_REPORT_KIND.duplicate, result.duplicate],
-        [SYNC_REPORT_KIND.missing, result.missing]
+        [SYNC_REPORT_KIND.missing, result.missing],
+        [SYNC_REPORT_KIND.reconcile, result.reconcile]
     ] as const).flatMap(([kind, entries]) => {
         return entries.map((entry) => ({
             kind,
@@ -567,6 +748,7 @@ const persistSyncReport = async ({
             movedCount: result.moved.length,
             duplicateCount: result.duplicate.length,
             missingCount: result.missing.length,
+            reconcileCount: result.reconcile.length,
             Item: {
                 create: items.map((entry) => ({
                     kind: entry.kind,
@@ -602,7 +784,10 @@ export const syncListener = (socket: Socket) => {
     });
 };
 
-export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Promise<SyncMusicResult | null> => {
+export const syncMusic = async (
+    socket: Pick<Socket, 'emit'>,
+    force = false
+): Promise<SyncMusicResult | null> => withLibraryMetadataLock(async () => {
     const startedAt = new Date();
 
     try {
@@ -664,7 +849,8 @@ export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Pr
             created: [],
             moved: [],
             duplicate: [],
-            missing: []
+            missing: [],
+            reconcile: []
         };
         const orderedFiles = [
             ...files.filter((filePath) => physicalFileByPath.has(filePath)),
@@ -728,21 +914,60 @@ export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Pr
                 }
 
                 if (force) {
-                    const metadata = await parseTrackMetadata(sourceFilePath, fileData ?? fs.readFileSync(sourceFilePath));
-                    const updated = await updateLinkedPhysicalFileFromMetadata({
+                    const resolvedData = fileData ?? fs.readFileSync(sourceFilePath);
+                    const metadata = await parseTrackMetadata(sourceFilePath, resolvedData);
+
+                    if (linkedFile.legacyMetadataOverride) {
+                        const updated = await updateLinkedPhysicalFileFromMetadata({
+                            file: linkedFile,
+                            music,
+                            filePath,
+                            contentHash: contentHash ?? createTrackContentHash(resolvedData),
+                            metadata,
+                            observedAt,
+                            syncStatus: linkedFile.syncStatus as TrackSyncStatus,
+                            fileSizeBytes: BigInt(resolvedData.length),
+                            cachePath,
+                            resizedPath
+                        });
+                        upsertKnownPhysicalFile(updated.file);
+                        upsertKnownMusic(updated.music);
+                        continue;
+                    }
+
+                    const metadataMatches = await matchesCanonicalFileMetadata(
+                        linkedFile.releaseTrackId,
+                        metadata
+                    );
+                    const updatedFile = await refreshKnownPhysicalFile({
                         file: linkedFile,
-                        music,
                         filePath,
-                        contentHash: contentHash ?? createTrackContentHash(fs.readFileSync(sourceFilePath)),
+                        contentHash: contentHash ?? createTrackContentHash(resolvedData),
                         metadata,
                         observedAt,
-                        syncStatus: linkedFile.syncStatus as TrackSyncStatus,
-                        fileSizeBytes: BigInt((fileData ?? fs.readFileSync(sourceFilePath)).length),
-                        cachePath,
-                        resizedPath
+                        fileSizeBytes: BigInt(resolvedData.length),
+                        metadataMatches
                     });
-                    upsertKnownPhysicalFile(updated.file);
-                    upsertKnownMusic(updated.music);
+                    upsertKnownPhysicalFile(updatedFile);
+                    await syncLinkedAlbumCoverFromMetadata({
+                        file: updatedFile,
+                        music,
+                        metadata,
+                        cachePath,
+                        resizedPath,
+                        albumById
+                    });
+
+                    if (updatedFile.metadataSyncStatus !== 'current') {
+                        result.reconcile.push({
+                            musicId: music.id,
+                            physicalFileId: updatedFile.id,
+                            musicName: music.name,
+                            filePath,
+                            previousFilePath: null
+                        });
+                    }
+
                     continue;
                 }
 
@@ -789,24 +1014,64 @@ export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Pr
                     continue;
                 }
 
-                const moved = await updateLinkedPhysicalFileFromMetadata({
-                    file: existingFile,
-                    music: existingMusic,
-                    filePath,
-                    contentHash: resolvedContentHash,
-                    metadata,
-                    observedAt,
-                    syncStatus: existingFile.syncStatus as TrackSyncStatus,
-                    fileSizeBytes: BigInt(resolvedFileData.length),
-                    cachePath,
-                    resizedPath
-                });
-                upsertKnownPhysicalFile(moved.file);
-                upsertKnownMusic(moved.music);
+                let movedFile: PhysicalFile;
+                let movedMusic = existingMusic;
+
+                if (existingFile.legacyMetadataOverride) {
+                    const moved = await updateLinkedPhysicalFileFromMetadata({
+                        file: existingFile,
+                        music: existingMusic,
+                        filePath,
+                        contentHash: resolvedContentHash,
+                        metadata,
+                        observedAt,
+                        syncStatus: TRACK_SYNC_STATUS.active,
+                        fileSizeBytes: BigInt(resolvedFileData.length),
+                        cachePath,
+                        resizedPath
+                    });
+                    movedFile = moved.file;
+                    movedMusic = moved.music;
+                } else {
+                    const metadataMatches = await matchesCanonicalFileMetadata(
+                        existingFile.releaseTrackId,
+                        metadata
+                    );
+                    movedFile = await refreshKnownPhysicalFile({
+                        file: existingFile,
+                        filePath,
+                        contentHash: resolvedContentHash,
+                        metadata,
+                        observedAt,
+                        fileSizeBytes: BigInt(resolvedFileData.length),
+                        metadataMatches
+                    });
+                    await syncLinkedAlbumCoverFromMetadata({
+                        file: movedFile,
+                        music: existingMusic,
+                        metadata,
+                        cachePath,
+                        resizedPath,
+                        albumById
+                    });
+
+                    if (movedFile.metadataSyncStatus !== 'current') {
+                        result.reconcile.push({
+                            musicId: existingMusic.id,
+                            physicalFileId: movedFile.id,
+                            musicName: existingMusic.name,
+                            filePath,
+                            previousFilePath: match.record.filePath
+                        });
+                    }
+                }
+
+                upsertKnownPhysicalFile(movedFile);
+                upsertKnownMusic(movedMusic);
                 result.moved.push({
-                    musicId: moved.music.id,
-                    physicalFileId: moved.file.id,
-                    musicName: moved.music.name,
+                    musicId: movedMusic.id,
+                    physicalFileId: movedFile.id,
+                    musicName: movedMusic.name,
                     filePath,
                     previousFilePath: match.record.filePath
                 });
@@ -820,6 +1085,10 @@ export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Pr
                     : null;
 
                 if (!matchedFile || !matchedMusic) continue;
+                const metadataMatches = await matchesCanonicalFileMetadata(
+                    matchedFile.releaseTrackId,
+                    metadata
+                );
 
                 const duplicateFile = await models.physicalFile.create({
                     data: {
@@ -836,6 +1105,10 @@ export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Pr
                         tagSnapshotJson: createTrackTagSnapshot(metadata),
                         tagSnapshotVersion: TRACK_TAG_SNAPSHOT_VERSION,
                         lastSeenAt: observedAt,
+                        metadataSyncStatus: metadataMatches ? 'current' : 'stale',
+                        metadataSyncError: metadataMatches
+                            ? null
+                            : 'Embedded tags differ from canonical relational metadata.',
                         syncStatus: TRACK_SYNC_STATUS.duplicate
                     }
                 });
@@ -847,6 +1120,15 @@ export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Pr
                     filePath,
                     previousFilePath: null
                 });
+                if (!metadataMatches) {
+                    result.reconcile.push({
+                        musicId: matchedMusic.id,
+                        physicalFileId: duplicateFile.id,
+                        musicName: matchedMusic.name,
+                        filePath,
+                        previousFilePath: null
+                    });
+                }
             } else {
                 const createdMusic = await upsertMusicFromMetadata({
                     filePath,
@@ -906,6 +1188,24 @@ export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Pr
                     filePath: updatedFile.filePath,
                     previousFilePath: null
                 });
+            } else if (
+                presenceUpdate.syncStatus === TRACK_SYNC_STATUS.active
+                && existingFile.metadataSyncStatus !== 'current'
+                && !result.reconcile.some(entry => (
+                    entry.physicalFileId === existingFile.id
+                ))
+            ) {
+                const music = musicByReleaseTrackId.get(existingFile.releaseTrackId);
+
+                if (!music) continue;
+
+                result.reconcile.push({
+                    musicId: music.id,
+                    physicalFileId: updatedFile.id,
+                    musicName: music.name,
+                    filePath: updatedFile.filePath,
+                    previousFilePath: null
+                });
             }
         }
 
@@ -933,7 +1233,8 @@ export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Pr
                 created: [],
                 moved: [],
                 duplicate: [],
-                missing: []
+                missing: [],
+                reconcile: []
             }
         }).catch((reportError) => {
             console.error(reportError);
@@ -941,4 +1242,4 @@ export const syncMusic = async (socket: Pick<Socket, 'emit'>, force = false): Pr
         emitSyncMessage(socket, 'error');
         return null;
     }
-};
+});

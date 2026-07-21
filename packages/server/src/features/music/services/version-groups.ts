@@ -344,6 +344,8 @@ export const getMusicFileVersions = async (musicIdValue: string | number) => {
         sampleRate: file.sampleRate,
         duration: file.durationMs / 1_000,
         syncStatus: file.syncStatus,
+        metadataSyncStatus: file.metadataSyncStatus,
+        metadataSyncError: file.metadataSyncError,
         isPreferred: file.preferenceRank === 0,
         isSelected: file.id === selected?.id,
         isPlayable: isPhysicalFileReadable(file)

@@ -6,10 +6,10 @@ import models, {
     type Prisma
 } from '~/models';
 import {
+    type ArtistCreditWithArtist,
     formatArtistCredits,
     getEffectiveMusicArtistCredits,
-    toArtistCreditGraphQL,
-    type ArtistCreditWithArtist
+    toArtistCreditGraphQL
 } from '~/modules/artist-credits';
 import { selectPhysicalFileForReleaseTrack } from '~/modules/physical-file-selection';
 import {
@@ -114,6 +114,12 @@ const getSelectedFile = (music: Music) => {
 };
 
 export const musicFieldResolvers: MusicFieldResolvers = {
+    recordingTitle: async (music: Music) => (
+        (await getReleaseTrack(music))?.Recording.title ?? music.name
+    ),
+    titleOverride: async (music: Music) => (
+        (await getReleaseTrack(music))?.titleOverride ?? null
+    ),
     duration: async (music: Music) => (
         (await getSelectedFile(music))?.durationMs ?? Math.round(music.duration * 1_000)
     ) / 1_000,
@@ -150,6 +156,16 @@ export const musicFieldResolvers: MusicFieldResolvers = {
     artistCredits: async (music: Music) => (
         (await getArtistCredits(music)).map(toArtistCreditGraphQL)
     ),
+    recordingArtistCredits: async (music: Music) => (
+        (await models.artistCredit.findMany({
+            where: { recordingId: music.recordingId },
+            include: { Artist: true },
+            orderBy: [{ position: 'asc' }, { id: 'asc' }]
+        })).map(toArtistCreditGraphQL)
+    ),
+    hasReleaseTrackArtistCredits: (music: Music) => models.artistCredit.count({
+        where: { releaseTrackId: music.releaseTrackId }
+    }).then(count => count > 0),
     album: (music: Music) => models.album.findUnique({ where: { id: music.albumId } }),
     genres: (music: Music) => models.genre.findMany({
         where: { RecordingGenre: { some: { recordingId: music.recordingId } } }

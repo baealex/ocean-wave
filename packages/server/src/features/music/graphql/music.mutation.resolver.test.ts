@@ -3,6 +3,8 @@ import { MUSIC_COUNT, MUSIC_UPDATED } from '~/socket/music';
 
 import {
     createRecordPlaybackMutationResolver,
+    createRecoverMusicMetadataOperationMutationResolver,
+    createRetryMusicMetadataOperationMutationResolver,
     createUpdateMusicMetadataMutationResolver
 } from './music.mutation.resolver';
 
@@ -95,15 +97,85 @@ describe('music mutation resolvers', () => {
             trackNumber: 1,
             genres: []
         };
-        const update = jest.fn().mockResolvedValue({ id: 1, name: 'Edited Track' });
+        const result = {
+            operationId: 'operation-1',
+            status: 'cleaned',
+            retryable: false,
+            errorCode: null,
+            errorMessage: null,
+            music: { id: 1, name: 'Edited Track' },
+            targets: []
+        };
+        const update = jest.fn().mockResolvedValue(result);
         const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
         const resolver = createUpdateMusicMetadataMutationResolver(update);
 
         await expect(resolver(null, {
             input,
+            previewToken: 'preview-1',
             originClientId: 'client-1'
-        })).resolves.toEqual({ id: 1, name: 'Edited Track' });
-        expect(update).toHaveBeenCalledWith(input);
+        })).resolves.toEqual(result);
+        expect(update).toHaveBeenCalledWith(input, 'preview-1');
+        expect(notifySpy).toHaveBeenCalledWith(MUSIC_UPDATED, {
+            musicId: '1',
+            originClientId: 'client-1'
+        });
+    });
+
+    it('does not notify other clients when metadata changes were rolled back', async () => {
+        const result = {
+            operationId: 'operation-1',
+            status: 'rolled-back',
+            retryable: true,
+            errorCode: 'AUDIO_METADATA_WRITE_FAILED',
+            errorMessage: 'The original audio file was restored.',
+            music: null,
+            targets: []
+        };
+        const update = jest.fn().mockResolvedValue(result);
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
+        const resolver = createUpdateMusicMetadataMutationResolver(update);
+
+        await expect(resolver(null, {
+            input: {
+                id: '1',
+                title: 'Edited Track',
+                album: 'Edited Album',
+                publishedYear: '2026',
+                trackNumber: 1,
+                genres: []
+            },
+            previewToken: 'preview-1',
+            originClientId: 'client-1'
+        })).resolves.toEqual(result);
+        expect(notifySpy).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['retry', createRetryMusicMetadataOperationMutationResolver],
+        ['recovery', createRecoverMusicMetadataOperationMutationResolver]
+    ] as const)('notifies other clients after successful metadata %s', async (
+        _label,
+        createResolver
+    ) => {
+        const result = {
+            operationId: 'operation-1',
+            status: 'cleaned',
+            retryable: false,
+            errorCode: null,
+            errorMessage: null,
+            music: { id: 1, name: 'Recovered Track' },
+            targets: []
+        };
+        const mutate = jest.fn().mockResolvedValue(result);
+        const notifySpy = jest.spyOn(connectors, 'notify').mockImplementation();
+        const resolver = createResolver(mutate);
+
+        await expect(resolver(null, {
+            operationId: 'operation-1',
+            originClientId: 'client-1'
+        })).resolves.toEqual(result);
+        expect(mutate).toHaveBeenCalledWith('operation-1');
         expect(notifySpy).toHaveBeenCalledWith(MUSIC_UPDATED, {
             musicId: '1',
             originClientId: 'client-1'

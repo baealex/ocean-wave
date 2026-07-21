@@ -9,7 +9,8 @@ export const SYNC_REPORT_KIND = {
     created: 'created',
     moved: 'moved',
     duplicate: 'duplicate',
-    missing: 'missing'
+    missing: 'missing',
+    reconcile: 'reconcile'
 } as const;
 
 export type SyncReportKind = typeof SYNC_REPORT_KIND[keyof typeof SYNC_REPORT_KIND];

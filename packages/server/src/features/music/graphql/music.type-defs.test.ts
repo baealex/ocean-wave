@@ -96,3 +96,52 @@ describe('recording version GraphQL contract', () => {
         ]));
     });
 });
+
+describe('relational metadata editor GraphQL contract', () => {
+    it('exposes preview, durable operation recovery, and relationship-owned fields', () => {
+        const musicType = schema.getType('Music') as {
+            getFields: () => Record<string, { type: { toString: () => string } }>;
+        };
+        const metadataInput = schema.getType('UpdateMusicMetadataInput') as typeof musicType;
+        const metadataPreview = schema.getType('MusicMetadataPreview') as typeof musicType;
+        const metadataOperation = schema.getType('MusicMetadataOperation') as typeof musicType;
+        const queries = schema.getQueryType()?.getFields();
+        const mutations = schema.getMutationType()?.getFields();
+        const updateArguments = mutations?.updateMusicMetadata.args
+            .map(argument => [argument.name, argument.type.toString()]);
+
+        expect(musicType.getFields().recordingTitle.type.toString()).toBe('String!');
+        expect(musicType.getFields().titleOverride.type.toString()).toBe('String');
+        expect(musicType.getFields().recordingArtistCredits.type.toString())
+            .toBe('[ArtistCredit!]!');
+        expect(musicType.getFields().hasReleaseTrackArtistCredits.type.toString())
+            .toBe('Boolean!');
+        const musicFileType = schema.getType('MusicFileVersion') as typeof musicType;
+        expect(musicFileType.getFields().metadataSyncStatus.type.toString()).toBe('String!');
+        expect(musicFileType.getFields().metadataSyncError.type.toString()).toBe('String');
+
+        expect(metadataInput.getFields().recordingArtistCredits.type.toString())
+            .toBe('[ArtistCreditInput!]');
+        expect(metadataInput.getFields().releaseTrackArtistCredits.type.toString())
+            .toBe('[ArtistCreditInput!]');
+        expect(metadataInput.getFields().trackNumber.type.toString()).toBe('Int');
+        expect(metadataInput.getFields().releaseType.type.toString()).toBe('ReleaseType');
+
+        expect(queries?.previewMusicMetadataUpdate.type.toString())
+            .toBe('MusicMetadataPreview!');
+        expect(queries?.musicMetadataOperations.type.toString())
+            .toBe('[MusicMetadataOperation!]!');
+        expect(metadataPreview.getFields().files.type.toString())
+            .toBe('[MusicMetadataFilePreview!]!');
+        expect(metadataOperation.getFields().targets.type.toString())
+            .toBe('[MusicMetadataOperationTarget!]!');
+        expect(updateArguments).toEqual(expect.arrayContaining([
+            ['input', 'UpdateMusicMetadataInput!'],
+            ['previewToken', 'String!']
+        ]));
+        expect(Object.keys(mutations ?? {})).toEqual(expect.arrayContaining([
+            'retryMusicMetadataOperation',
+            'recoverMusicMetadataOperation'
+        ]));
+    });
+});
