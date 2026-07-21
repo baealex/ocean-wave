@@ -80,6 +80,8 @@ const createMusic = ({
     lastSkippedAt: null,
     name: `Track ${id}`,
     playCount: 0,
+    recordingVersionTitle: null,
+    releaseVersionTitle: null,
     sampleRate: 44_100,
     skipCount: 0,
     tags: [],

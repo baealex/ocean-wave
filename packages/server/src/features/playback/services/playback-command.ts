@@ -1,5 +1,5 @@
 import models from '~/models';
-import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
+import { resolvePlayableReleaseTrack } from '~/modules/physical-file-selection';
 import {
     COMMAND_COMPLETION_TIMEOUT_MS,
     EXECUTION_GRANT_TTL_MS,
@@ -331,13 +331,11 @@ export const resolvePlaybackCommand = async (
     const currentMusicId = session.currentMusicId?.toString() ?? null;
     const currentMusic = session.currentMusicId === null
         ? null
-        : await models.music.findUnique({
-            where: { id: session.currentMusicId },
-            select: { duration: true, syncStatus: true }
-        });
-    const currentMusicAvailable = !session.currentMusicId || (
-        currentMusic?.syncStatus === TRACK_SYNC_STATUS.active
-    );
+        : await resolvePlayableReleaseTrack(
+            session.currentMusicId,
+            session.historyPhysicalFileId
+        );
+    const currentMusicAvailable = !session.currentMusicId || Boolean(currentMusic);
 
     if (!currentMusicAvailable) {
         throw new PlaybackCommandServiceError(
@@ -370,13 +368,7 @@ export const resolvePlaybackCommand = async (
     if (desiredResult.position.mode === 'absolute') {
         const desiredMusic = desiredResult.currentMusicId === currentMusicId
             ? currentMusic
-            : await models.music.findFirst({
-                where: {
-                    id: Number(desiredResult.currentMusicId),
-                    syncStatus: TRACK_SYNC_STATUS.active
-                },
-                select: { duration: true }
-            });
+            : await resolvePlayableReleaseTrack(Number(desiredResult.currentMusicId));
 
         if (!desiredMusic) {
             throw new PlaybackCommandServiceError(
@@ -398,10 +390,9 @@ export const resolvePlaybackCommand = async (
     const resolvedDurationMs = desiredResult.currentMusicId === currentMusicId
         ? durationMs
         : Math.max(
-            Math.round(((await models.music.findUnique({
-                where: { id: Number(desiredResult.currentMusicId) },
-                select: { duration: true }
-            }))?.duration ?? 0) * 1_000),
+            Math.round(((await resolvePlayableReleaseTrack(
+                Number(desiredResult.currentMusicId)
+            ))?.duration ?? 0) * 1_000),
             0
         );
 

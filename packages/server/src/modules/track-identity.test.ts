@@ -9,8 +9,10 @@ import {
 const createRecord = (overrides?: Partial<TrackIdentityRecord>): TrackIdentityRecord => {
     return {
         id: overrides?.id ?? 1,
+        releaseTrackId: overrides?.releaseTrackId,
         filePath: overrides?.filePath ?? 'library/track-a.mp3',
         contentHash: overrides?.contentHash ?? 'hash-a',
+        isExplicitlyActivated: overrides?.isExplicitlyActivated ?? false,
         lastSeenAt: overrides?.lastSeenAt ?? null,
         missingSinceAt: overrides?.missingSinceAt ?? null,
         syncStatus: overrides?.syncStatus ?? TRACK_SYNC_STATUS.active
@@ -150,5 +152,54 @@ describe('track identity', () => {
         expect(resolveVisibleTrackSyncStatus([original, laterCopy], laterCopy, visiblePaths)).toBe(
             TRACK_SYNC_STATUS.duplicate
         );
+    });
+
+    it('preserves explicitly activated exact copies inside one release-track group', () => {
+        const original = createRecord({
+            id: 2,
+            releaseTrackId: 10,
+            filePath: 'library/original.flac',
+            contentHash: 'same-hash',
+            syncStatus: TRACK_SYNC_STATUS.active
+        });
+        const activatedCopy = createRecord({
+            id: 5,
+            releaseTrackId: 10,
+            filePath: 'library/copy.flac',
+            contentHash: 'same-hash',
+            isExplicitlyActivated: true,
+            syncStatus: TRACK_SYNC_STATUS.active
+        });
+        const visiblePaths = new Set([original.filePath, activatedCopy.filePath]);
+
+        expect(resolveVisibleTrackSyncStatus(
+            [original, activatedCopy],
+            activatedCopy,
+            visiblePaths
+        )).toBe(TRACK_SYNC_STATUS.active);
+    });
+
+    it('reactivates a manually separated exact copy after it returns from missing', () => {
+        const original = createRecord({
+            id: 2,
+            releaseTrackId: 10,
+            filePath: 'library/original.flac',
+            contentHash: 'same-hash'
+        });
+        const separatedCopy = createRecord({
+            id: 5,
+            releaseTrackId: 20,
+            filePath: 'library/separated.flac',
+            contentHash: 'same-hash',
+            isExplicitlyActivated: true,
+            syncStatus: TRACK_SYNC_STATUS.missing
+        });
+        const visiblePaths = new Set([original.filePath, separatedCopy.filePath]);
+
+        expect(resolveVisibleTrackSyncStatus(
+            [original, separatedCopy],
+            separatedCopy,
+            visiblePaths
+        )).toBe(TRACK_SYNC_STATUS.active);
     });
 });

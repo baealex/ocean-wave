@@ -55,6 +55,7 @@ const createTrackFixture = (overrides?: {
     compilation?: boolean;
     fingerprint?: string;
     picture?: string;
+    subtitle?: string;
 }) => {
     const title = overrides?.title ?? 'Track A';
     const artist = overrides?.artist ?? 'Artist A';
@@ -70,8 +71,9 @@ const createTrackFixture = (overrides?: {
     const compilation = overrides?.compilation ? 'true' : 'false';
     const fingerprint = overrides?.fingerprint ?? 'fingerprint-a';
     const picture = overrides?.picture ?? '';
+    const subtitle = overrides?.subtitle ?? '';
 
-    return `title=${title}|artist=${artist}|artists=${artists}|album=${album}|albumArtist=${albumArtist}|albumArtists=${albumArtists}|year=${year}|track=${trackNumber}|disc=${discNumber}|totalDiscs=${totalDiscs}|releaseTypes=${releaseTypes}|compilation=${compilation}|fingerprint=${fingerprint}|picture=${picture}`;
+    return `title=${title}|artist=${artist}|artists=${artists}|album=${album}|albumArtist=${albumArtist}|albumArtists=${albumArtists}|year=${year}|track=${trackNumber}|disc=${discNumber}|totalDiscs=${totalDiscs}|releaseTypes=${releaseTypes}|compilation=${compilation}|fingerprint=${fingerprint}|picture=${picture}|subtitle=${subtitle}`;
 };
 
 const createTempTrackFile = ({
@@ -177,7 +179,8 @@ describe('sync music identity', () => {
                         of: entries.totalDiscs ? Number(entries.totalDiscs) : null
                     },
                     releasetype: entries.releaseTypes?.split('~').filter(Boolean),
-                    compilation: entries.compilation === 'true'
+                    compilation: entries.compilation === 'true',
+                    subtitle: entries.subtitle ? [entries.subtitle] : undefined
                 }
             } as never;
         });
@@ -297,7 +300,7 @@ describe('sync music identity', () => {
         ]));
     });
 
-    it('creates a duplicate row but keeps the normal library scoped to active tracks', async () => {
+    it('attaches an exact duplicate to the same release track while keeping it hidden', async () => {
         const contents = createTrackFixture({ fingerprint: 'duplicate-hash' });
         const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-duplicate-'));
         const originalRelativePath = 'library/original/track-a.mp3';
@@ -325,6 +328,10 @@ describe('sync music identity', () => {
 
         const result = await syncMusic({ emit: jest.fn() } as never);
         const musics = await models.music.findMany({ orderBy: { id: 'asc' } });
+        const physicalFiles = await models.physicalFile.findMany({
+            where: { releaseTrackId: originalMusic.releaseTrackId },
+            orderBy: { id: 'asc' }
+        });
         const visibleMusics = await (musicResolvers.Query as { allMusics: () => Promise<{ id: number }[]> }).allMusics();
         const report = await models.syncReport.findFirstOrThrow({
             orderBy: { createdAt: 'desc' },
@@ -333,18 +340,19 @@ describe('sync music identity', () => {
 
         expect(result).toMatchObject({
             duplicate: [{
-                musicId: musics[1].id,
+                musicId: originalMusic.id,
                 filePath: copyRelativePath
             }]
         });
-        expect(musics).toHaveLength(2);
+        expect(musics).toHaveLength(1);
         expect(musics[0]).toMatchObject({
             id: originalMusic.id,
             filePath: originalRelativePath,
             syncStatus: TRACK_SYNC_STATUS.active
         });
         expect(musics[0].contentHash).toBe(createTrackContentHash(Buffer.from(contents)));
-        expect(musics[1]).toMatchObject({
+        expect(physicalFiles).toHaveLength(2);
+        expect(physicalFiles[1]).toMatchObject({
             filePath: copyRelativePath,
             syncStatus: TRACK_SYNC_STATUS.duplicate
         });
@@ -360,9 +368,73 @@ describe('sync music identity', () => {
             expect.objectContaining({
                 kind: SYNC_REPORT_KIND.duplicate,
                 filePath: copyRelativePath,
-                musicName: musics[1].name
+                musicName: musics[0].name
             })
         ]));
+
+        await syncMusic({ emit: jest.fn() }, true);
+
+        await expect(models.physicalFile.findMany({
+            where: { releaseTrackId: originalMusic.releaseTrackId },
+            orderBy: { id: 'asc' },
+            select: { syncStatus: true, isExplicitlyActivated: true }
+        })).resolves.toEqual([
+            { syncStatus: TRACK_SYNC_STATUS.active, isExplicitlyActivated: false },
+            { syncStatus: TRACK_SYNC_STATUS.duplicate, isExplicitlyActivated: false }
+        ]);
+    });
+
+    it('keeps manually grouped alternate files attached across later rescans', async () => {
+        const originalContents = createTrackFixture({ fingerprint: 'group-original' });
+        const alternateContents = createTrackFixture({ fingerprint: 'group-alternate' });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-group-'));
+        const originalPath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/signal.flac',
+            contents: originalContents
+        });
+        const alternatePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/signal.mp3',
+            contents: alternateContents
+        });
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+
+        const music = await createExistingMusic({
+            filePath: originalPath,
+            contents: originalContents
+        });
+        await models.physicalFile.create({
+            data: {
+                releaseTrackId: music.releaseTrackId,
+                filePath: 'library/signal.mp3',
+                contentHash: createTrackContentHash(Buffer.from(alternateContents)),
+                hashVersion: TRACK_CONTENT_HASH_VERSION,
+                durationMs: 180_000,
+                codec: 'mp3',
+                container: 'mp3',
+                bitrate: 320_000,
+                sampleRate: 44_100,
+                syncStatus: TRACK_SYNC_STATUS.active
+            }
+        });
+        walkMock.mockResolvedValue([originalPath, alternatePath]);
+
+        const result = await syncMusic({ emit: jest.fn() } as never);
+
+        expect(result).toMatchObject({ created: [], moved: [], duplicate: [] });
+        await expect(models.releaseTrack.count()).resolves.toBe(1);
+        await expect(models.physicalFile.findMany({
+            where: { releaseTrackId: music.releaseTrackId },
+            orderBy: { id: 'asc' }
+        })).resolves.toEqual([
+            expect.objectContaining({ syncStatus: TRACK_SYNC_STATUS.active }),
+            expect.objectContaining({
+                filePath: 'library/signal.mp3',
+                syncStatus: TRACK_SYNC_STATUS.active
+            })
+        ]);
     });
 
     it('repairs missing cached album artwork for unchanged tracks during normal sync', async () => {
@@ -471,6 +543,35 @@ describe('sync music identity', () => {
         });
         expect(updated.Recording.RecordingGenre
             .map(({ Genre: genre }) => genre.name)).toEqual(['Ambient']);
+    });
+
+    it('seeds missing canonical version evidence when force-scanning an existing track', async () => {
+        const contents = createTrackFixture({
+            title: 'Signal',
+            subtitle: 'Live at the Harbor',
+            fingerprint: 'legacy-live-version'
+        });
+        const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ocean-wave-sync-version-'));
+        const filePath = createTempTrackFile({
+            directory: tempDirectory,
+            relativePath: 'library/signal-live.mp3',
+            contents
+        });
+        tempDirectories.push(tempDirectory);
+        process.env.OCEAN_WAVE_MUSIC_PATH = tempDirectory;
+        const music = await createExistingMusic({ filePath, contents });
+        walkMock.mockResolvedValue([filePath]);
+
+        await syncMusic({ emit: jest.fn() }, true);
+
+        await expect(models.recording.findUniqueOrThrow({
+            where: { id: music.recordingId }
+        })).resolves.toMatchObject({ versionTitle: 'Live at the Harbor' });
+        await expect(models.physicalFile.findUniqueOrThrow({
+            where: { id: music.physicalFileId }
+        })).resolves.toMatchObject({
+            tagSnapshotJson: expect.stringContaining('Live at the Harbor')
+        });
     });
 
     it('imports release type and orders duplicate track numbers across discs', async () => {

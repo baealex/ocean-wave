@@ -1,4 +1,8 @@
 import models from '~/models';
+import {
+    createReadableAudioTestFile,
+    removeReadableAudioTestFiles
+} from '~/test-support/readable-audio-file';
 import { recordPlayback } from '~/features/music/services/playback-records';
 import { setMusicLiked } from '~/features/music/services/preferences';
 import { reportPlaybackState } from '~/features/playback/services/playback-session';
@@ -30,7 +34,10 @@ const clearRelationshipFixture = async () => {
 
 describe('music relationship compatibility boundary', () => {
     beforeEach(clearRelationshipFixture);
-    afterEach(clearRelationshipFixture);
+    afterEach(async () => {
+        await clearRelationshipFixture();
+        removeReadableAudioTestFiles();
+    });
 
     it('maps a public ReleaseTrack id to every canonical dependent owner', async () => {
         const artist = await models.artist.create({
@@ -82,7 +89,7 @@ describe('music relationship compatibility boundary', () => {
             data: {
                 id: 501,
                 releaseTrackId: releaseTrack.id,
-                filePath: '/music/relationship.flac',
+                filePath: createReadableAudioTestFile(),
                 durationMs: 180_000,
                 codec: 'flac',
                 container: 'flac',

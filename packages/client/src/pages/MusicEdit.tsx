@@ -20,7 +20,12 @@ import {
 } from '~/components/shared';
 import { getMusic } from '~/api/library';
 import {
+    groupMusicAsAlternateFile,
+    linkMusicRecordings,
     restoreMusicArtwork,
+    setPreferredMusicFile,
+    ungroupMusicFile,
+    unlinkMusicRecording,
     updateMusicMetadata,
     uploadMusicArtwork
 } from '~/api/music';
@@ -28,10 +33,12 @@ import { queryKeys } from '~/api/query-keys';
 import { Music, Pencil } from '~/icon';
 import type {
     ArtistCreditRole,
-    Music as MusicModel
+    Music as MusicModel,
+    MusicGroupingCandidate
 } from '~/models/type';
 import { toast } from '~/modules/toast';
 import { musicStore } from '~/store/music';
+import MusicVersionManager from '~/components/music/MusicVersionManager';
 
 const MAX_ARTWORK_SIZE = 10 * 1024 * 1024;
 const SUPPORTED_ARTWORK_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -313,6 +320,7 @@ export default function MusicEdit() {
     const [artworkFile, setArtworkFile] = useState<File | null>(null);
     const [restoreArtwork, setRestoreArtwork] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [versionAction, setVersionAction] = useState<string | null>(null);
 
     const { data: music, isError, isLoading, refetch } = useQuery({
         queryKey: queryKeys.music.detail(id),
@@ -352,11 +360,81 @@ export default function MusicEdit() {
     }
 
     const initialValues = toEditorValues(music);
+    const hasRelationalMetadataGroup = (music.files?.length ?? 0) > 1
+        || (music.recordingAppearances?.length ?? 0) > 0;
     const metadataChanged = JSON.stringify(values) !== JSON.stringify(initialValues);
-    const shouldWriteMetadata = metadataChanged || music.hasMetadataOverride;
+    const shouldWriteMetadata = !hasRelationalMetadataGroup
+        && (metadataChanged || music.hasMetadataOverride);
     const artworkChanged = Boolean(artworkFile) || restoreArtwork;
     const hasChanges = shouldWriteMetadata || artworkChanged;
     const artworkSource = restoreArtwork ? '' : music.album.cover;
+    const isBusy = isSaving || Boolean(versionAction);
+
+    const refreshVersionSurfaces = async () => {
+        await Promise.all([
+            musicStore.sync(),
+            queryClient.invalidateQueries({ queryKey: queryKeys.albums.all() }),
+            queryClient.invalidateQueries({ queryKey: ['album'] }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.artists.all() }),
+            queryClient.invalidateQueries({ queryKey: ['artist'] }),
+            queryClient.invalidateQueries({ queryKey: queryKeys.playlists.all() }),
+            queryClient.invalidateQueries({ queryKey: ['playlist'] })
+        ]);
+        await refetch();
+    };
+
+    const runVersionAction = async (
+        label: string,
+        action: () => Promise<{
+            type: 'success';
+        } | {
+            type: 'error';
+            errors: Array<{ message: string }>;
+        }>,
+        successMessage: string
+    ) => {
+        if (isBusy) return;
+
+        setVersionAction(label);
+
+        try {
+            const response = await action();
+
+            if (response.type === 'error') {
+                throw new Error(response.errors[0]?.message ?? 'Version update failed.');
+            }
+
+            await refreshVersionSurfaces();
+            toast(successMessage);
+        } catch (error) {
+            toast.error(getRequestErrorMessage(error));
+        } finally {
+            setVersionAction(null);
+        }
+    };
+
+    const handleGroupingCandidate = (candidate: MusicGroupingCandidate) => {
+        if (candidate.kind === 'ALTERNATE_FILE') {
+            void runVersionAction(
+                `file-${candidate.music.id}`,
+                () => groupMusicAsAlternateFile({
+                    musicId: candidate.music.id,
+                    targetMusicId: music.id
+                }),
+                'Alternate file grouped'
+            );
+            return;
+        }
+
+        void runVersionAction(
+            `recording-${candidate.music.id}`,
+            () => linkMusicRecordings({
+                musicId: candidate.music.id,
+                targetMusicId: music.id
+            }),
+            'Recording appearances linked'
+        );
+    };
 
     const updateValue = (key: keyof EditorValues, value: string) => {
         setValues((current) => current ? { ...current, [key]: value } : current);
@@ -391,13 +469,14 @@ export default function MusicEdit() {
     const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
         event.preventDefault();
 
-        if (!hasChanges || isSaving) {
+        if (!hasChanges || isBusy) {
             return;
         }
 
         const trackNumber = Number(values.trackNumber);
 
-        if (!Number.isInteger(trackNumber) || trackNumber < 1 || trackNumber > 9999) {
+        if (shouldWriteMetadata
+            && (!Number.isInteger(trackNumber) || trackNumber < 1 || trackNumber > 9999)) {
             toast.error('Track number must be between 1 and 9999.');
             return;
         }
@@ -482,7 +561,7 @@ export default function MusicEdit() {
                     <input
                         type="file"
                         accept="image/jpeg,image/png,image/webp"
-                        disabled={isSaving}
+                        disabled={isBusy}
                         onChange={(event) => handleArtworkChange(event.target.files?.[0])}
                         className="block w-full cursor-pointer rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] text-xs font-semibold text-[var(--b-color-text-secondary)] file:mr-3 file:min-h-9 file:border-0 file:border-r file:border-[var(--b-color-border-subtle)] file:bg-[var(--b-color-secondary-button)] file:px-3 file:text-xs file:font-semibold file:text-[var(--b-color-text-secondary)]"
                     />
@@ -499,7 +578,7 @@ export default function MusicEdit() {
                             type="button"
                             variant="ghost"
                             fullWidth
-                            disabled={isSaving}
+                            disabled={isBusy}
                             onClick={() => {
                                 setArtworkFile(null);
                                 setRestoreArtwork((current) => !current);
@@ -514,12 +593,17 @@ export default function MusicEdit() {
                         <Pencil className="h-4 w-4 text-[var(--b-color-text-muted)]" />
                         <Text as="h2" size="sectionTitle" weight="semibold">Metadata</Text>
                     </div>
+                    {hasRelationalMetadataGroup && (
+                        <Text as="p" variant="muted" size="xs" className="leading-relaxed">
+                            Shared metadata editing is locked while alternate files or release appearances are linked. Separate them first so one file cannot be updated only partially.
+                        </Text>
+                    )}
                     <div className="grid gap-5 sm:grid-cols-2">
                         <Field label="Title">
                             <Input
                                 required
                                 value={values.title}
-                                disabled={isSaving}
+                                disabled={isBusy || hasRelationalMetadataGroup}
                                 onChange={(event) => updateValue('title', event.target.value)}
                             />
                         </Field>
@@ -527,7 +611,7 @@ export default function MusicEdit() {
                             <Input
                                 required
                                 value={values.album}
-                                disabled={isSaving}
+                                disabled={isBusy || hasRelationalMetadataGroup}
                                 onChange={(event) => updateValue('album', event.target.value)}
                             />
                         </Field>
@@ -538,7 +622,7 @@ export default function MusicEdit() {
                                 maxLength={4}
                                 pattern="\d{4}"
                                 value={values.publishedYear}
-                                disabled={isSaving}
+                                disabled={isBusy || hasRelationalMetadataGroup}
                                 onChange={(event) => updateValue('publishedYear', event.target.value)}
                             />
                         </Field>
@@ -549,7 +633,7 @@ export default function MusicEdit() {
                                 min="1"
                                 max="9999"
                                 value={values.trackNumber}
-                                disabled={isSaving}
+                                disabled={isBusy || hasRelationalMetadataGroup}
                                 onChange={(event) => updateValue('trackNumber', event.target.value)}
                             />
                         </Field>
@@ -557,7 +641,7 @@ export default function MusicEdit() {
                             <Field label="Genres" hint="Separate multiple genres with commas.">
                                 <Input
                                     value={values.genres}
-                                    disabled={isSaving}
+                                    disabled={isBusy || hasRelationalMetadataGroup}
                                     placeholder="Electronic, Ambient"
                                     onChange={(event) => updateValue('genres', event.target.value)}
                                 />
@@ -566,19 +650,40 @@ export default function MusicEdit() {
                         <ArtistCreditEditor
                             label="Track artists"
                             credits={values.artistCredits}
-                            disabled={isSaving}
+                            disabled={isBusy || hasRelationalMetadataGroup}
                             featuredByDefault
                             onChange={(credits) => updateCredits('artistCredits', credits)}
                         />
                         <ArtistCreditEditor
                             label="Album artists"
                             credits={values.albumArtistCredits}
-                            disabled={isSaving}
+                            disabled={isBusy || hasRelationalMetadataGroup}
                             onChange={(credits) => updateCredits('albumArtistCredits', credits)}
                         />
                     </div>
                 </Surface>
             </div>
+
+            <MusicVersionManager
+                music={music}
+                busy={isBusy}
+                onSetPreferred={(fileId) => void runVersionAction(
+                    `preferred-${fileId ?? 'automatic'}`,
+                    () => setPreferredMusicFile({ musicId: music.id, fileId }),
+                    fileId ? 'Preferred file updated' : 'Quality fallback restored'
+                )}
+                onUngroupFile={(fileId) => void runVersionAction(
+                    `ungroup-${fileId}`,
+                    () => ungroupMusicFile({ musicId: music.id, fileId }),
+                    'File separated into its own track'
+                )}
+                onGroupCandidate={handleGroupingCandidate}
+                onUnlinkRecording={() => void runVersionAction(
+                    'unlink-recording',
+                    () => unlinkMusicRecording({ musicId: music.id }),
+                    'Release appearance separated'
+                )}
+            />
 
             <Surface variant="subtle" padding="responsive" className="grid gap-2 sm:grid-cols-2">
                 <div>
@@ -606,10 +711,10 @@ export default function MusicEdit() {
             </Surface>
 
             <div className="flex flex-wrap justify-end gap-3">
-                <Button type="button" variant="ghost" disabled={isSaving} onClick={() => navigate(-1)}>
+                <Button type="button" variant="ghost" disabled={isBusy} onClick={() => navigate(-1)}>
                     Cancel
                 </Button>
-                <Button type="submit" variant="primary" disabled={!hasChanges || isSaving}>
+                <Button type="submit" variant="primary" disabled={!hasChanges || isBusy}>
                     {isSaving ? 'Saving…' : 'Save changes'}
                 </Button>
             </div>

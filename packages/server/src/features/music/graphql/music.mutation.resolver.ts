@@ -18,6 +18,14 @@ import {
     setMusicHated,
     setMusicLiked
 } from '../services/preferences';
+import {
+    groupMusicAsAlternateFile,
+    isMusicVersionServiceError,
+    linkMusicRecordings,
+    setPreferredMusicFile,
+    ungroupMusicFile,
+    unlinkMusicRecording
+} from '../services/version-groups';
 
 class MusicGraphQLError extends Error {
     extensions: {
@@ -37,6 +45,10 @@ const toGraphQLError = (error: unknown) => {
     }
 
     if (isMusicPreferenceServiceError(error)) {
+        return new MusicGraphQLError(error.message, error.code);
+    }
+
+    if (isMusicVersionServiceError(error)) {
         return new MusicGraphQLError(error.message, error.code);
     }
 
@@ -130,11 +142,33 @@ export const createUpdateMusicMetadataMutationResolver = (
     });
 };
 
+const createMusicVersionMutationResolver = <Input extends object>(
+    mutate: (input: Input) => Promise<{ id: number }>
+) => {
+    return async (_: unknown, {
+        originClientId,
+        ...input
+    }: Input & { originClientId?: string | null }) => withMusicErrorHandling(async () => {
+        const result = await mutate(input as Input);
+
+        await notifySafely(() => connectors.notify(MUSIC_UPDATED, withOriginClientId({
+            musicId: result.id.toString()
+        }, originClientId)));
+
+        return result;
+    });
+};
+
 type MusicMutationResolvers = NonNullable<IResolvers['Mutation']>;
 
 export const musicMutationResolvers: MusicMutationResolvers = {
     setMusicLiked: createSetMusicLikedMutationResolver(),
     setMusicHated: createSetMusicHatedMutationResolver(),
     updateMusicMetadata: createUpdateMusicMetadataMutationResolver(),
+    setPreferredMusicFile: createMusicVersionMutationResolver(setPreferredMusicFile),
+    groupMusicAsAlternateFile: createMusicVersionMutationResolver(groupMusicAsAlternateFile),
+    ungroupMusicFile: createMusicVersionMutationResolver(ungroupMusicFile),
+    linkMusicRecordings: createMusicVersionMutationResolver(linkMusicRecordings),
+    unlinkMusicRecording: createMusicVersionMutationResolver(unlinkMusicRecording),
     recordPlayback: createRecordPlaybackMutationResolver()
 };

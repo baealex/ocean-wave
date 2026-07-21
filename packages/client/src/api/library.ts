@@ -34,6 +34,8 @@ export function getMusics() {
             'lastCompletedAt',
             'discNumber',
             'trackNumber',
+            'recordingVersionTitle',
+            'releaseVersionTitle',
             'isLiked',
             'isHated',
             'createdAt',
@@ -83,6 +85,8 @@ export function getMusic(id: string) {
             'duration',
             'discNumber',
             'trackNumber',
+            'recordingVersionTitle',
+            'releaseVersionTitle',
             'hasMetadataOverride',
             'artistDisplayName',
             createQuery('artistCredits', artistCreditFields),
@@ -107,6 +111,41 @@ export function getMusic(id: string) {
             ]),
             createQuery('genres', [
                 'name'
+            ]),
+            createQuery('files', [
+                'id',
+                'filePath',
+                'codec',
+                'container',
+                'bitrate',
+                'sampleRate',
+                'duration',
+                'syncStatus',
+                'isPreferred',
+                'isSelected',
+                'isPlayable'
+            ]),
+            createQuery<Music>('recordingAppearances', [
+                'id',
+                'name',
+                'recordingVersionTitle',
+                'releaseVersionTitle',
+                'artistDisplayName',
+                createQuery<Album>('album', ['id', 'name', 'cover'])
+            ]),
+            createQuery('groupingCandidates', [
+                'kind',
+                'reasons',
+                createQuery<Music>('music', [
+                    'id',
+                    'name',
+                    'duration',
+                    'codec',
+                    'recordingVersionTitle',
+                    'releaseVersionTitle',
+                    'artistDisplayName',
+                    createQuery<Album>('album', ['id', 'name', 'cover'])
+                ])
             ])
         ]))
     });

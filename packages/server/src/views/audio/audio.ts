@@ -3,6 +3,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { PassThrough } from 'stream';
 
 import models from '~/models';
+import { selectPhysicalFileForReleaseTrack } from '~/modules/physical-file-selection';
 import { resolveMusicFilePath } from '~/modules/storage-paths';
 
 import type { Controller } from '~/types';
@@ -96,21 +97,27 @@ export const audio: Controller = async (req, res) => {
     }
 
     try {
-        const $music = await models.music.findUnique({ where: { id: Number(id) } });
+        const releaseTrackId = Number(id);
+        const releaseTrack = await models.releaseTrack.findUnique({
+            where: { id: releaseTrackId },
+            select: { id: true }
+        });
 
-        if (!$music) {
+        if (!releaseTrack) {
             res.status(404).send('Music not found').end();
             return;
         }
 
-        const filePath = resolveMusicFilePath($music.filePath);
+        const selectedFile = await selectPhysicalFileForReleaseTrack(releaseTrackId);
 
-        if (!fs.existsSync(filePath)) {
+        if (!selectedFile) {
             res.status(404).send('Audio file not found').end();
             return;
         }
 
-        const fileExtension = $music.filePath.split('.').pop()?.toLowerCase() || '';
+        const filePath = resolveMusicFilePath(selectedFile.filePath);
+
+        const fileExtension = selectedFile.filePath.split('.').pop()?.toLowerCase() || '';
 
         const noTranscode = req.query.notranscode === 'true';
 

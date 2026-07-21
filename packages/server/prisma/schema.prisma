@@ -115,6 +115,7 @@ model PhysicalFile {
   tagSnapshotVersion     Int?
   legacyMetadataOverride String?
   preferenceRank         Int?
+  isExplicitlyActivated  Boolean           @default(false)
   metadataRevision       Int               @default(0)
   lastSeenAt             DateTime?
   missingSinceAt         DateTime?

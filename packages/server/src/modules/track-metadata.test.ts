@@ -20,7 +20,10 @@ describe('track release metadata parsing', () => {
                 year: 2026,
                 track: { no: 1, of: 10 },
                 disk: { no: 2, of: 3 },
-                releasetype: ['Album', 'Live']
+                releasetype: ['Album', 'Live'],
+                subtitle: ['Live at the Harbor'],
+                musicbrainz_recordingid: 'RECORDING-ID',
+                isrc: ['USABC1234567']
             }
         } as never);
 
@@ -29,7 +32,13 @@ describe('track release metadata parsing', () => {
                 releaseType: 'live',
                 discNumber: 2,
                 totalDiscs: 3,
-                trackNumber: 1
+                trackNumber: 1,
+                recordingVersionTitle: 'Live at the Harbor',
+                releaseVersionTitle: null,
+                identifiers: [
+                    { scheme: 'musicbrainz-recording', value: 'recording-id' },
+                    { scheme: 'isrc', value: 'USABC1234567' }
+                ]
             });
     });
 

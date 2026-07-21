@@ -1,4 +1,8 @@
 import models from '~/models';
+import {
+    createReadableAudioTestFile,
+    removeReadableAudioTestFiles
+} from '~/test-support/readable-audio-file';
 import type { PlaybackHandoffRequest } from '~/socket/playback-handoff-contract';
 
 import {
@@ -29,7 +33,7 @@ const createMusic = async (name: string, duration = 180) => {
             name: `${name} ${unique}`,
             artistId: artist.id,
             albumId: album.id,
-            filePath: `/music/${unique}.mp3`,
+            filePath: createReadableAudioTestFile(),
             duration,
             codec: 'mp3',
             container: 'mp3',
@@ -91,6 +95,7 @@ describe('playback handoff service', () => {
     afterEach(async () => {
         await models.playbackQueue.deleteMany();
         await models.playbackSession.deleteMany();
+        removeReadableAudioTestFiles();
     });
 
     const request = (

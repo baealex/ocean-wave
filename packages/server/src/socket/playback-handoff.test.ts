@@ -1,6 +1,10 @@
 import type { Socket } from 'socket.io';
 
 import models from '~/models';
+import {
+    createReadableAudioTestFile,
+    removeReadableAudioTestFiles
+} from '~/test-support/readable-audio-file';
 import { PlaybackHandoffServiceError } from '~/features/playback/services/playback-handoff';
 import { recordPlayback } from '~/features/music/services/playback-records';
 
@@ -38,7 +42,7 @@ const createMusic = async (name: string, duration = 180) => {
             name: `${name} ${unique}`,
             artistId: artist.id,
             albumId: album.id,
-            filePath: `/music/${unique}.mp3`,
+            filePath: createReadableAudioTestFile(),
             duration,
             codec: 'mp3',
             container: 'mp3',
@@ -164,6 +168,7 @@ describe('playback handoff coordinator integration', () => {
     afterEach(async () => {
         await models.playbackQueue.deleteMany();
         await models.playbackSession.deleteMany();
+        removeReadableAudioTestFiles();
     });
 
     const request = (force = false): PlaybackHandoffRequest => ({

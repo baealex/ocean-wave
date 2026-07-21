@@ -103,7 +103,9 @@ owns:
 - file availability timestamps and sync status;
 - probed duration and encoding values;
 - the last parsed tag snapshot for diagnostics;
-- an optional preference rank among files for the same ReleaseTrack.
+- an optional preference rank among files for the same ReleaseTrack;
+- a durable explicit-activation marker so a user-unhidden exact copy is not
+  hidden again by a later scan.
 
 Each PhysicalFile contains one encoding, so a separate Encoding table is not
 needed in the first model. Encoding becomes a separate entity only if Ocean
@@ -211,6 +213,7 @@ model PhysicalFile {
     tagSnapshotVersion     Int?
     legacyMetadataOverride String?
     preferenceRank         Int?
+    isExplicitlyActivated  Boolean   @default(false)
     metadataRevision       Int       @default(0)
     lastSeenAt             DateTime?
     missingSinceAt         DateTime?
@@ -445,12 +448,78 @@ unambiguous. Once grouping is enabled, resolution follows these boundaries:
 
 1. consider only active and readable files;
 2. use the lowest explicit `preferenceRank` first;
-3. use a deterministic quality fallback defined by the version-grouping work;
+3. prefer lossless codecs (`flac`, `alac`, `wav`, `wave`, `pcm`, `aiff`,
+   `ape`, or `wavpack`), then higher sample rate, bitrate, and file size;
 4. use PhysicalFile id as the final tie-breaker.
 
 If a preferred file becomes missing, playback falls through to the next active
 file without changing the playlist or queue item. The preference remains stored
 so it becomes effective again if that file returns.
+
+### Version labels, suggestions, and manual grouping
+
+The importer preserves a normalized subtitle or a recognized trailing title
+qualifier as version evidence without removing it from the displayed title.
+Intrinsic labels such as `Live`, `Acoustic`, `Remix`, and `Radio Edit` seed
+`Recording.versionTitle`. Mastering or edition labels such as `Remaster`,
+`Mono`, `Stereo`, `Anniversary`, and `Deluxe` seed
+`ReleaseTrack.versionTitle`. An explicit subtitle wins over title inference.
+MusicBrainz Recording, ISRC, and AcoustID values are normalized into the
+versioned PhysicalFile tag snapshot as evidence; they do not become identity by
+themselves. Candidate checks combine canonical labels with every attached tag
+snapshot, so a legacy track whose canonical version field has not yet been
+seeded cannot be mistaken for an unversioned studio recording.
+
+Ocean Wave never automatically merges similarity candidates. Candidate
+suggestions require all of the following:
+
+1. normalized base titles are equal;
+2. effective ordered artist ids and roles are equal;
+3. intrinsic version labels are equal, including null versus non-null;
+4. the closest file durations differ by at most two seconds;
+5. any identifier scheme present on both sides intersects; a conflicting
+   MusicBrainz Recording, ISRC, or AcoustID value rejects the candidate.
+
+A candidate is an alternate PhysicalFile only when release id, nullable disc
+and track positions, and release-specific version labels also match. Otherwise
+it is a same-Recording suggestion across distinct ReleaseTracks. Exact
+whole-file duplicates are the sole automatic grouping case: the scanner adds a
+hidden `duplicate` PhysicalFile to the already-known ReleaseTrack. Activating a
+non-identical alternate file or linking recordings always requires an explicit
+user action. Choosing a hidden exact copy as the preferred file is also an
+explicit activation. That intent is stored independently from transient sync
+status, so force scans, missing-file recovery, and manual separation preserve
+the choice instead of hiding the file again.
+
+Manual same-Recording linking merges complete Recording groups, unions genres
+and personal tags, preserves likes and hides, moves history provenance, and
+adds aggregate listening counters. ReleaseTracks, playlists, and queues remain
+distinct release appearances. Separating one appearance creates a new
+Recording and reassigns that ReleaseTrack. Playback events and their derived
+aggregates are partitioned by ReleaseTrack, while likes, hides, and personal
+tags are copied to both resulting recordings because they were previously one
+user-visible musical item. A rescan of its known file path cannot silently
+restore the old grouping.
+
+Collapsing a separately imported track into an alternate PhysicalFile is more
+restrictive to avoid data loss. The source must contain exactly one file and
+one release appearance, match the strict alternate-file candidate rules, and
+have no listening, queue, session, like, hide, or personal-tag state. Playlist
+references are moved to the target and deduplicated within each playlist. A
+PhysicalFile can later be separated into a new Recording and ReleaseTrack; its
+path identity remains attached to that new group on later scans.
+
+The compatibility Music view uses the same persisted preference and quality
+order. The audio endpoint additionally checks readability at request time and
+falls through to the next active file. A missing preferred file keeps rank `0`
+in the DB, is skipped while unavailable, and automatically resumes after a
+scan marks it active again. Grouped relational metadata editing remains locked
+Playback events, authoritative session history, commands, and handoffs resolve
+that same readable PhysicalFile and use its duration, so fallback playback
+never records the unavailable preferred file. Grouped relational metadata
+editing remains locked until the durable multi-file editor can update every
+active file atomically; users must separate alternate files and linked release
+appearances before using the current single-file metadata editor.
 
 ## 9. Source of Truth
 
@@ -550,6 +619,9 @@ PhysicalFiles.
 
 The scanner applies path identity first. A normalized path match updates that
 PhysicalFile and does not perform hash-based identity selection.
+The scan index enumerates canonical PhysicalFile rows rather than the
+one-row-per-ReleaseTrack compatibility view, so every grouped alternate keeps
+its own path identity and a later rescan cannot recreate it as a new track.
 
 For an unmatched new path, a hash candidate exists only when both its non-null
 `contentHash` and `hashVersion` equal the scanner's current whole-file hash and

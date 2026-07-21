@@ -1,5 +1,5 @@
 import models, { type Prisma } from '~/models';
-import { TRACK_SYNC_STATUS } from '~/modules/track-identity';
+import { resolvePlayableReleaseTrack } from '~/modules/physical-file-selection';
 import {
     normalizePlaybackHandoffState,
     type PlaybackHandoffErrorCode,
@@ -378,22 +378,15 @@ export const resolvePlaybackHandoff = async (
 
     const currentMusic = session.currentMusicId === null
         ? null
-        : await models.music.findUnique({
-            where: { id: session.currentMusicId },
-            select: {
-                recordingId: true,
-                releaseTrackId: true,
-                physicalFileId: true,
-                duration: true,
-                syncStatus: true
-            }
-        });
+        : await resolvePlayableReleaseTrack(
+            session.currentMusicId,
+            session.historyPhysicalFileId
+        );
     const handoffState = normalizePlaybackHandoffState(session.state);
     if (
         !handoffState
         || !session.currentMusicId
         || !currentMusic
-        || currentMusic.syncStatus !== TRACK_SYNC_STATUS.active
     ) {
         throw new PlaybackHandoffServiceError(
             'The current playback item is unavailable for transfer.',

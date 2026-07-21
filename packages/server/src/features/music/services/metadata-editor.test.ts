@@ -267,6 +267,74 @@ describe('music metadata editor', () => {
         }));
     });
 
+    it('blocks partial metadata writes while alternate files share a release track', async () => {
+        const music = await createMusic('metadata-grouped');
+        await models.physicalFile.create({
+            data: {
+                releaseTrackId: music.releaseTrackId,
+                filePath: 'library/metadata-grouped-alternate.flac',
+                durationMs: 180_000,
+                codec: 'flac',
+                container: 'flac',
+                bitrate: 900_000,
+                sampleRate: 96_000,
+                syncStatus: 'active'
+            }
+        });
+        const writeTrackMetadata = jest.fn();
+
+        await expect(updateMusicMetadata({
+            id: music.id.toString(),
+            title: 'Unsafe Partial Edit',
+            artist: 'Edited Artist',
+            album: 'Edited Album',
+            publishedYear: '2026',
+            trackNumber: 1,
+            genres: []
+        }, { writeTrackMetadata })).rejects.toMatchObject({
+            code: 'RELATIONAL_METADATA_EDIT_REQUIRED'
+        });
+        expect(writeTrackMetadata).not.toHaveBeenCalled();
+    });
+
+    it('blocks partial metadata writes while release appearances share a recording', async () => {
+        const music = await createMusic('metadata-linked-recording');
+        const linkedTrack = await models.releaseTrack.create({
+            data: {
+                recordingId: music.recordingId,
+                releaseId: music.albumId,
+                discNumber: 1,
+                trackNumber: 2
+            }
+        });
+        await models.physicalFile.create({
+            data: {
+                releaseTrackId: linkedTrack.id,
+                filePath: 'library/metadata-linked-recording-second.mp3',
+                durationMs: 180_000,
+                codec: 'mp3',
+                container: 'mp3',
+                bitrate: 320_000,
+                sampleRate: 44_100,
+                syncStatus: 'active'
+            }
+        });
+        const writeTrackMetadata = jest.fn();
+
+        await expect(updateMusicMetadata({
+            id: music.id.toString(),
+            title: 'Unsafe Shared Recording Edit',
+            artist: 'Edited Artist',
+            album: 'Edited Album',
+            publishedYear: '2026',
+            trackNumber: 1,
+            genres: []
+        }, { writeTrackMetadata })).rejects.toMatchObject({
+            code: 'RELATIONAL_METADATA_EDIT_REQUIRED'
+        });
+        expect(writeTrackMetadata).not.toHaveBeenCalled();
+    });
+
     it('preserves ordered credits when a legacy scalar client edits another field', async () => {
         const suffix = 'legacy-credit-preservation';
         const music = await createMusic(suffix);

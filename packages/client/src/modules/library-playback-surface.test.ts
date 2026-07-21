@@ -20,6 +20,8 @@ const music: Music = {
     sampleRate: 44_100,
     discNumber: 1,
     trackNumber: 1,
+    recordingVersionTitle: null,
+    releaseVersionTitle: null,
     playCount: 0,
     lastPlayedAt: null,
     totalPlayedMs: 0,
