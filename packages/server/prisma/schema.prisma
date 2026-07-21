@@ -73,26 +73,27 @@ model Release {
 }
 
 model ReleaseTrack {
-  id                Int                 @id @default(autoincrement())
-  stableId          String              @unique @default(uuid())
-  recordingId       Int
-  releaseId         Int
-  titleOverride     String?
-  versionTitle      String?
-  discNumber        Int?
-  trackNumber       Int?
-  metadataRevision  Int                 @default(0)
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  Recording         Recording           @relation(fields: [recordingId], references: [id], onDelete: Restrict)
-  Release           Release             @relation(fields: [releaseId], references: [id], onDelete: Restrict)
-  PhysicalFile      PhysicalFile[]
-  ArtistCredit      ArtistCredit[]      @relation("ReleaseTrackArtistCredit")
-  PlaylistMusic     PlaylistMusic[]
-  PlaybackQueueItem PlaybackQueueItem[]
-  PlaybackEvent     PlaybackEvent[]
-  CurrentSession    PlaybackSession[]   @relation("PlaybackSessionCurrentReleaseTrack")
-  HistorySession    PlaybackSession[]   @relation("PlaybackSessionHistoryReleaseTrack")
+  id                 Int                  @id @default(autoincrement())
+  stableId           String               @unique @default(uuid())
+  recordingId        Int
+  releaseId          Int
+  titleOverride      String?
+  versionTitle       String?
+  discNumber         Int?
+  trackNumber        Int?
+  metadataRevision   Int                  @default(0)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  Recording          Recording            @relation(fields: [recordingId], references: [id], onDelete: Restrict)
+  Release            Release              @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  PhysicalFile       PhysicalFile[]
+  ArtistCredit       ArtistCredit[]       @relation("ReleaseTrackArtistCredit")
+  PlaylistMusic      PlaylistMusic[]
+  PlaybackQueueItem  PlaybackQueueItem[]
+  PlaybackEvent      PlaybackEvent[]
+  CurrentSession     PlaybackSession[]    @relation("PlaybackSessionCurrentReleaseTrack")
+  HistorySession     PlaybackSession[]    @relation("PlaybackSessionHistoryReleaseTrack")
+  PlaylistImportItem PlaylistImportItem[]
 
   @@index([recordingId])
   @@index([releaseId, discNumber, trackNumber])
@@ -483,12 +484,50 @@ model MusicHate {
 }
 
 model Playlist {
-  id            Int             @id @default(autoincrement())
+  id            Int                     @id @default(autoincrement())
   name          String
-  order         Int             @default(0)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  order         Int                     @default(0)
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
   PlaylistMusic PlaylistMusic[]
+  ImportSession PlaylistImportSession[]
+}
+
+model PlaylistImportSession {
+  id         String               @id @default(uuid())
+  name       String
+  format     String
+  mode       String
+  sourceJson String
+  status     String               @default("preview")
+  playlistId Int?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  Playlist   Playlist?            @relation(fields: [playlistId], references: [id], onDelete: SetNull)
+  Item       PlaylistImportItem[]
+
+  @@index([status, updatedAt])
+  @@index([playlistId])
+}
+
+model PlaylistImportItem {
+  id               Int                   @id @default(autoincrement())
+  sessionId        String
+  order            Int
+  sourceJson       String
+  status           String
+  reason           String
+  candidateIdsJson String
+  selectedMusicId  Int?
+  skipped          Boolean               @default(false)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  Session          PlaylistImportSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  SelectedMusic    ReleaseTrack?         @relation(fields: [selectedMusicId], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, order])
+  @@index([sessionId, status])
+  @@index([selectedMusicId])
 }
 
 model PlaylistMusic {
@@ -501,7 +540,7 @@ model PlaylistMusic {
   playlistId   Int
   Playlist     Playlist     @relation(fields: [playlistId], references: [id], onDelete: Cascade)
 
-  @@unique([playlistId, musicId], map: "PlaylistMusic_playlistId_releaseTrackId_key")
+  @@index([playlistId, musicId], map: "PlaylistMusic_playlistId_releaseTrackId_idx")
   @@index([playlistId, order])
   @@index([musicId], map: "PlaylistMusic_releaseTrackId_idx")
 }

@@ -828,23 +828,10 @@ export const groupMusicAsAlternateFile = async ({
         });
 
         for (const row of playlistRows) {
-            const targetRow = await transaction.playlistMusic.findUnique({
-                where: {
-                    playlistId_musicId: {
-                        playlistId: row.playlistId,
-                        musicId: target.id
-                    }
-                }
+            await transaction.playlistMusic.update({
+                where: { id: row.id },
+                data: { musicId: target.id }
             });
-
-            if (targetRow) {
-                await transaction.playlistMusic.delete({ where: { id: row.id } });
-            } else {
-                await transaction.playlistMusic.update({
-                    where: { id: row.id },
-                    data: { musicId: target.id }
-                });
-            }
         }
 
         await transaction.physicalFile.update({

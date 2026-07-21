@@ -3,3 +3,4 @@ export * from './auth';
 export * from './cache';
 export * from './home';
 export * from './music-artwork';
+export * from './playlist-portability';

@@ -22,6 +22,12 @@ export const createApiRouter = (authConfig: AuthConfig) => {
             useAsync(views.putMusicArtwork)
         )
         .delete('/music/:id/artwork', useAsync(views.deleteMusicArtwork))
+        .post('/playlists/imports/preview', useAsync(views.previewPlaylist))
+        .get('/playlists/imports/:id', useAsync(views.getPlaylistReport))
+        .patch('/playlists/imports/:id/mappings', useAsync(views.mapPlaylistItems))
+        .post('/playlists/imports/:id/relink', useAsync(views.relinkPlaylistItems))
+        .post('/playlists/imports/:id/apply', useAsync(views.applyPlaylist))
+        .get('/playlists/:id/export', useAsync(views.downloadPlaylist))
         .get('/audio/:id', useAsync(views.audio))
         .get('/home', useAsync(views.home));
 };
