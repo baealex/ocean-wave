@@ -92,6 +92,7 @@ vi.mock('~/components/music', () => ({
             ? 'Remote controls affect another device. Play Here moves playback to this browser.'
             : null
     ),
+    LibraryRediscoverySections: () => null,
     MusicActionPanelContent: () => null,
     MusicListItem: () => null,
     MusicTagFilterPanelContent: () => null,

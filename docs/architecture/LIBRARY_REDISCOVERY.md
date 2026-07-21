@@ -116,3 +116,48 @@ local measurements, not production latency guarantees.
 
 The diagnostics used by the benchmark are service-only and are not exposed in
 GraphQL.
+
+## 8. Library Presentation
+
+The Library page consumes a frozen presentation snapshot instead of reshuffling
+cards after every live playback signal. It requests candidates after the music
+store has loaded, resolves cards once, and keeps that result for the lifetime of
+the page. Leaving and returning to Library is the refresh boundary, so a recent
+play or skip affects the next visit without moving cards under the user's hand.
+The song list remains interactive while this optional request is pending. If the
+user has already scrolled when a successful response arrives, the page skips
+late card insertion for that visit rather than moving the visible song; the next
+Library visit is the next opportunity to present the refreshed snapshot.
+
+The page presents only these user-facing sections:
+
+1. dormant liked tracks;
+2. forgotten albums;
+3. recently added tracks.
+
+Dormant liked tracks are the primary priority when enough distinct results are
+available. At most two sections are shown. The secondary slot rotates daily,
+using the server `generatedAt` day as a stable seed, so forgotten albums and
+recent additions can take turns without changing during one visit. Each section
+requires at least two resolved cards and shows at most five cards. Missing,
+hated, recently played, and duplicate-album results are removed; a section that
+becomes too small is omitted without a placeholder. Underplayed and fallback
+candidates remain available to future surfaces but are not forced into this UI.
+
+Reason codes map to concise card copy in the client:
+
+| Reason code | Card copy |
+| --- | --- |
+| `RECENTLY_ADDED` | Added to your library recently |
+| `LIKED_NOT_RECENTLY_PLAYED` | Liked, but not played in a while |
+| `NEVER_PLAYED` | Still waiting for a first listen |
+| `RARELY_PLAYED` | Only played a few times |
+| `FORGOTTEN_ALBUM` | Not played in a while |
+| `FREQUENTLY_COMPLETED` | A track you often finish |
+| `TAG_AFFINITY` | Matches tags you return to |
+| `GENRE_AFFINITY` | Fits genres you return to |
+| `LIBRARY_FALLBACK` | A quieter corner of your library |
+
+The normal song list remains available while the optional rediscovery request is
+pending. If that request fails or exceeds the client timeout, the list stays
+available and no error placeholder is inserted.

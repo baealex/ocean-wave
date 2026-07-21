@@ -37,11 +37,12 @@ describe('library rediscovery API', () => {
             }
         });
 
-        await getLibraryRediscovery(6);
+        await getLibraryRediscovery(6, 5_000);
 
         const payload = post.mock.calls[0]?.[1] as GraphqlPayload;
         expect(payload.operationName).toBe('LibraryRediscovery');
         expect(payload.variables).toEqual({ limit: 6 });
+        expect(post.mock.calls[0]?.[2]).toEqual({ timeout: 5_000 });
         expect(payload.query).toContain('libraryRediscovery(limit: $limit)');
         expect(payload.query).toContain('reasonCodes');
         expect(payload.query).toContain('forgottenAlbums');

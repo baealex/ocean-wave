@@ -36,10 +36,14 @@ export interface LibraryRediscovery {
     fallback: LibraryRediscoveryTrackCandidate[];
 }
 
-export const getLibraryRediscovery = (limit = 8) => graphQuery<{
+export const getLibraryRediscovery = (
+    limit = 8,
+    requestTimeoutMs?: number
+) => graphQuery<{
     libraryRediscovery: LibraryRediscovery;
 }, { limit: number }>({
     operationName: 'LibraryRediscovery',
+    requestTimeoutMs,
     query: `query LibraryRediscovery($limit: Int) {
         libraryRediscovery(limit: $limit) {
             generatedAt
