@@ -6,7 +6,14 @@ import type { AuthConfig } from './modules/auth-mode';
 import useAsync from './modules/use-async';
 
 export const createApiRouter = (authConfig: AuthConfig) => {
-    const resourceReadRateLimit = rateLimit({
+    const apiRateLimit = rateLimit({
+        windowMs: 60_000,
+        limit: 300,
+        standardHeaders: 'draft-8',
+        legacyHeaders: false,
+        message: { message: 'Too many API requests. Please try again later.' }
+    });
+    const resourceAccessRateLimit = rateLimit({
         windowMs: 60_000,
         limit: 10,
         standardHeaders: 'draft-8',
@@ -15,6 +22,7 @@ export const createApiRouter = (authConfig: AuthConfig) => {
     });
 
     return Router()
+        .use(apiRateLimit)
         .get('/auth/session', useAsync(views.createSessionStatusHandler(authConfig)))
         .post('/auth/login', useAsync(views.createApiLoginHandler(authConfig)))
         .post('/auth/logout', useAsync(views.createApiLogoutHandler(authConfig)))
@@ -24,14 +32,15 @@ export const createApiRouter = (authConfig: AuthConfig) => {
         .use(requireAuthenticatedRequest(authConfig))
         .put(
             '/music/:id/artwork',
+            resourceAccessRateLimit,
             express.raw({
                 type: ['image/jpeg', 'image/png', 'image/webp'],
                 limit: '10mb'
             }),
             useAsync(views.putMusicArtwork)
         )
-        .delete('/music/:id/artwork', useAsync(views.deleteMusicArtwork))
-        .get('/library/backup', resourceReadRateLimit, useAsync(views.downloadLibraryBackup))
+        .delete('/music/:id/artwork', resourceAccessRateLimit, useAsync(views.deleteMusicArtwork))
+        .get('/library/backup', resourceAccessRateLimit, useAsync(views.downloadLibraryBackup))
         .post('/library/restore/preview', useAsync(views.previewLibraryRestore))
         .post('/library/restore/apply', useAsync(views.applyLibraryRestore))
         .post('/playlists/imports/preview', useAsync(views.previewPlaylist))
