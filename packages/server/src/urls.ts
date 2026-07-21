@@ -1,10 +1,19 @@
 import express, { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import * as views from './views';
 import { requireAuthenticatedRequest } from './modules/auth';
 import type { AuthConfig } from './modules/auth-mode';
 import useAsync from './modules/use-async';
 
 export const createApiRouter = (authConfig: AuthConfig) => {
+    const resourceReadRateLimit = rateLimit({
+        windowMs: 60_000,
+        limit: 10,
+        standardHeaders: 'draft-8',
+        legacyHeaders: false,
+        message: { message: 'Too many resource-intensive requests. Please try again later.' }
+    });
+
     return Router()
         .get('/auth/session', useAsync(views.createSessionStatusHandler(authConfig)))
         .post('/auth/login', useAsync(views.createApiLoginHandler(authConfig)))
@@ -22,7 +31,7 @@ export const createApiRouter = (authConfig: AuthConfig) => {
             useAsync(views.putMusicArtwork)
         )
         .delete('/music/:id/artwork', useAsync(views.deleteMusicArtwork))
-        .get('/library/backup', useAsync(views.downloadLibraryBackup))
+        .get('/library/backup', resourceReadRateLimit, useAsync(views.downloadLibraryBackup))
         .post('/library/restore/preview', useAsync(views.previewLibraryRestore))
         .post('/library/restore/apply', useAsync(views.applyLibraryRestore))
         .post('/playlists/imports/preview', useAsync(views.previewPlaylist))
