@@ -59,7 +59,11 @@ export default function Home() {
     const availableMusics = musics.filter(music => !music.isHated);
     const likedMusics = availableMusics.filter(music => music.isLiked);
     const albumCount = new Set(availableMusics.map(music => music.album.id)).size;
-    const artistCount = new Set(availableMusics.map(music => music.artist.id)).size;
+    const artistCount = new Set(availableMusics.flatMap(
+        music => music.artistCredits?.length
+            ? music.artistCredits.map(credit => credit.artist.id)
+            : [music.artist.id]
+    )).size;
     const queuePreviewStartIndex = selected === null ? 0 : selected + 1;
     const queuePreviewMusics = items
         .slice(queuePreviewStartIndex)
@@ -176,7 +180,7 @@ export default function Home() {
 
                     <Text as="p" variant="secondary" size="md" className="max-w-[544px] leading-[1.6] max-sm:hidden">
                         {heroMusic
-                            ? `${heroMusic.artist.name} · ${heroMusic.album.name}`
+                            ? `${heroMusic.artistDisplayName} · ${heroMusic.album.name}`
                             : remotePlayback
                                 ? 'Playback remains owned by another device. Open controls or the queue to recover its current item.'
                                 : 'Select music to start playback.'}

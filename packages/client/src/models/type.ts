@@ -19,11 +19,30 @@ export interface Music {
     isHated: boolean;
     createdAt: number;
     artist: Artist;
+    artistDisplayName: string;
+    artistCredits: ArtistCredit[];
     album: Album;
     genres: {
         name: string;
     }[];
     tags: Tag[];
+}
+
+export type ArtistCreditRole =
+    | 'PRIMARY'
+    | 'FEATURED'
+    | 'REMIXER'
+    | 'PERFORMER'
+    | 'COMPOSER'
+    | 'CONDUCTOR'
+    | 'UNKNOWN';
+
+export interface ArtistCredit {
+    artist: Pick<Artist, 'id' | 'name'>;
+    role: ArtistCreditRole;
+    position: number;
+    creditedName: string | null;
+    joinPhrase: string;
 }
 
 export interface Tag {
@@ -59,6 +78,8 @@ export interface Album {
     cover: string;
     isCoverCustom: boolean;
     publishedYear: string;
+    artistDisplayName: string;
+    artistCredits: ArtistCredit[];
     artist: {
         id: string;
         name: string;

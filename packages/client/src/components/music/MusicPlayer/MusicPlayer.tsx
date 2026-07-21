@@ -277,7 +277,7 @@ const MusicPlayer = () => {
                     </span>
                 ) : (
                     <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">
-                        {displayMusic?.artist.name ?? ''}
+                        {displayMusic?.artistDisplayName ?? ''}
                         {currentDevice
                             ? ` · ${currentDevice.name} · ${currentDevice.online ? 'Online' : 'Connecting'}`
                             : ' · This browser'}
@@ -481,7 +481,7 @@ const MusicPlayer = () => {
             <span className="sr-only" role="status" aria-live="polite">
                 {remotePlayback
                     ? remotePlayback.music
-                        ? `${playbackStateLabel[remotePlayback.state]} on ${remoteDeviceName}: ${remotePlayback.music.name} by ${remotePlayback.music.artist.name}. ${remoteDeviceStatus}.`
+                        ? `${playbackStateLabel[remotePlayback.state]} on ${remoteDeviceName}: ${remotePlayback.music.name} by ${remotePlayback.music.artistDisplayName}. ${remoteDeviceStatus}.`
                         : `${playbackStateLabel[remotePlayback.state]} on ${remoteDeviceName}: playback item unavailable. ${remoteDeviceStatus}.`
                     : ''}
             </span>

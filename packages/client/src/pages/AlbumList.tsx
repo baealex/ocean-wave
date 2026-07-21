@@ -42,7 +42,7 @@ export default function Album() {
     const filteredAlbums = albums
         ?.filter(album =>
             album.name.toLowerCase().includes(deferredQuery) ||
-            album.artist.name.toLowerCase().includes(deferredQuery)
+            album.artistDisplayName.toLowerCase().includes(deferredQuery)
         ) ?? [];
     const albumCount = albums?.length ?? 0;
     const summary = !loaded
@@ -98,7 +98,7 @@ export default function Album() {
                             albumId={album.id}
                             albumName={album.name}
                             albumCover={album.cover}
-                            artistName={album.artist.name}
+                            artistName={album.artistDisplayName}
                             publishedYear={album.publishedYear}
                             musicCount={album.musics?.length}
                         />

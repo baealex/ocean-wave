@@ -26,7 +26,10 @@ import {
 } from '~/api/music';
 import { queryKeys } from '~/api/query-keys';
 import { Music, Pencil } from '~/icon';
-import type { Music as MusicModel } from '~/models/type';
+import type {
+    ArtistCreditRole,
+    Music as MusicModel
+} from '~/models/type';
 import { toast } from '~/modules/toast';
 import { musicStore } from '~/store/music';
 
@@ -35,19 +38,60 @@ const SUPPORTED_ARTWORK_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'
 
 interface EditorValues {
     title: string;
-    artist: string;
+    artistCredits: CreditEditorValue[];
     album: string;
-    albumArtist: string;
+    albumArtistCredits: CreditEditorValue[];
     publishedYear: string;
     trackNumber: string;
     genres: string;
 }
 
+interface CreditEditorValue {
+    name: string;
+    role: ArtistCreditRole;
+    creditedName: string;
+    joinPhrase: string;
+}
+
+const CREDIT_ROLE_OPTIONS: Array<{ value: ArtistCreditRole; label: string }> = [
+    { value: 'PRIMARY', label: 'Primary' },
+    { value: 'FEATURED', label: 'Featured' },
+    { value: 'REMIXER', label: 'Remixer' },
+    { value: 'PERFORMER', label: 'Performer' },
+    { value: 'COMPOSER', label: 'Composer' },
+    { value: 'CONDUCTOR', label: 'Conductor' },
+    { value: 'UNKNOWN', label: 'Unknown' }
+];
+
+const toCreditEditorValues = (
+    credits: MusicModel['artistCredits'],
+    fallbackName: string
+): CreditEditorValue[] => {
+    if (!credits.length) {
+        return [{
+            name: fallbackName,
+            role: 'PRIMARY',
+            creditedName: '',
+            joinPhrase: ''
+        }];
+    }
+
+    return credits.map(credit => ({
+        name: credit.artist.name,
+        role: credit.role,
+        creditedName: credit.creditedName ?? '',
+        joinPhrase: credit.joinPhrase
+    }));
+};
+
 const toEditorValues = (music: MusicModel): EditorValues => ({
     title: music.name,
-    artist: music.artist.name,
+    artistCredits: toCreditEditorValues(music.artistCredits, music.artist.name),
     album: music.album.name,
-    albumArtist: music.album.artist.name,
+    albumArtistCredits: toCreditEditorValues(
+        music.album.artistCredits,
+        music.album.artist.name
+    ),
     publishedYear: music.album.publishedYear,
     trackNumber: music.trackNumber.toString(),
     genres: music.genres.map((genre) => genre.name).join(', ')
@@ -70,6 +114,188 @@ const Field = ({
         )}
     </label>
 );
+
+const ArtistCreditEditor = ({
+    label,
+    credits,
+    disabled,
+    featuredByDefault,
+    onChange
+}: {
+    label: string;
+    credits: CreditEditorValue[];
+    disabled: boolean;
+    featuredByDefault?: boolean;
+    onChange: (credits: CreditEditorValue[]) => void;
+}) => {
+    const updateCredit = <Key extends keyof CreditEditorValue>(
+        index: number,
+        key: Key,
+        value: CreditEditorValue[Key]
+    ) => {
+        onChange(credits.map((credit, creditIndex) => (
+            creditIndex === index
+                ? { ...credit, [key]: value }
+                : credit
+        )));
+    };
+
+    const addCredit = () => {
+        const nextCredits = credits.map((credit, index) => (
+            index === credits.length - 1 && !credit.joinPhrase
+                ? {
+                    ...credit,
+                    joinPhrase: featuredByDefault ? ' feat. ' : ' & '
+                }
+                : credit
+        ));
+
+        onChange([
+            ...nextCredits,
+            {
+                name: '',
+                role: featuredByDefault ? 'FEATURED' : 'PRIMARY',
+                creditedName: '',
+                joinPhrase: ''
+            }
+        ]);
+    };
+
+    const removeCredit = (index: number) => {
+        const nextCredits = credits.filter((_, creditIndex) => creditIndex !== index);
+
+        if (nextCredits.length) {
+            nextCredits[nextCredits.length - 1] = {
+                ...nextCredits[nextCredits.length - 1],
+                joinPhrase: ''
+            };
+        }
+
+        onChange(nextCredits);
+    };
+
+    const moveCredit = (index: number, offset: -1 | 1) => {
+        const targetIndex = index + offset;
+
+        if (targetIndex < 0 || targetIndex >= credits.length) return;
+
+        const joinPhrases = credits.map(credit => credit.joinPhrase);
+        const nextCredits = [...credits];
+        [nextCredits[index], nextCredits[targetIndex]] = [
+            nextCredits[targetIndex],
+            nextCredits[index]
+        ];
+        onChange(nextCredits.map((credit, creditIndex) => ({
+            ...credit,
+            joinPhrase: joinPhrases[creditIndex]
+        })));
+    };
+
+    return (
+        <section className="grid gap-3 sm:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <Text as="h3" size="sm" weight="semibold">{label}</Text>
+                    <Text as="p" variant="muted" size="xs" className="mt-1 leading-relaxed">
+                        Order controls display. “Join after” keeps text such as “ feat. ” or “ &amp; ”.
+                    </Text>
+                </div>
+                <Button
+                    type="button"
+                    size="xs"
+                    disabled={disabled}
+                    onClick={addCredit}>
+                    Add artist
+                </Button>
+            </div>
+            <div className="grid gap-3">
+                {credits.map((credit, index) => (
+                    <div
+                        key={`${label}-${index}`}
+                        className="grid gap-3 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] p-3 md:grid-cols-[minmax(0,1.5fr)_minmax(140px,0.75fr)_minmax(0,1fr)_minmax(110px,0.65fr)_minmax(128px,auto)]">
+                        <Field label={`Artist ${index + 1}`}>
+                            <Input
+                                required
+                                value={credit.name}
+                                disabled={disabled}
+                                onChange={(event) => updateCredit(index, 'name', event.target.value)}
+                            />
+                        </Field>
+                        <Field label="Role">
+                            <select
+                                value={credit.role}
+                                disabled={disabled}
+                                aria-label={`${label} artist ${index + 1} role`}
+                                onChange={(event) => updateCredit(
+                                    index,
+                                    'role',
+                                    event.target.value as ArtistCreditRole
+                                )}
+                                className="min-h-10 w-full rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-input)] px-3 text-sm text-[var(--b-color-text)] focus-visible:border-[var(--b-color-focus)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--b-color-focus-ring)] disabled:opacity-40">
+                                {CREDIT_ROLE_OPTIONS.map(option => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </Field>
+                        <Field label="Credited as" hint="Optional display alias.">
+                            <Input
+                                value={credit.creditedName}
+                                disabled={disabled}
+                                placeholder={credit.name || 'Artist name'}
+                                onChange={(event) => updateCredit(
+                                    index,
+                                    'creditedName',
+                                    event.target.value
+                                )}
+                            />
+                        </Field>
+                        <Field label="Join after">
+                            <Input
+                                value={credit.joinPhrase}
+                                disabled={disabled}
+                                placeholder={index === credits.length - 1 ? 'None' : ' & '}
+                                onChange={(event) => updateCredit(
+                                    index,
+                                    'joinPhrase',
+                                    event.target.value
+                                )}
+                            />
+                        </Field>
+                        <div className="flex flex-wrap items-end gap-1">
+                            <Button
+                                type="button"
+                                size="xs"
+                                disabled={disabled || index === 0}
+                                aria-label={`Move ${label.toLowerCase()} artist ${index + 1} up`}
+                                onClick={() => moveCredit(index, -1)}>
+                                ↑
+                            </Button>
+                            <Button
+                                type="button"
+                                size="xs"
+                                disabled={disabled || index === credits.length - 1}
+                                aria-label={`Move ${label.toLowerCase()} artist ${index + 1} down`}
+                                onClick={() => moveCredit(index, 1)}>
+                                ↓
+                            </Button>
+                            <Button
+                                type="button"
+                                size="xs"
+                                variant="danger"
+                                disabled={disabled || credits.length === 1}
+                                aria-label={`Remove ${label.toLowerCase()} artist ${index + 1}`}
+                                onClick={() => removeCredit(index)}>
+                                Remove
+                            </Button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </section>
+    );
+};
 
 const getRequestErrorMessage = (error: unknown) => {
     if (axios.isAxiosError<{ message?: string }>(error)) {
@@ -136,6 +362,13 @@ export default function MusicEdit() {
         setValues((current) => current ? { ...current, [key]: value } : current);
     };
 
+    const updateCredits = (
+        key: 'artistCredits' | 'albumArtistCredits',
+        credits: CreditEditorValue[]
+    ) => {
+        setValues((current) => current ? { ...current, [key]: credits } : current);
+    };
+
     const handleArtworkChange = (file: File | undefined) => {
         if (!file) {
             return;
@@ -176,9 +409,15 @@ export default function MusicEdit() {
                 const response = await updateMusicMetadata({
                     id: music.id,
                     title: values.title,
-                    artist: values.artist,
+                    artistCredits: values.artistCredits.map(credit => ({
+                        ...credit,
+                        creditedName: credit.creditedName || null
+                    })),
                     album: values.album,
-                    albumArtist: values.albumArtist || null,
+                    albumArtistCredits: values.albumArtistCredits.map(credit => ({
+                        ...credit,
+                        creditedName: credit.creditedName || null
+                    })),
                     publishedYear: values.publishedYear,
                     trackNumber,
                     genres: values.genres.split(',')
@@ -284,27 +523,12 @@ export default function MusicEdit() {
                                 onChange={(event) => updateValue('title', event.target.value)}
                             />
                         </Field>
-                        <Field label="Track artist">
-                            <Input
-                                required
-                                value={values.artist}
-                                disabled={isSaving}
-                                onChange={(event) => updateValue('artist', event.target.value)}
-                            />
-                        </Field>
                         <Field label="Album">
                             <Input
                                 required
                                 value={values.album}
                                 disabled={isSaving}
                                 onChange={(event) => updateValue('album', event.target.value)}
-                            />
-                        </Field>
-                        <Field label="Album artist" hint="Leave blank to use the track artist.">
-                            <Input
-                                value={values.albumArtist}
-                                disabled={isSaving}
-                                onChange={(event) => updateValue('albumArtist', event.target.value)}
                             />
                         </Field>
                         <Field label="Release year">
@@ -339,6 +563,19 @@ export default function MusicEdit() {
                                 />
                             </Field>
                         </div>
+                        <ArtistCreditEditor
+                            label="Track artists"
+                            credits={values.artistCredits}
+                            disabled={isSaving}
+                            featuredByDefault
+                            onChange={(credits) => updateCredits('artistCredits', credits)}
+                        />
+                        <ArtistCreditEditor
+                            label="Album artists"
+                            credits={values.albumArtistCredits}
+                            disabled={isSaving}
+                            onChange={(credits) => updateCredits('albumArtistCredits', credits)}
+                        />
                     </div>
                 </Surface>
             </div>

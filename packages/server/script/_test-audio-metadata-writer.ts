@@ -38,9 +38,29 @@ export const testAudioMetadataWriter = async () => {
         fs.writeFileSync(filePath, createSilentWav());
         await writeTrackMetadataToFile(filePath, {
             title: 'Portable Track',
-            artist: 'Track Artist',
+            artist: 'Track Artist feat. Guest Artist',
+            artistCredits: [
+                {
+                    name: 'Track Artist',
+                    role: 'primary',
+                    creditedName: null,
+                    joinPhrase: ' feat. '
+                },
+                {
+                    name: 'Guest Artist',
+                    role: 'featured',
+                    creditedName: null,
+                    joinPhrase: ''
+                }
+            ],
             album: 'Portable Album',
-            albumArtist: 'Album Artist',
+            albumArtist: 'Various Artists',
+            albumArtistCredits: [{
+                name: 'Various Artists',
+                role: 'primary',
+                creditedName: null,
+                joinPhrase: ''
+            }],
             year: '2026',
             trackNumber: 3,
             genres: ['Ambient', 'Electronic']
@@ -54,9 +74,12 @@ export const testAudioMetadataWriter = async () => {
         );
 
         assert.equal(metadata.title, 'Portable Track');
-        assert.equal(metadata.artist, 'Track Artist');
+        assert.deepEqual(
+            metadata.artistCredits.map(credit => credit.name),
+            ['Track Artist', 'Guest Artist']
+        );
         assert.equal(metadata.album, 'Portable Album');
-        assert.equal(metadata.albumArtist, 'Album Artist');
+        assert.equal(metadata.albumArtist, 'Various Artists');
         assert.equal(metadata.year, '2026');
         assert.equal(metadata.trackNumber, 3);
         assert.deepEqual(metadata.genres, ['Ambient', 'Electronic']);

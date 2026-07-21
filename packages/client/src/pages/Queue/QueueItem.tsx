@@ -137,7 +137,7 @@ export default function QueueItem({
                     </div>
 
                     <Text as="span" variant="secondary" size="sm" className="truncate">
-                        {music.artist.name}
+                        {music.artistDisplayName}
                         {sessionReason ? ` · ${sessionReason}` : ''}
                     </Text>
                 </div>

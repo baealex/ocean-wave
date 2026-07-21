@@ -61,9 +61,9 @@ describe('audio metadata writer', () => {
             },
             readTags: async () => ({
                 title: [writtenTags.title as string],
-                artist: [writtenTags.artist as string],
+                artist: writtenTags.artist as string[],
                 album: [writtenTags.album as string],
-                albumArtist: [writtenTags.albumArtist as string],
+                albumArtist: writtenTags.albumArtist as string[],
                 date: writtenTags.date as string,
                 year: Number(writtenTags.date),
                 track: writtenTags.track as number,
@@ -73,9 +73,37 @@ describe('audio metadata writer', () => {
         });
         const result = await writeTrackMetadataToFile(filePath, {
             title: 'Portable Track',
-            artist: 'Track Artist',
+            artist: 'Track Artist feat. Guest Artist',
+            artistCredits: [
+                {
+                    name: 'Track Artist',
+                    role: 'primary',
+                    creditedName: null,
+                    joinPhrase: ' feat. '
+                },
+                {
+                    name: 'Guest Artist',
+                    role: 'featured',
+                    creditedName: null,
+                    joinPhrase: ''
+                }
+            ],
             album: 'Portable Album',
-            albumArtist: 'Album Artist',
+            albumArtist: 'Album Artist & Album Partner',
+            albumArtistCredits: [
+                {
+                    name: 'Album Artist',
+                    role: 'primary',
+                    creditedName: null,
+                    joinPhrase: ' & '
+                },
+                {
+                    name: 'Album Partner',
+                    role: 'primary',
+                    creditedName: null,
+                    joinPhrase: ''
+                }
+            ],
             year: '2026',
             trackNumber: 3,
             genres: ['Ambient', 'Electronic']
@@ -83,6 +111,8 @@ describe('audio metadata writer', () => {
         const writtenData = fs.readFileSync(filePath);
 
         expect(result.contentHash).toBe(createTrackContentHash(writtenData));
+        expect(writtenTags.artist).toEqual(['Track Artist', 'Guest Artist']);
+        expect(writtenTags.albumArtist).toEqual(['Album Artist', 'Album Partner']);
         expect(writtenData).not.toEqual(createSilentWav());
         expect(fs.readdirSync(directory).filter((name) => name.includes('.project441.tmp')))
             .toEqual([]);
@@ -101,8 +131,15 @@ describe('audio metadata writer', () => {
         const result = await writeTrackMetadataToFile(filePath, {
             title: 'AAC Track',
             artist: 'Track Artist',
+            artistCredits: [{
+                name: 'Track Artist',
+                role: 'primary',
+                creditedName: null,
+                joinPhrase: ''
+            }],
             album: 'Portable Album',
             albumArtist: null,
+            albumArtistCredits: null,
             year: '2026',
             trackNumber: 2,
             genres: ['Ambient']
@@ -140,8 +177,15 @@ describe('audio metadata writer', () => {
         await expect(writeTrackMetadataToFile(filePath, {
             title: 'Track',
             artist: 'Artist',
+            artistCredits: [{
+                name: 'Artist',
+                role: 'primary',
+                creditedName: null,
+                joinPhrase: ''
+            }],
             album: 'Album',
             albumArtist: null,
+            albumArtistCredits: null,
             year: '2026',
             trackNumber: 1,
             genres: []

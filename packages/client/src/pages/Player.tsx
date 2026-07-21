@@ -633,7 +633,7 @@ export default function PlayerDetail() {
                                     size="md"
                                     weight="medium"
                                     className="w-full truncate lg:text-lg">
-                                    {displayMusic.artist.name}
+                                    {displayMusic.artistDisplayName}
                                 </Text>
 
                                 <div className="flex w-full min-w-0 flex-nowrap items-center justify-center gap-2.5 lg:justify-start [&>*]:min-w-0 [&>*]:truncate [&>:first-child]:flex-[0_1_auto] [&>:last-child]:shrink-0">

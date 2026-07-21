@@ -117,7 +117,7 @@ const CompactTrackRow = ({
             <span className="flex min-w-0 flex-col gap-0.5">
                 <span className="truncate text-sm font-medium text-[var(--b-color-text)]">{music.name}</span>
                 <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">
-                    {subtitle ?? music.artist.name}
+                    {subtitle ?? music.artistDisplayName}
                 </span>
                 {meter && (
                     <span className="mt-0.5 h-1 overflow-hidden rounded-full bg-[var(--b-color-border-subtle)]" aria-hidden="true">

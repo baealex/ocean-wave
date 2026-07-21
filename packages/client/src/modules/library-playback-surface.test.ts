@@ -33,6 +33,14 @@ const music: Music = {
     createdAt: 1,
     genres: [],
     tags: [],
+    artistDisplayName: 'Ocean Signals',
+    artistCredits: [{
+        artist: { id: 'artist-1', name: 'Ocean Signals' },
+        role: 'PRIMARY',
+        position: 0,
+        creditedName: null,
+        joinPhrase: ''
+    }],
     artist: {
         id: 'artist-1',
         name: 'Ocean Signals',
@@ -48,6 +56,14 @@ const music: Music = {
         cover: '/cover.jpg',
         isCoverCustom: false,
         publishedYear: '2026',
+        artistDisplayName: 'Ocean Signals',
+        artistCredits: [{
+            artist: { id: 'artist-1', name: 'Ocean Signals' },
+            role: 'PRIMARY',
+            position: 0,
+            creditedName: null,
+            joinPhrase: ''
+        }],
         artist: { id: 'artist-1', name: 'Ocean Signals' },
         musics: [{ id: 'track-1' }],
         createdAt: 1

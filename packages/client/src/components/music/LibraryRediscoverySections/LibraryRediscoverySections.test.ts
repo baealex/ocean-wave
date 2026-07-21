@@ -56,6 +56,7 @@ const music = {
         name: 'Tidal Memory'
     },
     artist: { name: 'Ocean Signals' },
+    artistDisplayName: 'Ocean Signals',
     id: 'track-1',
     name: 'Midnight Current'
 } as Music;

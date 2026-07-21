@@ -370,7 +370,7 @@ export default function Queue() {
                 <MusicActionPanelContent
                     id={music.id}
                     onAlbumClick={() => navigate(`/album/${music.album.id}`)}
-                    onArtistClick={() => navigate(`/artist/${music.artist.id}`)}
+                    onArtistClick={(artistId) => navigate(`/artist/${artistId}`)}
                 />
             )
         });

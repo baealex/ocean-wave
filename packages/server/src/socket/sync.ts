@@ -8,7 +8,14 @@ import {
     hasHealthyAlbumCoverCache,
     syncAlbumCoverCache
 } from '../modules/album-cover-cache';
-import { normalizeArtistName } from '../modules/artist-identity';
+import {
+    findOrCreateArtist,
+    getEffectiveMusicArtistCredits,
+    preserveArtistCreditPresentation,
+    replaceArtistCredits,
+    resolveArtistCreditArtists,
+    type ArtistCreditValue
+} from '../modules/artist-credits';
 import { walk } from '../modules/file';
 import {
     normalizeMusicFilePath,
@@ -37,8 +44,12 @@ import {
     SYNC_REPORT_STATUS,
     type SyncReportStatus
 } from '../modules/sync-report';
+import {
+    createCompatibilityMusicInTransaction,
+    updateCompatibilityMusicInTransaction
+} from '../models/music-compatibility';
 
-import models, { type Album, type Artist, type Genre, type Music } from '~/models';
+import models, { type Album, type Genre, type Music } from '~/models';
 
 const SUPPORTED_AUDIO_EXTENSIONS = new Set([
     '.mp3',
@@ -91,57 +102,60 @@ const toTrackIdentityRecord = (music: Music): TrackIdentityRecord => {
     };
 };
 
-const findOrCreateArtist = async (name: string): Promise<Artist> => {
-    const normalizedName = normalizeArtistName(name);
-    const existingArtist = await models.artist.findFirst({
-        where: { name },
-        orderBy: { id: 'asc' }
-    });
-
-    if (existingArtist) {
-        return existingArtist.normalizedName === normalizedName
-            ? existingArtist
-            : models.artist.update({
-                where: { id: existingArtist.id },
-                data: { normalizedName }
-            });
-    }
-
-    return models.artist.create({ data: { name, normalizedName } });
-};
-
 const findOrCreateAlbum = async ({
     name,
     publishedYear,
-    artistId
+    artistCredits
 }: {
     name: string;
     publishedYear: string;
-    artistId: number;
+    artistCredits: ArtistCreditValue[];
 }): Promise<Album> => {
-    const existingAlbum = await models.album.findFirst({
-        where: {
-            name,
-            artistId
-        }
-    });
-
-    if (existingAlbum) {
-        return existingAlbum.publishedYear === publishedYear
-            ? existingAlbum
-            : models.album.update({
-                where: { id: existingAlbum.id },
-                data: { publishedYear }
+    return models.$transaction(async (transaction) => {
+        const artists = await resolveArtistCreditArtists(transaction, artistCredits);
+        const releases = await transaction.release.findMany({
+            where: {
+                title: name,
+                releaseDate: publishedYear
+            },
+            include: {
+                ArtistCredit: {
+                    include: { Artist: true },
+                    orderBy: [{ position: 'asc' }, { id: 'asc' }]
+                }
+            }
+        });
+        const existingRelease = releases.find((release) => (
+            release.ArtistCredit.length === artists.length
+            && release.ArtistCredit.every((credit, index) => (
+                credit.artistId === artists[index].id
+            ))
+        ));
+        const resolvedCredits = existingRelease
+            ? preserveArtistCreditPresentation(artistCredits, existingRelease.ArtistCredit)
+            : artistCredits;
+        const release = existingRelease
+            ? await transaction.release.update({
+                where: { id: existingRelease.id },
+                data: { releaseDate: publishedYear }
+            })
+            : await transaction.release.create({
+                data: {
+                    title: name,
+                    releaseDate: publishedYear,
+                    releaseType: 'unknown',
+                    totalDiscs: 1,
+                    cover: ''
+                }
             });
-    }
 
-    return models.album.create({
-        data: {
-            name,
-            cover: '',
-            publishedYear,
-            artistId
-        }
+        await replaceArtistCredits(
+            transaction,
+            { releaseId: release.id },
+            resolvedCredits
+        );
+
+        return transaction.album.findUniqueOrThrow({ where: { id: release.id } });
     });
 };
 
@@ -180,14 +194,17 @@ const upsertMusicFromMetadata = async ({
         metadata,
         existingMusic?.metadataOverride
     );
-    const artist = await findOrCreateArtist(resolvedMetadata.artist);
-    const albumArtist = resolvedMetadata.albumArtist
-        ? await findOrCreateArtist(resolvedMetadata.albumArtist)
-        : null;
+    const existingCredits = existingMusic
+        ? await getEffectiveMusicArtistCredits(existingMusic)
+        : [];
+    const artistCredits = existingCredits.length
+        ? preserveArtistCreditPresentation(resolvedMetadata.artistCredits, existingCredits)
+        : resolvedMetadata.artistCredits;
+    const albumArtistCredits = resolvedMetadata.albumArtistCredits ?? artistCredits;
     const album = await findOrCreateAlbum({
         name: resolvedMetadata.album,
         publishedYear: resolvedMetadata.year,
-        artistId: albumArtist ? albumArtist.id : artist.id
+        artistCredits: albumArtistCredits
     });
     const genres = await findOrCreateGenres(resolvedMetadata.genres);
 
@@ -208,32 +225,50 @@ const upsertMusicFromMetadata = async ({
         });
     }
 
-    if (existingMusic) {
-        return models.music.update({
-            where: { id: existingMusic.id },
-            data: {
-                codec: metadata.codec,
-                container: metadata.container,
-                bitrate: metadata.bitrate,
-                sampleRate: metadata.sampleRate,
-                name: resolvedMetadata.title,
-                duration: metadata.duration,
-                trackNumber: resolvedMetadata.trackNumber,
-                filePath,
-                contentHash,
-                hashVersion: TRACK_CONTENT_HASH_VERSION,
-                lastSeenAt: observedAt,
-                missingSinceAt: null,
-                syncStatus,
-                albumId: album.id,
-                artistId: artist.id,
-                Genre: { set: genres.map((genre) => ({ id: genre.id })) }
-            }
-        });
-    }
+    return models.$transaction(async (transaction) => {
+        const primaryCredit = artistCredits.find(credit => credit.role === 'primary')
+            ?? artistCredits[0];
+        const primaryArtist = await findOrCreateArtist(transaction, primaryCredit.name);
 
-    return models.music.create({
-        data: {
+        if (existingMusic) {
+            const releaseTrackCreditCount = await transaction.artistCredit.count({
+                where: { releaseTrackId: existingMusic.releaseTrackId }
+            });
+            const updatedMusic = await updateCompatibilityMusicInTransaction(
+                transaction,
+                existingMusic.id,
+                {
+                    codec: metadata.codec,
+                    container: metadata.container,
+                    bitrate: metadata.bitrate,
+                    sampleRate: metadata.sampleRate,
+                    name: resolvedMetadata.title,
+                    duration: metadata.duration,
+                    trackNumber: resolvedMetadata.trackNumber,
+                    filePath,
+                    contentHash,
+                    hashVersion: TRACK_CONTENT_HASH_VERSION,
+                    lastSeenAt: observedAt,
+                    missingSinceAt: null,
+                    syncStatus,
+                    albumId: album.id,
+                    ...(releaseTrackCreditCount ? {} : { artistId: primaryArtist.id }),
+                    Genre: { set: genres.map((genre) => ({ id: genre.id })) }
+                }
+            );
+
+            await replaceArtistCredits(
+                transaction,
+                releaseTrackCreditCount
+                    ? { releaseTrackId: existingMusic.releaseTrackId }
+                    : { recordingId: existingMusic.recordingId },
+                artistCredits
+            );
+
+            return transaction.music.findUniqueOrThrow({ where: { id: updatedMusic.id } });
+        }
+
+        const createdMusic = await createCompatibilityMusicInTransaction(transaction, {
             codec: metadata.codec,
             container: metadata.container,
             bitrate: metadata.bitrate,
@@ -247,10 +282,18 @@ const upsertMusicFromMetadata = async ({
             lastSeenAt: observedAt,
             missingSinceAt: null,
             syncStatus,
-            Album: { connect: { id: album.id } },
-            Artist: { connect: { id: artist.id } },
+            albumId: album.id,
+            artistId: primaryArtist.id,
             Genre: { connect: genres.map((genre) => ({ id: genre.id })) }
-        }
+        });
+
+        await replaceArtistCredits(
+            transaction,
+            { recordingId: createdMusic.recordingId },
+            artistCredits
+        );
+
+        return transaction.music.findUniqueOrThrow({ where: { id: createdMusic.id } });
     });
 };
 
