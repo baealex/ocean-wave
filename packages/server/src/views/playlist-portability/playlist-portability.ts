@@ -8,6 +8,7 @@ import {
     updatePlaylistImportMappings
 } from '~/features/playlist/services/playlist-imports';
 import type { PlaylistFormat, PlaylistImportMode } from '~/features/playlist/services/playlist-portability';
+import models from '~/models';
 
 const formats = new Set<PlaylistFormat>(['m3u', 'xspf', 'json']);
 const modes = new Set<PlaylistImportMode>(['create', 'replace', 'merge']);
@@ -62,4 +63,18 @@ export const downloadPlaylist = async (req: Request, res: Response) => {
     const types = { json: 'application/json', m3u: 'audio/x-mpegurl', xspf: 'application/xspf+xml' };
     res.type(types[format]).setHeader('Content-Disposition', `attachment; filename="playlist-${id}.${format === 'm3u' ? 'm3u8' : format}"`);
     res.send(content);
+};
+
+export const getPlaylistOfflineAssets = async (req: Request, res: Response) => {
+    const id = Number(param(req.params.id));
+    const items = await models.playlistMusic.findMany({
+        where: { playlistId: id },
+        orderBy: { order: 'asc' },
+        include: { ReleaseTrack: { include: { PhysicalFile: true } } }
+    });
+    res.json({
+        playlistId: id,
+        totalBytes: items.reduce((total, item) => total + Number(item.ReleaseTrack.PhysicalFile[0]?.fileSizeBytes ?? 0), 0),
+        urls: items.map(item => `/api/audio/${item.musicId}?notranscode=true`)
+    });
 };

@@ -2,6 +2,7 @@ export * from './auth';
 export * from './graphql';
 export * from './library';
 export * from './library-backup';
+export * from './offline-playlists';
 export * from './playback';
 export * from './playlist-portability';
 export * from './rediscovery';
