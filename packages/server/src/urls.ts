@@ -43,6 +43,7 @@ export const createApiRouter = (authConfig: AuthConfig) => {
         .get('/library/backup', resourceAccessRateLimit, useAsync(views.downloadLibraryBackup))
         .post('/library/restore/preview', useAsync(views.previewLibraryRestore))
         .post('/library/restore/apply', useAsync(views.applyLibraryRestore))
+        .get('/diagnostics/connectivity', useAsync(views.connectivityDiagnostics))
         .post('/playlists/imports/preview', useAsync(views.previewPlaylist))
         .get('/playlists/imports/:id', useAsync(views.getPlaylistReport))
         .patch('/playlists/imports/:id/mappings', useAsync(views.mapPlaylistItems))
