@@ -1,5 +1,6 @@
 export { default as MusicActionPanelContent } from './MusicActionPanelContent';
 export { default as LibraryPlaybackSurface } from './LibraryPlaybackSurface';
+export { default as LibraryRediscoverySections } from './LibraryRediscoverySections';
 export { default as MusicListItem } from './MusicListItem';
 export { default as MusicPlayer } from './MusicPlayer';
 export { default as MusicPlayerDiskStyle } from './MusicPlayerDiskStyle';

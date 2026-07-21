@@ -1,7 +1,14 @@
-import { useDeferredValue } from 'react';
+import {
+    useDeferredValue,
+    useEffect,
+    useRef,
+    useState
+} from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { getLibraryRediscovery } from '~/api/rediscovery';
 import {
     LibraryPlaybackSurface,
+    LibraryRediscoverySections,
     MusicActionPanelContent,
     MusicListItem,
     MusicTagFilterPanelContent,
@@ -33,6 +40,10 @@ import {
 } from '~/modules/music-tags';
 import { panel } from '~/modules/panel';
 import {
+    resolveLibraryRediscoverySections,
+    type LibraryRediscoverySection
+} from '~/modules/library-rediscovery-sections';
+import {
     REMOTE_PLAYBACK_OWNERSHIP_MESSAGE,
     REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
 } from '~/modules/playback-ownership';
@@ -49,13 +60,23 @@ import { musicStore } from '~/store/music';
 import { queueStore } from '~/store/queue';
 
 const MUSIC_LIST_ROW_HEIGHT = 80;
+const LIBRARY_REDISCOVERY_REQUEST_TIMEOUT_MS = 5_000;
+const LIBRARY_REDISCOVERY_SOURCE_LIMIT = 8;
 const SMART_FILTER_PARAM = 'filter';
+
+type LibraryRediscoveryPresentation =
+    | { status: 'loading' }
+    | { sections: LibraryRediscoverySection[]; status: 'ready' };
 
 export default function Music() {
     const navigate = useNavigate();
     const resetQueue = useResetQueue();
     const remotePlaybackOwnership = useRemotePlaybackOwnership();
     const [searchParams, setSearchParams] = useSearchParams();
+    const [rediscoveryPresentation, setRediscoveryPresentation] = useState<
+        LibraryRediscoveryPresentation
+    >({ status: 'loading' });
+    const rediscoveryAnchorRef = useRef<HTMLSpanElement>(null);
 
     const [{ musics, loaded }] = useStore(musicStore);
     const query = searchParams.get('q') || '';
@@ -128,11 +149,61 @@ export default function Music() {
         music.album.name.toLowerCase().includes(deferredQuery)
     );
     const hasActiveFilters = Boolean(query.trim()) || isSmartFilterActive || isTagFilterActive;
+    const showRediscovery = !hasActiveFilters;
     const summary = !loaded
         ? 'Loading library'
         : hasActiveFilters
             ? `${filteredMusics.length.toLocaleString()} of ${availableMusics.length.toLocaleString()} songs`
             : `${availableMusics.length.toLocaleString()} songs`;
+
+    useEffect(() => {
+        if (!loaded) {
+            return;
+        }
+
+        let active = true;
+
+        const loadRediscovery = async () => {
+            if (musicStore.state.musics.length === 0) {
+                setRediscoveryPresentation({ sections: [], status: 'ready' });
+                return;
+            }
+
+            const response = await getLibraryRediscovery(
+                LIBRARY_REDISCOVERY_SOURCE_LIMIT,
+                LIBRARY_REDISCOVERY_REQUEST_TIMEOUT_MS
+            );
+
+            if (!active) {
+                return;
+            }
+
+            const scrollRoot = rediscoveryAnchorRef.current?.closest<HTMLElement>(
+                '.main-container'
+            );
+            const canInsertSections = (scrollRoot?.scrollTop ?? 0) <= 0;
+
+            setRediscoveryPresentation({
+                sections: response.type === 'success' && canInsertSections
+                    ? resolveLibraryRediscoverySections(
+                        response.libraryRediscovery,
+                        musicStore.state.musicMap
+                    )
+                    : [],
+                status: 'ready'
+            });
+        };
+
+        void loadRediscovery().catch(() => {
+            if (active) {
+                setRediscoveryPresentation({ sections: [], status: 'ready' });
+            }
+        });
+
+        return () => {
+            active = false;
+        };
+    }, [loaded]);
 
     const openSmartFilter = () => panel.open({
         title: 'Music Filter',
@@ -260,12 +331,27 @@ export default function Music() {
                     </Button>
                 </StickyHeaderActions>
             </CollectionHeader>
+            <span ref={rediscoveryAnchorRef} className="hidden" aria-hidden="true" />
             <LibraryPlaybackSurface />
+            {loaded
+                && showRediscovery
+                && rediscoveryPresentation.status === 'ready' && (
+                <LibraryRediscoverySections
+                    sections={rediscoveryPresentation.sections}
+                    playbackBlocked={Boolean(remotePlaybackOwnership)}
+                    onPlayTrack={(musicId) => queueStore.add(musicId)}
+                />
+            )}
             {!loaded && (
                 <Loading />
             )}
             {loaded && (
                 <FixedVirtualList
+                    key={showRediscovery
+                        && rediscoveryPresentation.status === 'ready'
+                        && rediscoveryPresentation.sections.length > 0
+                        ? 'rediscovery-visible'
+                        : showRediscovery ? 'rediscovery-pending-or-empty' : 'filtered-library'}
                     items={filteredMusics}
                     rowHeight={MUSIC_LIST_ROW_HEIGHT}
                     overscanPx={MUSIC_LIST_ROW_HEIGHT * 6}
