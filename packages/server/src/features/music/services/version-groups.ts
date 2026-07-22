@@ -828,12 +828,11 @@ export const groupMusicAsAlternateFile = async ({
         });
 
         for (const row of playlistRows) {
-            const targetRow = await transaction.playlistMusic.findUnique({
+            const targetRow = await transaction.playlistMusic.findFirst({
                 where: {
-                    playlistId_musicId: {
-                        playlistId: row.playlistId,
-                        musicId: target.id
-                    }
+                    playlistId: row.playlistId,
+                    musicId: target.id,
+                    id: { not: row.id }
                 }
             });
 
