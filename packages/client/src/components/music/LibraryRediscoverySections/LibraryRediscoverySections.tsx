@@ -33,9 +33,7 @@ const artworkClassName = [
 
 const trackCardClassName = [
     'group/card ow-active-press flex h-full min-w-0 flex-col rounded-[var(--b-radius-xl)]',
-    'border border-transparent p-2 text-left text-[var(--b-color-text)]',
-    'transition-[background-color,border-color,transform,opacity] duration-150',
-    'hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-surface-subtle)]',
+    'p-2 text-left text-[var(--b-color-text)]',
     'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
     'disabled:cursor-not-allowed disabled:opacity-40'
 ].join(' ');
@@ -67,7 +65,7 @@ const TrackCard = ({
             ? `Play ${item.music.name} by ${item.music.artistDisplayName} unavailable while another device owns playback. Why this appears: ${item.reason.copy}`
             : `Play ${item.music.name} by ${item.music.artistDisplayName}. Why this appears: ${item.reason.copy}`}
         onClick={() => onPlayTrack(item.music.id)}>
-        <span className="relative aspect-square w-full shrink-0 transition-transform duration-150 group-hover/card:scale-[1.015] motion-reduce:transition-none">
+        <span className="relative aspect-square w-full shrink-0">
             <span className={artworkClassName}>
                 <Image
                     src={item.music.album.cover}
@@ -83,7 +81,7 @@ const TrackCard = ({
             </span>
         </span>
         <span className="flex min-h-[88px] min-w-0 flex-1 flex-col gap-1 px-1 pt-3">
-            <span className="line-clamp-2 text-sm font-semibold leading-[1.35]">
+            <span className="line-clamp-2 text-sm font-semibold leading-[1.35] transition-colors duration-150 group-hover/card:text-[var(--b-color-point-light)]">
                 {item.music.name}
             </span>
             <span className="truncate text-xs text-[var(--b-color-text-secondary)]">

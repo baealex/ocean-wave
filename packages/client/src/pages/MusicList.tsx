@@ -26,7 +26,11 @@ import {
     StateMessage,
     StickyHeaderActions
 } from '~/components/shared';
-import { useRemotePlaybackOwnership, useResetQueue } from '~/hooks';
+import {
+    usePlaybackSignal,
+    useRemotePlaybackOwnership,
+    useResetQueue
+} from '~/hooks';
 import * as Icon from '~/icon';
 import {
     DEFAULT_MUSIC_TAG_FILTER_MODE,
@@ -72,6 +76,7 @@ export default function Music() {
     const navigate = useNavigate();
     const resetQueue = useResetQueue();
     const remotePlaybackOwnership = useRemotePlaybackOwnership();
+    const playbackSignal = usePlaybackSignal();
     const [searchParams, setSearchParams] = useSearchParams();
     const [rediscoveryPresentation, setRediscoveryPresentation] = useState<
         LibraryRediscoveryPresentation
@@ -380,6 +385,7 @@ export default function Music() {
                             musicCodec={music.codec}
                             isLiked={music.isLiked}
                             isHated={music.isHated}
+                            playbackSignal={playbackSignal?.musicId === music.id ? playbackSignal : undefined}
                             onClick={() => queueStore.add(music.id)}
                             onLongPress={() => panel.open({
                                 title: 'Related to this music',

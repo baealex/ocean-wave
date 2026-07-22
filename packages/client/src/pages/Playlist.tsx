@@ -23,8 +23,8 @@ import { playlistStore } from '~/store/playlist';
 import { panel } from '~/modules/panel';
 import { moveArrayItem } from '~/modules/fixed-virtual-sortable-list';
 
-const PLAYLIST_CARD_HEIGHT = 86;
-const PLAYLIST_ROW_GAP = 12;
+const PLAYLIST_ROW_HEIGHT = 80;
+const PLAYLIST_ROW_GAP = 0;
 
 function PlaylistDndItem({
     playlist,
@@ -41,7 +41,7 @@ function PlaylistDndItem({
 
     return (
         <div
-            className={`relative grid h-full w-full grid-cols-[44px_minmax(0,1fr)] items-center gap-1 rounded-[var(--b-radius-xl)] border bg-[var(--b-color-surface-item)] p-1 transition-[border-color,background-color,box-shadow,opacity] hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] focus-within:border-[var(--b-color-focus)] focus-within:shadow-[0_0_0_3px_var(--b-color-focus-ring)] ${isDragOverlay ? 'border-transparent shadow-[var(--b-shadow-queue-drag)]' : 'border-[var(--b-color-border-subtle)]'} ${isDragging && !isDragOverlay ? 'opacity-15' : ''}`}>
+            className={`relative grid h-full w-full grid-cols-[44px_minmax(0,1fr)] items-center border-b border-[var(--b-color-border-subtle)] transition-[box-shadow,opacity] focus-within:z-[1] focus-within:outline focus-within:outline-2 focus-within:-outline-offset-2 focus-within:outline-[var(--b-color-focus)] ${isDragOverlay ? 'bg-[var(--b-color-background-layer-1)] shadow-[var(--b-shadow-queue-drag)]' : ''} ${isDragging && !isDragOverlay ? 'opacity-15' : ''}`}>
             <IconButton
                 {...handleProps}
                 size="md"
@@ -52,7 +52,7 @@ function PlaylistDndItem({
             <div className="min-w-0 flex-1">
                 <PlaylistItem
                     {...playlist}
-                    layout="collection"
+                    layout="reorder"
                     onClick={onClick}
                     onLongPress={onLongPress}
                 />
@@ -107,7 +107,7 @@ export default function Playlist() {
                     </Button>
                 )}
             />
-            <div className="mx-auto w-full max-w-[920px] px-4 py-4 sm:px-6 sm:pb-8">
+            <div className="w-full max-w-[920px]">
                 {!loaded && (
                     <Loading />
                 )}
@@ -128,7 +128,7 @@ export default function Playlist() {
                     <FixedVirtualSortableList
                         items={playlists}
                         ariaLabel="Playlists"
-                        itemHeight={PLAYLIST_CARD_HEIGHT}
+                        itemHeight={PLAYLIST_ROW_HEIGHT}
                         rowGap={PLAYLIST_ROW_GAP}
                         getKey={(playlist) => playlist.id}
                         getItemLabel={(playlist) => playlist.name}

@@ -7,10 +7,8 @@ const cx = classNames;
 
 const libraryActionCardClass = cva(
     [
-        'flex w-full min-w-0 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)]',
+        'flex w-full min-w-0 rounded-[var(--b-radius-lg)]',
         'bg-[var(--b-color-surface-item)] p-3.5 text-[var(--b-color-text)] no-underline',
-        'transition-[color,background-color,border-color,transform,opacity] duration-150',
-        'hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
         'disabled:cursor-not-allowed disabled:opacity-40'
     ],

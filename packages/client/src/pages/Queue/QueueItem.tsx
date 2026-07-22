@@ -20,6 +20,10 @@ import {
     REMOTE_PLAYBACK_OWNERSHIP_MESSAGE,
     REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID
 } from '~/modules/playback-ownership';
+import {
+    getPlaybackSignalLabel,
+    type PlaybackSignal
+} from '~/modules/playback-signal';
 import type { QueueTone } from './QueueDndItem';
 
 const cx = classNames;
@@ -29,6 +33,7 @@ interface QueueItemProps {
     music: Music;
     index: number;
     tone: QueueTone;
+    playbackSignal?: PlaybackSignal;
     isSelectMode: boolean;
     isSelected: boolean;
     playbackDisabled?: boolean;
@@ -46,6 +51,7 @@ export default function QueueItem({
     music,
     index,
     tone,
+    playbackSignal,
     isSelectMode,
     isSelected,
     playbackDisabled = false,
@@ -57,6 +63,12 @@ export default function QueueItem({
     onReorderPointerDown,
     style
 }: QueueItemProps) {
+    const statusLabel = playbackSignal
+        ? getPlaybackSignalLabel(playbackSignal)
+        : tone === 'current'
+            ? 'Current'
+            : null;
+
     return (
         <li
             data-queue-index={index}
@@ -131,8 +143,12 @@ export default function QueueItem({
                             className="truncate">
                             {music.name}
                         </Text>
-                        {tone === 'current' && (
-                            <Badge tone="subtle" className="shrink-0 uppercase">Now</Badge>
+                        {statusLabel && (
+                            <Badge
+                                tone={playbackSignal?.state === 'playing' ? 'accent' : 'subtle'}
+                                className="shrink-0">
+                                {statusLabel}
+                            </Badge>
                         )}
                     </div>
 

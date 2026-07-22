@@ -9,6 +9,7 @@ interface BottomPanelProps {
     title?: string;
     isOpen: boolean;
     onClose?: () => void;
+    onAfterClose?: () => void;
     children: React.ReactNode;
 }
 
@@ -30,6 +31,7 @@ export default function BottomPanel({
     title,
     isOpen,
     onClose,
+    onAfterClose,
     children
 }: BottomPanelProps) {
     const hasPush = useRef(false);
@@ -45,11 +47,23 @@ export default function BottomPanel({
 
     useEffect(() => {
         if (!isOpen) {
-            if (hasPush.current) {
-                hasPush.current = false;
-                history.back();
+            if (!hasPush.current) {
+                onAfterClose?.();
+                return;
             }
-            return;
+
+            hasPush.current = false;
+
+            const handlePopState = () => {
+                onAfterClose?.();
+            };
+
+            window.addEventListener('popstate', handlePopState, { once: true });
+            history.back();
+
+            return () => {
+                window.removeEventListener('popstate', handlePopState);
+            };
         }
 
         if (!hasPush.current) {
@@ -67,7 +81,7 @@ export default function BottomPanel({
         return () => {
             window.removeEventListener('popstate', handlePopState);
         };
-    }, [isOpen, onClose]);
+    }, [isOpen, onClose, onAfterClose]);
 
     return (
         <Dialog.Root

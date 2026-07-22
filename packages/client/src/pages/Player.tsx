@@ -614,6 +614,7 @@ export default function PlayerDetail() {
                                     variant="muted"
                                     size="xs"
                                     weight="medium"
+                                    aria-live="polite"
                                     className="uppercase tracking-[0.12em]">
                                     {remotePlayback
                                         ? `${remotePlaybackStateLabel[remotePlayback.state]} on ${remoteDeviceName} · ${remoteDeviceStatus}`
@@ -840,7 +841,7 @@ export default function PlayerDetail() {
                                     className="max-sm:w-full"
                                     icon={<Icon.Music />}
                                     label="Open library"
-                                    onClick={() => navigate('/')}
+                                    onClick={() => navigate('/library')}
                                 />
                                 <IconTextButton
                                     size="lg"

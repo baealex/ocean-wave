@@ -213,7 +213,7 @@ export default function FixedVirtualGrid<T>({
             ref={gridRef}
             role="list"
             aria-label={ariaLabel}
-            className="relative w-full"
+            className="relative w-full [overflow-anchor:none]"
             style={{
                 height: `${layout.totalHeight}px`,
                 minHeight: `${layout.totalHeight}px`

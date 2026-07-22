@@ -1,6 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cva } from 'class-variance-authority';
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { queryKeys } from '~/api/query-keys';
 import { getLatestSyncReport } from '~/api/sync';
@@ -11,7 +11,7 @@ import { socket } from '~/socket';
 
 
 export interface SynchronizationSectionProps {
-    onSyncMusic: (force: boolean) => Promise<void>;
+    onSyncMusic: (force: boolean) => Promise<boolean>;
 }
 
 const SyncIcon = () => (
@@ -50,7 +50,7 @@ const progressBarClass = cva(
     {
         variants: {
             syncing: {
-                true: 'animate-[progress_1.5s_ease-in-out_infinite]',
+                true: 'animate-[progress_1.5s_ease-in-out_infinite] motion-reduce:animate-none',
                 false: ''
             }
         },
@@ -63,6 +63,7 @@ const progressBarClass = cva(
 export const SynchronizationSection = ({ onSyncMusic }: SynchronizationSectionProps) => {
     const [progressMessage, setProgressMessage] = useState('');
     const [isSyncing, setIsSyncing] = useState(false);
+    const clearMessageTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const queryClient = useQueryClient();
     const { data: latestSyncReport } = useQuery({
         queryKey: queryKeys.syncReports.latest(),
@@ -72,10 +73,14 @@ export const SynchronizationSection = ({ onSyncMusic }: SynchronizationSectionPr
     useEffect(() => {
         const handleSyncMusic = (serverMessage: string | 'done' | 'error') => {
             if (serverMessage === 'done' || serverMessage === 'error') {
+                const resultMessage = serverMessage === 'done'
+                    ? 'Synchronization complete.'
+                    : 'Synchronization failed.';
+
                 if (serverMessage === 'done') {
-                    toast.success('Completed sync music');
+                    toast.success(resultMessage);
                 } else if (serverMessage === 'error') {
-                    toast.error('Error while sync music');
+                    toast.error(resultMessage);
                 }
 
                 setIsSyncing(false);
@@ -83,25 +88,53 @@ export const SynchronizationSection = ({ onSyncMusic }: SynchronizationSectionPr
                     queryKey: queryKeys.syncReports.listAll(),
                     exact: false
                 });
-                setTimeout(() => {
+                if (clearMessageTimerRef.current) {
+                    clearTimeout(clearMessageTimerRef.current);
+                }
+                clearMessageTimerRef.current = setTimeout(() => {
                     setProgressMessage('');
-                }, 1000);
+                    clearMessageTimerRef.current = null;
+                }, 2_000);
+                setProgressMessage(resultMessage);
             } else {
+                if (clearMessageTimerRef.current) {
+                    clearTimeout(clearMessageTimerRef.current);
+                    clearMessageTimerRef.current = null;
+                }
                 setIsSyncing(true);
+                setProgressMessage(serverMessage);
             }
-            setProgressMessage(serverMessage);
         };
 
         socket.on('sync-music', handleSyncMusic);
 
         return () => {
+            if (clearMessageTimerRef.current) {
+                clearTimeout(clearMessageTimerRef.current);
+            }
             socket.off('sync-music', handleSyncMusic);
         };
     }, [queryClient]);
 
     const handleSync = async (force: boolean) => {
-        setIsSyncing(true);
-        await onSyncMusic(force);
+        try {
+            const started = await onSyncMusic(force);
+
+            if (!started) {
+                return;
+            }
+
+            if (clearMessageTimerRef.current) {
+                clearTimeout(clearMessageTimerRef.current);
+                clearMessageTimerRef.current = null;
+            }
+            setIsSyncing(true);
+            setProgressMessage('Starting synchronization…');
+        } catch {
+            setIsSyncing(false);
+            setProgressMessage('Unable to start synchronization.');
+            toast.error('Unable to start synchronization.');
+        }
     };
 
     return (
@@ -115,12 +148,22 @@ export const SynchronizationSection = ({ onSyncMusic }: SynchronizationSectionPr
                 divider={!latestSyncReport}>
                 <div>
                     {progressMessage && (
-                        <div className="mb-[var(--b-spacing-sm)] w-[min(288px,100%)]">
-                            <div className="mb-[var(--b-spacing-sm)] h-[3px] overflow-hidden rounded-full bg-[var(--b-color-hover)]">
+                        <div
+                            className="mb-[var(--b-spacing-sm)] w-[min(288px,100%)]"
+                            role="status"
+                            aria-live="polite"
+                            aria-atomic="true">
+                            {isSyncing && (
                                 <div
-                                    className={progressBarClass({ syncing: isSyncing })}
-                                />
-                            </div>
+                                    className="mb-[var(--b-spacing-sm)] h-[3px] overflow-hidden rounded-full bg-[var(--b-color-hover)]"
+                                    role="progressbar"
+                                    aria-label="Music synchronization in progress"
+                                    aria-valuetext={progressMessage}>
+                                    <div
+                                        className={progressBarClass({ syncing: true })}
+                                    />
+                                </div>
+                            )}
                             <Text as="p" size="sm" variant="secondary" className="m-0">
                                 {progressMessage}
                             </Text>

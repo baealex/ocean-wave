@@ -1,10 +1,10 @@
 import type { QueueTone } from '~/pages/Queue/QueueDndItem';
 import { resolveFixedVirtualSortableDropIndex } from './fixed-virtual-sortable-list';
 
-export const QUEUE_TRACK_CARD_HEIGHT = 72;
-export const QUEUE_TRACK_ROW_GAP = 8;
+export const QUEUE_TRACK_CARD_HEIGHT = 68;
+export const QUEUE_TRACK_ROW_GAP = 0;
 export const QUEUE_TRACK_ROW_HEIGHT = QUEUE_TRACK_CARD_HEIGHT + QUEUE_TRACK_ROW_GAP;
-export const QUEUE_SECTION_ROW_HEIGHT = 30;
+export const QUEUE_SECTION_ROW_HEIGHT = 36;
 export const QUEUE_VIRTUAL_OVERSCAN_PX = QUEUE_TRACK_ROW_HEIGHT * 5;
 
 interface QueueVirtualRowBase {

@@ -184,6 +184,9 @@
   --app-toast-safe-area-bottom-offset: max(14px, env(safe-area-inset-bottom));
   --app-mini-player-toast-offset: 68px;
   --app-toast-mini-player-bottom-offset: calc(var(--app-mini-player-toast-offset) + var(--app-toast-safe-area-bottom-offset));
+  --app-bottom-navigation-height: calc(64px + env(safe-area-inset-bottom));
+  --app-toast-bottom-navigation-offset: calc(var(--app-bottom-navigation-height) + 14px);
+  --app-toast-mini-player-navigation-offset: calc(var(--app-mini-player-toast-offset) + var(--app-bottom-navigation-height) + 14px);
   --app-mini-player-content-offset: calc(88px + env(safe-area-inset-bottom));
   --app-mini-player-content-offset-lg: 92px;
 }
@@ -271,7 +274,7 @@ main {
 @media (min-width: 1024px) {
   main {
     display: grid;
-    grid-template-columns: 256px minmax(0, 1fr);
+    grid-template-columns: 224px minmax(0, 1fr);
     grid-template-rows: 1fr auto;
   }
 }
@@ -343,6 +346,16 @@ button {
   }
 }
 
+@keyframes select-content-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes cdSpin {
   from {
     transform: translateZ(0) rotate(0deg);
@@ -364,6 +377,15 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
   .music-player-disk {
     animation: none;
   }

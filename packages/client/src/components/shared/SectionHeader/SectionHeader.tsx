@@ -20,12 +20,12 @@ const sectionHeaderClass = cva('flex items-start justify-between gap-4', {
 });
 
 const sectionHeaderActionClass = cva(
-    'inline-flex min-h-9 items-center justify-center rounded-full border border-[var(--b-color-border-subtle)] bg-transparent px-2.5 py-1.5 text-sm font-medium no-underline transition-[color,background-color,border-color] duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
+    'inline-flex min-h-9 items-center justify-center bg-transparent px-1.5 py-1.5 text-sm font-medium no-underline transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
     {
         variants: {
             disabled: {
                 true: 'cursor-not-allowed text-[var(--b-color-text-muted)] opacity-50',
-                false: 'text-[var(--b-color-text-tertiary)] hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]'
+                false: 'text-[var(--b-color-text-tertiary)] hover:text-[var(--b-color-point-light)]'
             }
         },
         defaultVariants: {

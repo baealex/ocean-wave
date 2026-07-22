@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getArtist } from '~/api/library';
 import { queryKeys } from '~/api/query-keys';
-import { AlbumListItem } from '~/components/album';
 import { ArtistSummary } from '~/components/artist';
 import { TwoToneLayout, TwoTonePrimaryAction } from '~/components/layout';
 import {
@@ -10,8 +9,12 @@ import {
     MusicListItem,
     RemotePlaybackOwnershipNotice
 } from '~/components/music';
-import { Button, Loading, StateMessage, Text } from '~/components/shared';
-import { useRemotePlaybackOwnership, useResetQueue } from '~/hooks';
+import { Button, Image, Loading, StateMessage, Text } from '~/components/shared';
+import {
+    usePlaybackSignal,
+    useRemotePlaybackOwnership,
+    useResetQueue
+} from '~/hooks';
 import { Play } from '~/icon';
 import { panel } from '~/modules/panel';
 import { getReleaseTypeLabel } from '~/modules/releases';
@@ -36,7 +39,7 @@ const ReleaseShelf = ({
     if (!albums.length) return null;
 
     return (
-        <section className="mb-[var(--b-spacing-2xl)] last:mb-0">
+        <section className="mb-[var(--b-spacing-2xl)] last:mb-0 lg:mb-[var(--b-spacing-xl)] lg:last:mb-0">
             <div className="mb-[var(--b-spacing-sm)] flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
                 <div className="flex items-center gap-[var(--b-spacing-sm)]">
                     <Text as="h2" size="xl" weight="semibold">
@@ -48,20 +51,29 @@ const ReleaseShelf = ({
                 </div>
             </div>
             <div className="overflow-x-auto px-[var(--b-spacing-lg)] pb-[var(--b-spacing-sm)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div className="grid w-max auto-cols-[minmax(240px,320px)] grid-flow-col gap-[var(--b-spacing-sm)] [scroll-snap-type:x_proximity]">
+                <div className="grid w-max auto-cols-[148px] grid-flow-col gap-[var(--b-spacing-md)] sm:auto-cols-[168px] [scroll-snap-type:x_proximity]">
                     {albums.map(album => (
-                        <div key={album.id} className="min-w-0 overflow-hidden rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)] bg-transparent [scroll-snap-align:start]">
-                            <AlbumListItem
-                                albumCover={album.cover}
-                                albumName={album.name}
-                                artistName={album.artistDisplayName}
-                                publishedYear={album.publishedYear}
-                                releaseType={getReleaseTypeLabel(album.releaseType)}
-                                musicCount={album.musics?.length}
-                                compact
-                                onClick={() => onAlbumClick(album.id)}
-                            />
-                        </div>
+                        <button
+                            key={album.id}
+                            type="button"
+                            className="group/release min-w-0 text-left [scroll-snap-align:start] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"
+                            onClick={() => onAlbumClick(album.id)}>
+                            <span className="relative block aspect-square w-full overflow-hidden rounded-[var(--b-radius-lg)] bg-[var(--b-color-surface-subtle)] shadow-[var(--b-shadow-artwork-placeholder)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:shadow-[var(--b-shadow-inset-artwork-ring)] after:content-['']">
+                                <Image
+                                    src={album.cover}
+                                    alt=""
+                                    loading="lazy"
+                                    className="h-full w-full object-cover"
+                                />
+                            </span>
+                            <span className="mt-2.5 block truncate text-sm font-semibold text-[var(--b-color-text)] transition-colors duration-150 group-hover/release:text-[var(--b-color-point-light)]">
+                                {album.name}
+                            </span>
+                            <span className="mt-1 block truncate text-xs text-[var(--b-color-text-tertiary)]">
+                                {[album.publishedYear, getReleaseTypeLabel(album.releaseType)]
+                                    .filter(Boolean).join(' · ')}
+                            </span>
+                        </button>
                     ))}
                 </div>
             </div>
@@ -73,6 +85,7 @@ export default function ArtistDetail() {
     const navigate = useNavigate();
     const resetQueue = useResetQueue();
     const remotePlaybackOwnership = useRemotePlaybackOwnership();
+    const playbackSignal = usePlaybackSignal();
 
     const { id } = useParams<{ id: string }>();
 
@@ -150,7 +163,7 @@ export default function ArtistDetail() {
                 onAlbumClick={(albumId) => navigate(`/album/${albumId}`)}
             />
 
-            <div className="mb-[var(--b-spacing-2xl)] last:mb-0">
+            <div className="mb-[var(--b-spacing-2xl)] last:mb-0 lg:mb-[var(--b-spacing-xl)] lg:last:mb-0">
                 <div className="mb-[var(--b-spacing-sm)] flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
                     <div className="flex items-center gap-[var(--b-spacing-sm)]">
                         <Text as="h2" size="xl" weight="semibold">
@@ -181,6 +194,7 @@ export default function ArtistDetail() {
                                 musicCodec={music.codec}
                                 isLiked={music.isLiked}
                                 isHated={music.isHated}
+                                playbackSignal={playbackSignal?.musicId === music.id ? playbackSignal : undefined}
                                 onClick={() => queueStore.add(music.id)}
                                 onLongPress={() => panel.open({
                                     title: 'Related to this music',

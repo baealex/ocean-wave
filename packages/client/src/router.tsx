@@ -24,6 +24,13 @@ import { SiteLayout } from './components/layout';
 const router = createBrowserRouter([
     {
         element: <SiteLayout />,
+        handle: {
+            pageFrame: {
+                width: 'wide',
+                padding: 'none',
+                className: 'min-h-full'
+            }
+        },
         children: [
             {
                 path: '/',
@@ -119,11 +126,25 @@ const router = createBrowserRouter([
             },
             {
                 path: '/player',
-                element: <Player />
+                element: <Player />,
+                handle: {
+                    pageFrame: {
+                        width: 'full',
+                        padding: 'none',
+                        className: 'flex h-full min-h-0'
+                    }
+                }
             },
             {
                 path: '/queue',
-                element: <Queue />
+                element: <Queue />,
+                handle: {
+                    pageFrame: {
+                        width: 'wide',
+                        padding: 'none',
+                        className: 'h-full min-h-0'
+                    }
+                }
             }
         ]
     },

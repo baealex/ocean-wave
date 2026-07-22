@@ -56,8 +56,7 @@ export default function MusicActionPanelContent({
                 <PanelHeaderAction
                     layout="album"
                     onClick={() => {
-                        panel.close();
-                        setTimeout(onAlbumClick, 100);
+                        panel.close(onAlbumClick);
                     }}>
                     <Image
                         className={panelContentClass.cover}
@@ -77,8 +76,7 @@ export default function MusicActionPanelContent({
                     key={`${credit.position}-${credit.artist.id}`}
                     layout="artist"
                     onClick={() => {
-                        panel.close();
-                        setTimeout(() => onArtistClick(credit.artist.id), 100);
+                        panel.close(() => onArtistClick(credit.artist.id));
                     }}>
                     <div>
                         <div className={panelContentClass.subTitle}>
@@ -180,8 +178,7 @@ export default function MusicActionPanelContent({
                     icon: <Icon.Pencil />,
                     text: 'Edit track',
                     onClick: () => {
-                        panel.close();
-                        setTimeout(() => navigate(`/music/${music.id}/edit`), 100);
+                        panel.close(() => navigate(`/music/${music.id}/edit`));
                     }
                 },
                 {

@@ -58,6 +58,7 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('~/hooks', () => ({
+    usePlaybackSignal: () => null,
     useRemotePlaybackOwnership: () => ui.remoteOwnership,
     useResetQueue: () => ui.resetQueue
 }));

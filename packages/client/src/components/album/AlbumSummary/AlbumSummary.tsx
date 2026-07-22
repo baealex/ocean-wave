@@ -24,23 +24,25 @@ const AlbumSummary = ({
     totalDiscs
 }: AlbumSummaryProps) => {
     const releaseMeta = [
-        getReleaseTypeLabel(releaseType),
         publishedYear.trim(),
         totalDiscs && totalDiscs > 1 ? `${totalDiscs} discs` : ''
     ].filter(Boolean);
 
     return (
-        <div className="flex flex-col items-center gap-[var(--b-spacing-md)] text-center">
-            <div className="mb-[var(--b-spacing-sm)] w-[260px] max-w-[76%]">
+        <div className="flex flex-col items-center gap-[var(--b-spacing-lg)] text-center lg:flex-row lg:items-center lg:gap-[var(--b-spacing-xl)] lg:text-left">
+            <div className="w-[min(52vw,200px)] shrink-0 lg:w-[180px]">
                 <div className="relative aspect-square overflow-hidden rounded-[var(--b-radius-xl)] shadow-[var(--b-shadow-artwork-summary)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[var(--b-radius-xl)] after:shadow-[var(--b-shadow-inset-artwork-ring)] after:content-['']">
                     <Image className="h-full w-full object-cover" src={getOriginalImage(cover)} alt={name} icon={<Disc />} />
                 </div>
             </div>
-            <Text as="h1" size="xl" weight="bold" className="drop-shadow-[var(--b-shadow-summary-title)]">
-                {name}
-            </Text>
-            <div className="flex items-center gap-[var(--b-spacing-sm)]">
-                <span className="inline-flex min-h-8 flex-wrap items-center justify-center">
+            <div className="flex min-w-0 flex-col items-center gap-2.5 lg:items-start">
+                <Text as="span" variant="muted" size="overline" weight="medium">
+                    {getReleaseTypeLabel(releaseType)}
+                </Text>
+                <Text as="h1" size="2xl" weight="bold" className="max-w-full drop-shadow-[var(--b-shadow-summary-title)]">
+                    {name}
+                </Text>
+                <span className="inline-flex min-h-8 flex-wrap items-center justify-center lg:justify-start">
                     {artistCredits?.length ? artistCredits.map(credit => (
                         <Fragment key={`${credit.position}-${credit.artist.id}`}>
                             <Link
@@ -66,14 +68,15 @@ const AlbumSummary = ({
                         </Link>
                     )}
                 </span>
-                {releaseMeta.map(value => (
-                    <Fragment key={value}>
-                        <Text variant="muted" size="md">•</Text>
-                        <Text variant="tertiary" size="md">
-                            {value}
-                        </Text>
-                    </Fragment>
-                ))}
+                {releaseMeta.length > 0 && (
+                    <div className="flex flex-wrap items-center justify-center gap-[var(--b-spacing-sm)] lg:justify-start">
+                        {releaseMeta.map(value => (
+                            <Text key={value} variant="tertiary" size="sm">
+                                {value}
+                            </Text>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

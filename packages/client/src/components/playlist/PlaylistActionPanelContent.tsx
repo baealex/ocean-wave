@@ -53,8 +53,7 @@ export default function PlaylistActionPanelContent({
                     <PanelHeaderAction
                         layout="album"
                         onClick={() => {
-                            panel.close();
-                            setTimeout(onPlaylistClick, 100);
+                            panel.close(onPlaylistClick);
                         }}>
                         <GridImage
                             className={panelContentClass.coverGrid}
