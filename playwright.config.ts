@@ -15,6 +15,7 @@ const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
     testDir: './tests/e2e',
+    snapshotPathTemplate: '{testDir}/__snapshots__/{testFilePath}/{arg}{ext}',
     fullyParallel: false,
     forbidOnly: Boolean(process.env.CI),
     retries: 0,

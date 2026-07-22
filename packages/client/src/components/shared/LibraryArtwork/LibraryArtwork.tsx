@@ -28,9 +28,8 @@ export function AlbumArtwork({
                 aria-hidden="true"
                 className={cx(
                     'absolute right-0 top-2 h-12 w-12 rounded-full border border-[var(--b-color-border-subtle)] opacity-75',
-                    'bg-[var(--b-color-background-layer-1)] transition-all duration-150 group-hover/row:border-[var(--b-color-focus)] group-hover/row:opacity-90 group-hover/row:shadow-[0_0_0_3px_var(--b-color-focus-ring)]',
-                    '[background-image:radial-gradient(circle_at_center,var(--b-color-background)_0_15%,var(--b-color-border)_16%_20%,transparent_21%),linear-gradient(135deg,transparent_0_42%,var(--b-color-border)_43%_47%,transparent_48%_100%)]',
-                    'group-hover/row:[background-image:radial-gradient(circle_at_center,var(--b-color-background)_0_15%,var(--b-color-point-light)_16%_20%,transparent_21%),linear-gradient(135deg,transparent_0_42%,var(--b-color-focus)_43%_47%,transparent_48%_100%)]'
+                    'bg-[var(--b-color-background-layer-1)]',
+                    '[background-image:radial-gradient(circle_at_center,var(--b-color-background)_0_15%,var(--b-color-border)_16%_20%,transparent_21%),linear-gradient(135deg,transparent_0_42%,var(--b-color-border)_43%_47%,transparent_48%_100%)]'
                 )}
             />
             <Image
@@ -53,8 +52,7 @@ export function ArtistArtwork({
             <span
                 aria-hidden="true"
                 className={cx(
-                    'absolute -inset-1 rounded-full border border-[var(--b-color-border-subtle)] border-t-[var(--b-color-focus)]',
-                    'rotate-[18deg] transition-transform duration-150 group-hover/row:-rotate-[10deg] group-hover/row:scale-[1.04] group-hover/row:border-[var(--b-color-focus)]'
+                    'absolute -inset-1 rotate-[18deg] rounded-full border border-[var(--b-color-border-subtle)] border-t-[var(--b-color-focus)]'
                 )}
             />
             <Image

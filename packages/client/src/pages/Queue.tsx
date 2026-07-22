@@ -14,7 +14,12 @@ import {
 } from '~/components/music';
 import { PlaylistPanelContent } from '~/components/playlist';
 import { ActionBar, ActionBarButton, Button, IconButton, ListSelectionToolbar, PageContainer, StateMessage, Text } from '~/components/shared';
-import { useBack, useRemotePlaybackOwnership, useStoreValue } from '~/hooks';
+import {
+    useBack,
+    usePlaybackSignal,
+    useRemotePlaybackOwnership,
+    useStoreValue
+} from '~/hooks';
 import * as Icon from '~/icon';
 import type { Music } from '~/models/type';
 import { panel } from '~/modules/panel';
@@ -91,6 +96,7 @@ export default function Queue() {
     const back = useBack();
     const navigate = useNavigate();
     const remotePlaybackOwnership = useRemotePlaybackOwnership();
+    const playbackSignal = usePlaybackSignal();
 
     const [items] = useStoreValue(queueStore, 'items');
     const [selected] = useStoreValue(queueStore, 'selected');
@@ -489,6 +495,7 @@ export default function Queue() {
             music,
             index,
             tone,
+            playbackSignal: playbackSignal?.musicId === id ? playbackSignal : undefined,
             isSelectMode,
             className: options?.className,
             isSelected: selectedItems.includes(id),
@@ -549,7 +556,7 @@ export default function Queue() {
                 {dragState && dragOverlayTop !== null && (
                     <QueueItem
                         key={`drag-overlay-${dragState.activeId}`}
-                        className="pointer-events-none absolute left-0 z-[4] w-full drop-shadow-[var(--b-shadow-queue-drag)]"
+                        className="pointer-events-none absolute left-0 z-[4] w-full bg-[var(--b-color-background-layer-1)] drop-shadow-[var(--b-shadow-queue-drag)]"
                         music={dragState.music}
                         index={dragState.activeIndex}
                         tone={dragState.tone}
@@ -571,47 +578,48 @@ export default function Queue() {
     return (
         <div className="flex h-full min-h-full w-full flex-col overflow-y-auto overflow-x-hidden" ref={scrollRef}>
             <div className="sticky top-0 z-[3] w-full shrink-0 bg-[var(--b-color-background)] px-4 pb-3.5 pt-[calc(env(safe-area-inset-top)+14px)] max-lg:px-3 max-lg:py-2">
-                <div className="grid w-full min-w-0 grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 max-lg:grid-cols-[40px_minmax(0,1fr)_auto] max-lg:gap-2">
-                    <IconButton
-                        size="utility"
-                        tone="muted"
-                        className="justify-self-start"
-                        aria-label="Go back"
-                        onClick={back}>
-                        <Icon.ChevronLeft />
-                    </IconButton>
+                <div className="mx-auto w-full max-w-[860px]">
+                    <div className="grid w-full min-w-0 grid-cols-[44px_minmax(0,1fr)_auto] items-center gap-3 max-lg:grid-cols-[40px_minmax(0,1fr)_auto] max-lg:gap-2">
+                        <IconButton
+                            size="utility"
+                            tone="muted"
+                            className="justify-self-start"
+                            aria-label="Go back"
+                            onClick={back}>
+                            <Icon.ChevronLeft />
+                        </IconButton>
 
-                    <div className="flex min-w-0 flex-1 flex-col gap-0.5 max-lg:justify-center max-lg:gap-0">
-                        <Text
-                            as="h1"
-                            size="md"
-                            weight="semibold"
-                            className="truncate leading-[1.2] max-lg:text-sm">
-                            <span>Queue</span>
-                        </Text>
-                        <Text as="p" variant="muted" size="xs" className="truncate max-lg:hidden">
-                            {queueSummary}
-                        </Text>
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5 max-lg:justify-center max-lg:gap-0">
+                            <Text
+                                as="h1"
+                                size="md"
+                                weight="semibold"
+                                className="truncate leading-[1.2] max-lg:text-sm">
+                                <span>Queue</span>
+                            </Text>
+                            <Text as="p" variant="muted" size="xs" className="truncate max-lg:hidden">
+                                {queueSummary}
+                            </Text>
+                        </div>
                     </div>
-
+                    {items.length > 0 && (
+                        <ListSelectionToolbar
+                            className="mt-2 w-full"
+                            isSelecting={isSelectMode}
+                            selectedCount={selectedItems.length}
+                            totalCount={items.length}
+                            selectLabel="Select"
+                            selectedLabel="queue items"
+                            onStartSelect={() => setIsSelectMode(true)}
+                            onStopSelect={() => setIsSelectMode(false)}
+                            onSelectAll={() => setSelectedItems(items)}
+                            onClear={() => setSelectedItems([])}
+                        />
+                    )}
                 </div>
-                {items.length > 0 && (
-                    <ListSelectionToolbar
-                        className="mx-auto mt-2 w-[min(100%,608px)] px-4 max-sm:px-3.5"
-                        isSelecting={isSelectMode}
-                        selectedCount={selectedItems.length}
-                        totalCount={items.length}
-                        selectLabel="Select"
-                        selectedLabel="queue items"
-                        onStartSelect={() => setIsSelectMode(true)}
-                        onStopSelect={() => setIsSelectMode(false)}
-                        onSelectAll={() => setSelectedItems(items)}
-                        onClear={() => setSelectedItems([])}
-                    />
-                )}
             </div>
 
-            <PageContainer width="narrow" padding="focus" className="flex min-h-0 flex-col gap-4">
+            <PageContainer width="standard" padding="focus" className="flex min-h-0 flex-col gap-4">
                 <PlaybackQueueConflictNotice />
                 {remotePlaybackOwnership && <RemotePlaybackOwnershipNotice />}
                 {items.length > 0 ? (
@@ -634,7 +642,7 @@ export default function Queue() {
                             <Button
                                 variant="primary"
                                 className="max-sm:w-full"
-                                onClick={() => navigate('/')}>
+                                onClick={() => navigate('/library')}>
                                 <Icon.Music />
                                 <span>Open library</span>
                             </Button>

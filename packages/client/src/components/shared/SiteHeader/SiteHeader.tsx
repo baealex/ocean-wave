@@ -1,10 +1,13 @@
 import { cva } from 'class-variance-authority';
+import classNames from 'classnames';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { appShell } from '~/config/app-shell';
 import * as Icon from '~/icon';
 import { panel } from '~/modules/panel';
 import PanelContent from '../PanelContent';
+
+const cx = classNames;
 
 const navGroupClass = cva(
     'flex min-w-max flex-col gap-[var(--b-spacing-xs)] lg:min-w-0 [&_ul]:m-0 [&_ul]:flex [&_ul]:list-none [&_ul]:items-center [&_ul]:gap-[var(--b-spacing-xs)] [&_ul]:p-0 lg:[&_ul]:w-full lg:[&_ul]:flex-col lg:[&_ul]:items-stretch',
@@ -23,15 +26,15 @@ const navGroupClass = cva(
 
 const navLinkClass = cva(
     [
-        'relative flex min-h-11 items-center gap-[var(--b-spacing-sm)] rounded-full border border-transparent px-3.5 text-sm font-medium no-underline transition-[color,background-color,border-color] duration-150',
-        'text-[var(--b-color-text-secondary)] hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-surface-subtle)] hover:text-[var(--b-color-text)]',
-        'lg:rounded-[var(--b-radius-lg)] lg:text-[var(--b-color-text-tertiary)] lg:before:absolute lg:before:left-0 lg:before:h-[18px] lg:before:w-[3px] lg:before:rounded-full lg:before:bg-transparent lg:before:content-[""]',
+        'relative flex min-h-11 items-center gap-[var(--b-spacing-sm)] px-4 text-sm font-medium no-underline transition-colors duration-150',
+        'text-[var(--b-color-text-secondary)] hover:text-[var(--b-color-text)]',
+        'lg:text-[var(--b-color-text-tertiary)] lg:before:absolute lg:before:left-0 lg:before:h-[18px] lg:before:w-[2px] lg:before:rounded-full lg:before:bg-transparent lg:before:content-[""]',
         '[&_svg]:h-[18.88px] [&_svg]:w-[18.88px] [&_svg]:shrink-0 [&_svg]:transition-colors [&_svg]:duration-150'
     ],
     {
         variants: {
             active: {
-                true: 'border-[var(--b-color-border-subtle)] ow-active-background text-[var(--b-color-point)] [&_span]:text-[var(--b-color-point)] [&_svg]:text-[var(--b-color-point)] lg:before:bg-[var(--b-color-point)]',
+                true: 'text-[var(--b-color-point-light)] [&_span]:text-[var(--b-color-point-light)] [&_svg]:text-[var(--b-color-point-light)] lg:before:bg-[var(--b-color-point)]',
                 false: ''
             }
         },
@@ -43,16 +46,15 @@ const navLinkClass = cva(
 
 const mobileNavItemClass = cva(
     [
-        'flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-[var(--b-radius-lg)] px-1',
-        'text-[11px] font-medium text-[var(--b-color-text-tertiary)] transition-[color,background-color] duration-150',
-        'hover:bg-[var(--b-color-surface-subtle)] hover:text-[var(--b-color-text)]',
+        'relative flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1',
+        'text-[11px] font-medium text-[var(--b-color-text-tertiary)] transition-colors duration-150 hover:text-[var(--b-color-text)]',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
         '[&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0'
     ],
     {
         variants: {
             active: {
-                true: 'bg-[var(--b-color-active)] text-[var(--b-color-point-light)]',
+                true: 'text-[var(--b-color-point-light)] after:absolute after:bottom-0 after:h-1 after:w-1 after:rounded-full after:bg-[var(--b-color-point)] after:content-[""]',
                 false: ''
             }
         },
@@ -73,14 +75,23 @@ const NAVIGATION_GROUPS = [
     }
 ];
 
-const MOBILE_PRIMARY_IDS = new Set(['home', 'library', 'favorites']);
-const MOBILE_PRIMARY_ITEMS = appShell.navigation.primary.filter(item => MOBILE_PRIMARY_IDS.has(item.id));
+const MOBILE_PRIMARY_ITEM_IDS = ['home', 'library', 'favorites'];
+const MOBILE_PRIMARY_IDS = new Set<string>(MOBILE_PRIMARY_ITEM_IDS);
+const MOBILE_PRIMARY_ITEMS = MOBILE_PRIMARY_ITEM_IDS.flatMap((id) => {
+    const item = appShell.navigation.primary.find(item => item.id === id);
+
+    return item ? [item] : [];
+});
 const MOBILE_MORE_ITEMS = [
     ...appShell.navigation.primary.filter(item => !MOBILE_PRIMARY_IDS.has(item.id)),
     ...appShell.navigation.utility
 ];
 
-export default function SiteHeader() {
+interface SiteHeaderProps {
+    className?: string;
+}
+
+export default function SiteHeader({ className }: SiteHeaderProps) {
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -105,8 +116,7 @@ export default function SiteHeader() {
                         text: item.label,
                         active: isActive(item.path),
                         onClick: () => {
-                            navigate(item.path);
-                            panel.close();
+                            panel.close(() => navigate(item.path));
                         }
                     }))}
                 />
@@ -115,7 +125,7 @@ export default function SiteHeader() {
     };
 
     return (
-        <header className="relative flex h-16 flex-col justify-center border-b border-[var(--b-color-border-subtle)] bg-[var(--b-color-background)] px-3 lg:h-full lg:justify-start lg:border-b-0 lg:border-r lg:py-[var(--b-spacing-lg)]">
+        <header className={cx('relative order-3 flex h-[calc(4rem+env(safe-area-inset-bottom))] flex-col justify-center border-t border-[var(--b-color-border-subtle)] bg-[var(--b-color-background)] px-3 pb-[env(safe-area-inset-bottom)] lg:order-none lg:h-full lg:justify-start lg:border-r lg:border-t-0 lg:px-3 lg:py-[var(--b-spacing-lg)]', className)}>
             <nav
                 className="relative z-[1] flex w-full items-center gap-1 lg:hidden"
                 aria-label={`${appShell.brand.name} primary navigation`}>

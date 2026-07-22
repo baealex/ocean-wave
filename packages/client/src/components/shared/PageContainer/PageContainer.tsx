@@ -36,7 +36,7 @@ const PageContainer = ({
     children
 }: PageContainerProps) => {
     return (
-        <div className={cx('mx-auto text-[var(--b-color-text)]', WIDTH_MAP[width], PADDING_MAP[padding], className)}>
+        <div className={cx('mx-auto shrink-0 text-[var(--b-color-text)]', WIDTH_MAP[width], PADDING_MAP[padding], className)}>
             {children}
         </div>
     );

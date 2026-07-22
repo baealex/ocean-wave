@@ -23,34 +23,21 @@ const cardVariants = cva('bg-[var(--b-color-background-layer-1)]', {
             xl: 'rounded-[var(--b-radius-xl)]',
             '2xl': 'rounded-[var(--b-radius-2xl)]'
         },
-        interactive: {
-            true: 'cursor-pointer transition-[box-shadow,background-color,border-color,transform] duration-150 hover:shadow-[var(--b-card-shadow-hover)] active:scale-[0.99]',
-            false: ''
-        },
         overflow: {
             true: 'overflow-hidden',
             false: ''
         }
     },
-    compoundVariants: [
-        {
-            variant: 'outlined',
-            interactive: true,
-            className: 'hover:border-[var(--b-color-border)] hover:shadow-none'
-        }
-    ],
     defaultVariants: {
         variant: 'elevated',
         padding: 'md',
         radius: 'lg',
-        interactive: false,
         overflow: false
     }
 });
 
 interface CardProps extends VariantProps<typeof cardVariants> {
     className?: string;
-    onClick?: () => void;
     children: React.ReactNode;
 }
 
@@ -58,16 +45,13 @@ const Card = ({
     variant,
     padding,
     radius,
-    interactive,
     overflow,
     className,
-    onClick,
     children
 }: CardProps) => {
     return (
         <div
-            className={cx(cardVariants({ variant, padding, radius, interactive, overflow }), className)}
-            onClick={onClick}>
+            className={cx(cardVariants({ variant, padding, radius, overflow }), className)}>
             {children}
         </div>
     );

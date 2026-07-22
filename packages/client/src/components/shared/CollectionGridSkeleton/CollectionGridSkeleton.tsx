@@ -5,7 +5,7 @@ interface CollectionGridSkeletonProps {
     label: string;
 }
 
-const PLACEHOLDERS = Array.from({ length: 12 }, (_, index) => index);
+const PLACEHOLDERS = Array.from({ length: 15 }, (_, index) => index);
 
 export default function CollectionGridSkeleton({
     label

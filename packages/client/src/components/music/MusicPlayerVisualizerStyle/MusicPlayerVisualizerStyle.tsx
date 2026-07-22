@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Image } from '~/components/shared';
+import { useReducedMotion } from '~/hooks';
 import { getOriginalImage } from '~/modules/image';
 import { webAudioContext } from '~/modules/web-audio-context';
 
@@ -55,18 +56,19 @@ const getPointColor = () => {
     return parseCssRgbColor(getComputedStyle(document.documentElement).getPropertyValue('--b-color-point'));
 };
 
-const MusicPlayerVisualizerStyle = ({ type, src, alt }: MusicPlayerVisualizerStyleProps) => {
+const MusicPlayerVisualizerStyle = ({ type, isPlaying, src, alt }: MusicPlayerVisualizerStyleProps) => {
     const ref = useRef<HTMLCanvasElement>(null);
     const bufferLength = 144;
     const dataArray = useMemo(() => new Uint8Array(bufferLength), []);
     const [accentColor, setAccentColor] = useState<RGB | null>(null);
     const palette = useMemo(() => createVividVisualizerPalette(accentColor), [accentColor]);
+    const prefersReducedMotion = useReducedMotion();
 
     useEffect(() => {
         setAccentColor(getPointColor());
     }, []);
 
-    const draw = (ctx: CanvasRenderingContext2D) => {
+    const draw = useCallback((ctx: CanvasRenderingContext2D) => {
         if (!ref.current) return;
 
         const canvas = ref.current;
@@ -81,7 +83,7 @@ const MusicPlayerVisualizerStyle = ({ type, src, alt }: MusicPlayerVisualizerSty
                 round(canvas, ctx, bufferLength, dataArray, palette);
                 break;
         }
-    };
+    }, [dataArray, palette, type]);
 
     useEffect(() => {
         if (!ref.current) return;
@@ -89,6 +91,12 @@ const MusicPlayerVisualizerStyle = ({ type, src, alt }: MusicPlayerVisualizerSty
         const canvas = ref.current;
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        if (!isPlaying || prefersReducedMotion) {
+            return;
+        }
 
         let animationId = 0;
 
@@ -102,7 +110,7 @@ const MusicPlayerVisualizerStyle = ({ type, src, alt }: MusicPlayerVisualizerSty
         return () => {
             cancelAnimationFrame(animationId);
         };
-    }, [dataArray, palette, type]);
+    }, [draw, isPlaying, prefersReducedMotion]);
 
     return (
         <div className="relative aspect-square h-full w-full">

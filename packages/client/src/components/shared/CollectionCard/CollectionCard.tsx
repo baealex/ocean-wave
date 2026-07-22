@@ -21,14 +21,14 @@ export default function CollectionCard({
     return (
         <Link
             to={to}
-            className="group/card ow-active-press flex h-full min-w-0 flex-col rounded-[var(--b-radius-xl)] border border-transparent p-2 text-left text-[var(--b-color-text)] transition-[background-color,border-color,transform] duration-150 hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-surface-subtle)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]">
-            <span className="relative aspect-square w-full shrink-0 transition-transform duration-150 group-hover/card:scale-[1.015] motion-reduce:transition-none">
+            className="group/card ow-active-press flex h-full min-w-0 flex-col rounded-[var(--b-radius-xl)] p-2 text-left text-[var(--b-color-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]">
+            <span className="relative aspect-square w-full shrink-0">
                 {artwork}
             </span>
             <span
                 className="flex min-w-0 flex-1 flex-col gap-1 px-1 pt-3"
                 style={{ minHeight: COLLECTION_CARD_HEIGHT_OFFSET }}>
-                <span className="line-clamp-2 text-sm font-semibold leading-[1.35]">
+                <span className="line-clamp-2 text-sm font-semibold leading-[1.35] transition-colors duration-150 group-hover/card:text-[var(--b-color-point-light)]">
                     {title}
                 </span>
                 {description && (

@@ -14,14 +14,15 @@ export const listRowClass = cva(
                 queue: 'flex min-h-[68px] items-center gap-2 max-sm:min-h-[66px] max-sm:gap-1.5'
             },
             surface: {
-                divided: 'border-b border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-hover)]',
+                divided: 'border-b border-[var(--b-color-border-subtle)]',
                 plain: '',
                 staticDivided: 'border-b border-[var(--b-color-border-subtle)]',
-                queue: 'rounded-[var(--b-radius-xl)] border border-transparent bg-[var(--b-color-surface-subtle)] hover:bg-[linear-gradient(90deg,var(--b-color-surface-subtle),var(--b-color-surface-subtle)),var(--b-gradient-row-hover)]'
+                queue: 'border-b border-[var(--b-color-border-subtle)] bg-transparent'
             },
             columns: {
                 none: '',
                 content: 'grid-cols-[2.5rem_minmax(0,1fr)_auto]',
+                contentCompact: 'grid-cols-[2.5rem_minmax(0,1fr)]',
                 actionShell: 'grid-cols-[minmax(0,1fr)_auto]'
             },
             selected: {
@@ -30,7 +31,7 @@ export const listRowClass = cva(
             },
             tone: {
                 neutral: '',
-                current: 'border-[var(--b-color-focus)] bg-[var(--b-color-surface-item)]',
+                current: 'border-l-2 border-l-[var(--b-color-point)] bg-[var(--b-color-surface-subtle)]',
                 past: 'opacity-70',
                 upcoming: ''
             },
@@ -43,7 +44,7 @@ export const listRowClass = cva(
             {
                 layout: 'queue',
                 selected: true,
-                className: 'bg-[var(--b-color-surface-item)] hover:bg-[var(--b-color-surface-item)]'
+                className: 'bg-[var(--b-color-surface-item)]'
             }
         ],
         defaultVariants: {

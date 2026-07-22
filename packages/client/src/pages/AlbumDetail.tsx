@@ -10,7 +10,11 @@ import {
     RemotePlaybackOwnershipNotice
 } from '~/components/music';
 import { Button, Loading, StateMessage, Text } from '~/components/shared';
-import { useRemotePlaybackOwnership, useResetQueue } from '~/hooks';
+import {
+    usePlaybackSignal,
+    useRemotePlaybackOwnership,
+    useResetQueue
+} from '~/hooks';
 import { Play } from '~/icon';
 import { panel } from '~/modules/panel';
 import {
@@ -30,6 +34,7 @@ export default function AlbumDetail() {
     const navigate = useNavigate();
     const resetQueue = useResetQueue();
     const remotePlaybackOwnership = useRemotePlaybackOwnership();
+    const playbackSignal = usePlaybackSignal();
 
     const { id } = useParams<{ id: string }>();
 
@@ -104,6 +109,14 @@ export default function AlbumDetail() {
             {remotePlaybackOwnership && (
                 <RemotePlaybackOwnershipNotice className="mx-[var(--b-spacing-lg)] mb-[var(--b-spacing-lg)]" />
             )}
+            <div className="mb-[var(--b-spacing-sm)] flex items-center gap-[var(--b-spacing-sm)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)]">
+                <Text as="h2" size="xl" weight="semibold">
+                    Songs
+                </Text>
+                <Text variant="tertiary" size="sm">
+                    {albumTracks.length}
+                </Text>
+            </div>
             <div className="flex flex-col">
                 {discGroups.map(group => (
                     <section key={group.discNumber ?? 'unknown'}>
@@ -132,6 +145,7 @@ export default function AlbumDetail() {
                                 isLiked={music.isLiked}
                                 hideAlbumArt
                                 isHated={music.isHated}
+                                playbackSignal={playbackSignal?.musicId === music.id ? playbackSignal : undefined}
                                 onClick={() => queueStore.add(music.id)}
                                 onLongPress={() => panel.open({
                                     title: 'Related to this music',

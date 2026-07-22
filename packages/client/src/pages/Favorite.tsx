@@ -18,7 +18,11 @@ import {
     StateMessage,
     StickyHeaderActions
 } from '~/components/shared';
-import { useRemotePlaybackOwnership, useResetQueue } from '~/hooks';
+import {
+    usePlaybackSignal,
+    useRemotePlaybackOwnership,
+    useResetQueue
+} from '~/hooks';
 import * as Icon from '~/icon';
 
 import { panel } from '~/modules/panel';
@@ -45,6 +49,7 @@ export default function Music() {
     const navigate = useNavigate();
     const resetQueue = useResetQueue();
     const remotePlaybackOwnership = useRemotePlaybackOwnership();
+    const playbackSignal = usePlaybackSignal();
     const [searchParams, setSearchParams] = useSearchParams();
 
     const [{ musics, loaded }] = useStore(musicStore);
@@ -227,6 +232,7 @@ export default function Music() {
                                 .filter(Boolean).join(' · ')}
                             musicCodec={music.codec}
                             isLiked={music.isLiked}
+                            playbackSignal={playbackSignal?.musicId === music.id ? playbackSignal : undefined}
                             onClick={() => queueStore.add(music.id)}
                             onLongPress={() => panel.open({
                                 title: 'Related to this music',

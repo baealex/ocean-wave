@@ -11,7 +11,7 @@ interface PlaylistItemProps {
     name: string;
     headerMusics: Pick<Music, 'id'>[];
     musicCount: number;
-    layout?: 'list' | 'collection';
+    layout?: 'list' | 'collection' | 'reorder';
     onClick?: () => void;
     onLongPress?: () => void;
 }
@@ -31,7 +31,11 @@ export default function PlaylistItem({
             <button
                 type="button"
                 className={libraryRowClass({
-                    layout: layout === 'collection' ? 'playlist' : 'list'
+                    layout: layout === 'collection'
+                        ? 'playlist'
+                        : layout === 'reorder'
+                            ? 'playlistReorder'
+                            : 'list'
                 })}
                 onClick={onClick}
                 onContextMenu={(e) => {

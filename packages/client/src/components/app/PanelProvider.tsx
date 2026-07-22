@@ -1,3 +1,5 @@
+import { useCallback } from 'react';
+
 import { useAppStore as useStore } from '~/store/base-store';
 
 import BottomPanel from '~/components/shared/BottomPanel';
@@ -10,6 +12,8 @@ interface PanelProviderProps {
 
 export default function PanelProvider({ children }: PanelProviderProps) {
     const [{ isOpen, title, content }] = useStore(panel);
+    const handleClose = useCallback(() => panel.close(), []);
+    const handleAfterClose = useCallback(() => panel.completeClose(), []);
 
     return (
         <>
@@ -17,7 +21,8 @@ export default function PanelProvider({ children }: PanelProviderProps) {
             <BottomPanel
                 title={title}
                 isOpen={isOpen}
-                onClose={() => panel.close()}>
+                onClose={handleClose}
+                onAfterClose={handleAfterClose}>
                 {content}
             </BottomPanel>
         </>

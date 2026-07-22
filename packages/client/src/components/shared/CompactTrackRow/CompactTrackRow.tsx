@@ -12,8 +12,8 @@ const cx = classNames;
 
 const compactTrackRowClass = cva(
     [
-        'grid min-h-15 min-w-0 items-center gap-3 rounded-[var(--b-radius-lg)] border border-[var(--b-color-border-subtle)]',
-        'bg-[var(--b-color-surface-item)] p-2.5 text-[var(--b-color-text)] transition-[color,background-color,border-color,transform] duration-150',
+        'grid min-h-15 min-w-0 items-center gap-3 rounded-[var(--b-radius-lg)]',
+        'bg-[var(--b-color-surface-subtle)] p-2.5 text-[var(--b-color-text)]',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
         'disabled:cursor-not-allowed disabled:opacity-40'
     ],
@@ -25,7 +25,7 @@ const compactTrackRowClass = cva(
                 trailing: 'grid-cols-[3rem_minmax(0,1fr)_auto]'
             },
             interactive: {
-                true: 'w-full text-left no-underline hover:border-[var(--b-color-border)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
+                true: 'w-full text-left no-underline',
                 false: ''
             }
         },

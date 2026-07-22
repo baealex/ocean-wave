@@ -134,11 +134,11 @@ export default function Home() {
 
     return (
         <>
-            <Surface as="section" variant="subtle" radius="2xl" padding="hero" className="relative grid min-h-[clamp(208px,28vw,304px)] grid-cols-[minmax(144px,0.44fr)_minmax(0,1fr)] items-center gap-[clamp(20px,4vw,48px)] overflow-hidden shadow-[var(--b-card-shadow-main)] max-[900px]:min-h-0 max-[900px]:grid-cols-1">
-                <div className="relative flex min-w-0 justify-center before:absolute before:left-1/2 before:top-1/2 before:h-[78%] before:w-[78%] before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border before:border-[var(--b-color-point-glow)] before:content-[''] after:absolute after:left-1/2 after:top-1/2 after:h-[92%] after:w-[92%] after:-translate-x-1/2 after:-translate-y-1/2 after:rounded-[var(--b-radius-2xl)] after:border after:border-[var(--b-color-border-subtle)] after:content-['']">
+            <Surface as="section" variant="bare" radius="2xl" padding="hero" className="relative grid min-h-[clamp(208px,28vw,304px)] grid-cols-[minmax(144px,0.44fr)_minmax(0,1fr)] items-center gap-[clamp(20px,4vw,48px)] overflow-hidden bg-[linear-gradient(135deg,var(--b-color-surface-subtle),transparent_72%)] max-[900px]:min-h-0 max-[900px]:grid-cols-1">
+                <div className="relative flex min-w-0 justify-center">
                     {heroMusic ? (
                         <Image
-                            className="relative z-[1] aspect-square w-[min(100%,200px)] rounded-[var(--b-radius-2xl)] border border-[var(--b-color-border-subtle)] object-cover shadow-[var(--b-shadow-artwork-hero)] max-sm:w-[min(100%,224px)] max-sm:rounded-[var(--b-radius-xl)]"
+                            className="relative z-[1] aspect-square w-[min(100%,200px)] rounded-[var(--b-radius-2xl)] object-cover shadow-[var(--b-shadow-artwork-hero)] max-sm:w-[min(100%,224px)] max-sm:rounded-[var(--b-radius-xl)]"
                             src={heroMusic.album.cover}
                             alt={heroMusic.album.name}
                             loading="eager"

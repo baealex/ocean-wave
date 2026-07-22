@@ -27,7 +27,11 @@ import {
     StateMessage,
     Text
 } from '~/components/shared';
-import { useRemotePlaybackOwnership, useResetQueue } from '~/hooks';
+import {
+    usePlaybackSignal,
+    useRemotePlaybackOwnership,
+    useResetQueue
+} from '~/hooks';
 import * as Icon from '~/icon';
 import { Play } from '~/icon';
 import { moveArrayItem } from '~/modules/fixed-virtual-sortable-list';
@@ -55,6 +59,7 @@ export default function PlaylistDetail() {
     const navigate = useNavigate();
     const resetQueue = useResetQueue();
     const remotePlaybackOwnership = useRemotePlaybackOwnership();
+    const playbackSignal = usePlaybackSignal();
 
     const { id } = useParams<{ id: string }>();
 
@@ -185,7 +190,7 @@ export default function PlaylistDetail() {
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                     <Text
                         as="h2"
-                        size="title"
+                        size="xl"
                         weight="semibold"
                         className="truncate">
                         {isSelectMode && (
@@ -278,6 +283,7 @@ export default function PlaylistDetail() {
                                             musicCodec={music.codec}
                                             isLiked={music.isLiked}
                                             isHated={music.isHated}
+                                            playbackSignal={playbackSignal?.musicId === music.id ? playbackSignal : undefined}
                                             onClick={isSelectMode ? onSelect : onClick}
                                             onLongPress={() => panel.open({
                                                 content: (

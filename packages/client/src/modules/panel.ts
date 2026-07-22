@@ -6,7 +6,9 @@ interface PanelStoreState {
     content: React.ReactNode;
 }
 
-class PanelStore extends BaseStore<PanelStoreState> {
+export class PanelStore extends BaseStore<PanelStoreState> {
+    private afterClose: (() => void) | null = null;
+
     constructor() {
         super();
         this.state = {
@@ -17,6 +19,7 @@ class PanelStore extends BaseStore<PanelStoreState> {
     }
 
     open({ title, content }: { title?: string; content: React.ReactNode }) {
+        this.afterClose = null;
         this.set({
             title: title || '',
             isOpen: true,
@@ -24,12 +27,25 @@ class PanelStore extends BaseStore<PanelStoreState> {
         });
     }
 
-    close() {
+    close(afterClose?: () => void) {
+        if (afterClose) {
+            this.afterClose = afterClose;
+        } else if (this.state.isOpen) {
+            this.afterClose = null;
+        }
+
         this.set({
             title: '',
             isOpen: false,
             content: null
         });
+    }
+
+    completeClose() {
+        const afterClose = this.afterClose;
+
+        this.afterClose = null;
+        afterClose?.();
     }
 }
 

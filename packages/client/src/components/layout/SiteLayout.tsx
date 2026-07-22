@@ -34,13 +34,13 @@ interface RouteHandle {
 
 const siteContentClass = cva('relative flex min-h-0 flex-1 overflow-hidden', {
     variants: {
-        subPage: {
+        fullscreen: {
             true: 'lg:col-[1/3]',
             false: ''
         }
     },
     defaultVariants: {
-        subPage: false
+        fullscreen: false
     }
 });
 
@@ -96,15 +96,19 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
     const [searchParams, setSearchParams] = useSearchParams();
 
     const containerRef = useRef<HTMLDivElement>(null);
-    const shouldBeScroll = useRef(true);
+    const restoredScrollRouteRef = useRef<string | null>(null);
+    const persistedScrollTopRef = useRef<string | null>(null);
     const setSearchParamsRef = useRef(setSearchParams);
     const isSubPage = isSubPagePath(location.pathname);
     const subPagePresentation = resolveSubPagePresentation(location.pathname);
+    const isFullscreenSubPage = isSubPage && subPagePresentation === 'fullscreen';
     const hasSubPageHeader = shouldRenderSubPageHeader(location.pathname);
     const hideMiniPlayer = shouldHideMiniPlayer(location.pathname);
     const shouldAvoidMiniPlayerForToast = !disablePlayer && !hideMiniPlayer;
     const hasMiniPlayer = !disablePlayer && !hideMiniPlayer;
+    const hasBottomNavigation = !isSubPage;
     const pageFrame = resolvePageFrame(matches);
+    const scrollRouteKey = `${isSubPage ? 'subpage' : 'page'}:${location.pathname}`;
 
     const renderOutlet = () => {
         const outlet = (
@@ -123,14 +127,21 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
     });
 
     useEffect(() => {
-        if (containerRef.current && shouldBeScroll.current) {
-            containerRef.current.scrollTop = parseInt(searchParams.get('py') || '0');
-            shouldBeScroll.current = false;
+        const scrollRoot = containerRef.current;
+
+        if (!scrollRoot || restoredScrollRouteRef.current === scrollRouteKey) {
+            return;
         }
-        return () => {
-            shouldBeScroll.current = true;
-        };
-    }, [containerRef, isSubPage, shouldBeScroll, location.pathname, searchParams]);
+
+        const parsedScrollTop = Number.parseFloat(searchParams.get('py') || '0');
+        const restoredScrollTop = Number.isFinite(parsedScrollTop)
+            ? Math.max(parsedScrollTop, 0)
+            : 0;
+
+        restoredScrollRouteRef.current = scrollRouteKey;
+        persistedScrollTopRef.current = Math.round(restoredScrollTop).toString();
+        scrollRoot.scrollTop = restoredScrollTop;
+    }, [scrollRouteKey, searchParams]);
 
     useEffect(() => {
         if (!containerRef.current) {
@@ -145,9 +156,25 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
             }
 
             timer = setTimeout(() => {
+                const scrollTop = Math.max(
+                    Math.round(containerRef.current?.scrollTop ?? 0),
+                    0
+                ).toString();
+
+                if (persistedScrollTopRef.current === scrollTop) {
+                    return;
+                }
+
+                persistedScrollTopRef.current = scrollTop;
                 setSearchParamsRef.current((currentSearchParams) => {
                     const nextSearchParams = new URLSearchParams(currentSearchParams);
-                    nextSearchParams.set('py', containerRef.current?.scrollTop.toString() || '0');
+
+                    if (scrollTop === '0') {
+                        nextSearchParams.delete('py');
+                    } else {
+                        nextSearchParams.set('py', scrollTop);
+                    }
+
                     return nextSearchParams;
                 }, { replace: true });
             }, 200);
@@ -161,13 +188,15 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
             }
             containerRef.current?.removeEventListener('scroll', handleScroll);
         };
-    }, [containerRef, isSubPage, location.pathname]);
+    }, [scrollRouteKey]);
 
     return (
         <PanelProvider>
             <main>
-            {!isSubPage && <SiteHeader />}
-            <div className={siteContentClass({ subPage: isSubPage })}>
+            {(!isSubPage || !isFullscreenSubPage) && (
+                <SiteHeader className={isSubPage ? 'max-lg:hidden' : undefined} />
+            )}
+            <div className={siteContentClass({ fullscreen: isFullscreenSubPage })}>
                 {!isSubPage && (
                     <div
                         ref={containerRef}
@@ -185,21 +214,19 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                         <div
                             key={location.pathname}
                             className={cx(
-                                'relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden border-t border-[var(--b-color-border-subtle)] shadow-none lg:grid lg:grid-cols-[256px_minmax(0,1fr)] lg:border-t-0',
+                                'relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden border-t border-[var(--b-color-border-subtle)] shadow-none lg:border-t-0',
                                 subPageSurfaceClass[subPagePresentation]
                             )}>
                             {hasSubPageHeader ? (
-                                <>
+                                <div
+                                    ref={containerRef}
+                                    className={cx(
+                                        'main-container min-h-0',
+                                        subPageContentClass[subPagePresentation]
+                                    )}>
                                     <SubPageHeader />
-                                    <div
-                                        ref={containerRef}
-                                        className={cx(
-                                            'main-container min-h-0',
-                                            subPageContentClass[subPagePresentation]
-                                        )}>
-                                        {renderOutlet()}
-                                    </div>
-                                </>
+                                    {renderOutlet()}
+                                </div>
                             ) : (
                                 <div className={cx('min-h-0', subPageContentClass[subPagePresentation])}>
                                     {renderOutlet()}
@@ -209,8 +236,11 @@ export default function SiteLayout({ disablePlayer = false }: SiteLayoutProps) {
                     </div>
                 )}
             </div>
-            {hasMiniPlayer && <MusicPlayer />}
-            <ToastProvider avoidMiniPlayer={shouldAvoidMiniPlayerForToast} />
+            {hasMiniPlayer && <MusicPlayer hasBottomNavigation={hasBottomNavigation} />}
+            <ToastProvider
+                avoidBottomNavigation={hasBottomNavigation}
+                avoidMiniPlayer={shouldAvoidMiniPlayerForToast}
+            />
             </main>
         </PanelProvider>
     );

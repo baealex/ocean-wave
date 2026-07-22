@@ -17,8 +17,8 @@ const buttonVariants = cva(
         variants: {
             variant: {
                 primary: 'border-[var(--b-color-point)] bg-[var(--b-color-point)] text-[var(--b-color-background)] hover:border-[var(--b-color-point-dark)] hover:bg-[var(--b-color-point-dark)] hover:text-[var(--b-color-static-white)]',
-                secondary: 'border-transparent bg-[var(--b-color-secondary-button)] text-[var(--b-color-text-secondary)] hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
-                ghost: 'border-transparent bg-transparent text-[var(--b-color-text-secondary)] hover:border-[var(--b-color-border-subtle)] hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
+                secondary: 'border-transparent bg-[var(--b-color-secondary-button)] text-[var(--b-color-text-secondary)] hover:text-[var(--b-color-text)]',
+                ghost: 'border-transparent bg-transparent text-[var(--b-color-text-secondary)] hover:text-[var(--b-color-point-light)]',
                 danger: 'border-transparent bg-[var(--b-color-badge-danger-background)] text-[var(--b-color-badge-danger-text)] hover:bg-[var(--b-color-danger-hover)] hover:text-[var(--b-color-text)]'
             },
             size: {

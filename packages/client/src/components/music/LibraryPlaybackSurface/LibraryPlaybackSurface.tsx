@@ -219,9 +219,9 @@ const LibraryPlaybackSurface = () => {
         <Surface
             as="section"
             id={model.isRemote ? REMOTE_PLAYBACK_OWNERSHIP_NOTICE_ID : undefined}
-            variant="panel"
+            variant="bare"
             radius="xl"
-            className="mx-[var(--b-spacing-lg)] mb-[var(--b-spacing-md)] overflow-hidden p-3 sm:p-4"
+            className="mx-[var(--b-spacing-lg)] mb-[var(--b-spacing-md)] overflow-hidden bg-[var(--b-color-surface-subtle)] p-3 sm:p-4"
             aria-label="Current playback and continue listening">
             <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex min-w-0 flex-1 items-center gap-3">

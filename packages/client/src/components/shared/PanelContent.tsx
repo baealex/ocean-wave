@@ -26,7 +26,7 @@ export const panelContentClass = {
 };
 
 const panelHeaderActionClass = cva(
-    'relative w-full border-0 bg-transparent pr-10 text-left font-inherit text-inherit after:absolute after:right-4 after:top-1/2 after:h-2.5 after:w-2.5 after:-translate-y-1/2 after:rotate-45 after:border-r-2 after:border-t-2 after:border-[var(--b-color-text-muted)] after:content-[""]',
+    'relative w-full border-0 bg-transparent pr-10 text-left font-inherit text-inherit focus-visible:rounded-[var(--b-radius-lg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)] after:absolute after:right-4 after:top-1/2 after:h-2.5 after:w-2.5 after:-translate-y-1/2 after:rotate-45 after:border-r-2 after:border-t-2 after:border-[var(--b-color-text-muted)] after:content-[""]',
     {
         variants: {
             layout: {
@@ -61,6 +61,7 @@ const panelActionClass = cva(
     [
         'flex w-full items-start gap-4 rounded-[var(--b-radius-lg)] border-0 bg-transparent py-3.5 text-left font-inherit text-[var(--b-color-text)]',
         'transition-[background-color,color]',
+        'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
         '[&_svg]:mt-0.5 [&_svg]:h-[18px] [&_svg]:w-[18px]'
     ],
     {

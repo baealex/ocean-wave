@@ -12,8 +12,8 @@ import { TagMatchModeControl } from '~/components/music';
 import {
     ActionBar,
     ActionBarButton,
-    Badge,
     Button,
+    CollectionHeader,
     IconButton,
     ListSelectionToolbar,
     listRowActionRailClass,
@@ -24,7 +24,6 @@ import {
     SearchField,
     SelectionCheckIndicator,
     SegmentedControl,
-    StickyHeader,
     Text,
     type SegmentedControlOption
 } from '~/components/shared';
@@ -180,14 +179,11 @@ function TagListItem({
                 <Text weight="semibold" truncate>
                     {tag.name}
                 </Text>
-                {tag.description && (
-                    <Text variant="muted" size="xs" truncate>
-                        {tag.description}
-                    </Text>
-                )}
-            </span>
-            <span className="flex min-w-0 flex-wrap justify-end gap-1">
-                <Badge>{getTagUsageSummary(tag)}</Badge>
+                <Text variant="muted" size="xs" truncate>
+                    {tag.description
+                        ? `${tag.description} · ${getTagUsageSummary(tag)}`
+                        : getTagUsageSummary(tag)}
+                </Text>
             </span>
         </>
     );
@@ -198,7 +194,7 @@ function TagListItem({
                 type="button"
                 aria-label={selected ? `Unselect ${tag.name}` : `Select ${tag.name}`}
                 aria-pressed={selected}
-                className={listRowClass({ columns: 'content', selected })}
+                className={listRowClass({ columns: 'contentCompact', selected })}
                 onClick={onClick}>
                 {content}
             </button>
@@ -211,7 +207,7 @@ function TagListItem({
                 type="button"
                 aria-label={`Filter library by ${tag.name}`}
                 className={cx(
-                    listRowClass({ columns: 'content' }),
+                    listRowClass({ columns: 'contentCompact' }),
                     listRowButtonContentClass()
                 )}
                 onClick={onClick}>
@@ -279,10 +275,11 @@ function SmartViewListItem({
                         {view.name}
                     </Text>
                     <Text variant="muted" size="xs" truncate>
-                        {hasTags ? view.tags.map(tag => tag.name).join(', ') : 'No tags left in this smart view'}
+                        {hasTags
+                            ? `${view.tags.map(tag => tag.name).join(', ')} · ${getSmartViewSummary(view)}`
+                            : 'No tags left in this smart view'}
                     </Text>
                 </span>
-                <Badge>{getSmartViewSummary(view)}</Badge>
             </button>
             <div className={listRowActionRailClass}>
                 <IconButton
@@ -666,66 +663,51 @@ export default function TagList() {
 
     return (
         <>
-            <StickyHeader>
+            <CollectionHeader
+                title={section === 'views' ? 'Smart views' : 'Tags'}
+                summary={section === 'views'
+                    ? `${views.length} smart views`
+                    : unusedOnly
+                        ? `${tags.length} unused tags`
+                        : `${tags.length} tags`}
+                actions={section === 'views' ? (
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        aria-label="Create smart view"
+                        onClick={handleStartCreateFilter}>
+                        <Icon.Plus /> Create
+                    </Button>
+                ) : isSelectMode ? null : (
+                    <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={pendingAction === 'create'}
+                        onClick={() => setIsCreateDialogOpen(true)}>
+                        <Icon.Plus /> Create
+                    </Button>
+                )}>
                 <SearchField
                     value={query}
                     placeholder={section === 'views' ? 'Search smart views' : 'Search tags'}
                     ariaLabel={section === 'views' ? 'Search smart views' : 'Search tags'}
                     onChange={handleSearchChange}
                 />
-            </StickyHeader>
-
-            <nav
-                aria-label="Tag page sections"
-                className="border-b border-[var(--b-color-border-subtle)] px-[var(--b-spacing-lg)]">
-                <SegmentedControl
-                    variant="tabs"
-                    value={section}
-                    options={TAG_LIST_SECTION_OPTIONS}
-                    ariaLabel="Tag page sections"
-                    onChange={handleSectionChange}
-                />
-            </nav>
-
-            <section className="flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-lg)] py-[var(--b-spacing-md)] max-sm:flex-col max-sm:items-start">
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <Text as="h2" size="title" weight="semibold" className="truncate">
-                        {section === 'views' ? 'Smart views' : 'Tags'}
-                    </Text>
-                    <Text as="p" variant="muted" size="xs" className="truncate">
-                        {section === 'views'
-                            ? `${views.length} smart views`
-                            : unusedOnly
-                                ? `${tags.length} unused tags`
-                                : `${tags.length} tags`}
-                    </Text>
-                </div>
-
-                <div className="inline-flex items-center justify-self-end gap-2 max-sm:w-full max-sm:justify-end">
-                    {section === 'views' ? (
-                        <Button
-                            size="sm"
-                            aria-label="Create smart view"
-                            onClick={handleStartCreateFilter}>
-                            <Icon.Plus /> Create
-                        </Button>
-                    ) : isSelectMode ? null : (
-                        <>
-                            <Button
-                                size="sm"
-                                disabled={pendingAction === 'create'}
-                                onClick={() => setIsCreateDialogOpen(true)}>
-                                <Icon.Plus /> Create
-                            </Button>
-                        </>
-                    )}
-                </div>
-            </section>
+                <nav aria-label="Tag page sections" className="max-sm:w-full">
+                    <SegmentedControl
+                        variant="tabs"
+                        value={section}
+                        options={TAG_LIST_SECTION_OPTIONS}
+                        ariaLabel="Tag page sections"
+                        className="max-sm:w-full"
+                        onChange={handleSectionChange}
+                    />
+                </nav>
+            </CollectionHeader>
 
             {section === 'tags' && tags.length > 0 && (
                 <ListSelectionToolbar
-                    sticky
-                    className="top-[60px] px-[var(--b-spacing-lg)] pb-2 pt-0 max-sm:top-[96px]"
+                    className="px-[var(--b-spacing-lg)] pb-2 pt-2"
                     isSelecting={isSelectMode}
                     selectedCount={selectedTagIds.length}
                     totalCount={tags.length}

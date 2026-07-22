@@ -37,7 +37,7 @@ export default function ArtistCollectionCard({
                         </span>
                     )}
                     <span
-                        className="pointer-events-none absolute inset-0 rounded-full border border-transparent border-t-[var(--b-color-focus)] opacity-80 transition-transform duration-150 group-hover/card:-rotate-12 motion-reduce:transition-none"
+                        className="pointer-events-none absolute inset-0 rounded-full border border-transparent border-t-[var(--b-color-focus)] opacity-65"
                         aria-hidden="true"
                     />
                 </span>

@@ -53,7 +53,11 @@ export const seekLocalPlaybackToPercent = (
     return true;
 };
 
-const MusicPlayer = () => {
+interface MusicPlayerProps {
+    hasBottomNavigation?: boolean;
+}
+
+const MusicPlayer = ({ hasBottomNavigation = false }: MusicPlayerProps) => {
     const navigate = useNavigate();
     const miniPlayerRef = useRef<HTMLDivElement>(null);
     const remoteTouchStartRef = useRef<{
@@ -361,8 +365,11 @@ const MusicPlayer = () => {
                 </div>
             )}
             <div className={cx(
-                'flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-md)] pb-[calc(var(--b-spacing-sm)+env(safe-area-inset-bottom))] pt-[var(--b-spacing-sm)] lg:px-[var(--b-spacing-lg)] lg:py-[var(--b-spacing-sm)]',
-                remotePlayback && 'max-[520px]:flex-wrap max-[520px]:gap-[var(--b-spacing-sm)]'
+                'flex items-center justify-between gap-[var(--b-spacing-md)] px-[var(--b-spacing-md)] pt-[var(--b-spacing-sm)] lg:px-[var(--b-spacing-lg)] lg:py-[var(--b-spacing-sm)]',
+                remotePlayback && 'max-[520px]:flex-wrap max-[520px]:gap-[var(--b-spacing-sm)]',
+                hasBottomNavigation
+                    ? 'pb-[var(--b-spacing-sm)]'
+                    : 'pb-[calc(var(--b-spacing-sm)+env(safe-area-inset-bottom))]'
             )}>
                 <button
                     type="button"

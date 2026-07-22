@@ -22,7 +22,7 @@ const buttonClass = cva(
         'block min-h-9 w-full min-w-0 overflow-hidden rounded-[var(--b-radius-md)] border px-3 py-2 text-left text-xs font-semibold',
         'text-[var(--b-color-text-secondary)] transition-[color,background-color,border-color] duration-150',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--b-color-focus)]',
-        'disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:border-[var(--b-color-border)] enabled:hover:bg-[var(--b-color-hover)] enabled:hover:text-[var(--b-color-text)]'
+        'disabled:cursor-not-allowed disabled:opacity-50 enabled:hover:text-[var(--b-color-point-light)]'
     ],
     {
         variants: {

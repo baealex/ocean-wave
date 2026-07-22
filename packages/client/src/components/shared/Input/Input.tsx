@@ -12,7 +12,7 @@ const inputVariants = cva(
         'placeholder:text-[var(--b-color-text-muted)]',
         'focus:outline-none focus-visible:border-[var(--b-color-focus)] focus-visible:bg-[var(--b-color-hover)]',
         'focus-visible:text-[var(--b-color-text)] focus-visible:shadow-[0_0_0_3px_var(--b-color-focus-ring)]',
-        'enabled:hover:border-[var(--b-color-border-subtle)] enabled:hover:bg-[var(--b-color-hover)] enabled:hover:text-[var(--b-color-text)]',
+        'enabled:hover:text-[var(--b-color-text)]',
         'disabled:cursor-not-allowed disabled:opacity-50'
     ],
     {

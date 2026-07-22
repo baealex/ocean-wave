@@ -19,7 +19,7 @@ const triggerClass = cva([
     'inline-flex min-h-10 w-[min(100%,320px)] min-w-56 items-center justify-between gap-3 rounded-[var(--b-radius-md)]',
     'border border-[var(--b-color-border-subtle)] bg-[var(--b-color-surface-subtle)] px-3 py-1.5',
     'text-xs font-semibold text-[var(--b-color-text-secondary)] transition-[border-color,background-color,box-shadow,color] duration-150',
-    'hover:bg-[var(--b-color-hover)] hover:text-[var(--b-color-text)]',
+    'hover:text-[var(--b-color-text)]',
     'focus-visible:border-[var(--b-color-focus)] focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--b-color-focus-ring)]',
     'data-[state=open]:bg-[var(--b-color-hover)] data-[state=open]:text-[var(--b-color-text)] max-md:w-full max-md:min-w-0'
 ]);
@@ -27,7 +27,8 @@ const triggerClass = cva([
 const contentClass = cva([
     'z-40 max-h-[min(288px,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)]',
     'max-w-[min(384px,calc(100vw-32px))] overflow-hidden rounded-[var(--b-radius-md)] border border-[var(--b-color-border-subtle)]',
-    'bg-[var(--b-color-surface-dropdown)] text-[var(--b-color-text)] shadow-[var(--b-card-shadow-sub)] animate-[fade-in_140ms_ease]'
+    'bg-[var(--b-color-surface-dropdown)] text-[var(--b-color-text)] shadow-[var(--b-card-shadow-sub)]',
+    'data-[state=open]:animate-[select-content-in_140ms_ease-out]'
 ]);
 
 const itemClass = cva([

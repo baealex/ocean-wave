@@ -4,6 +4,10 @@ const cx = classNames;
 import { IconButton, TrackArtwork } from '~/components/shared';
 import { activeFilledIconClassName } from '~/components/shared/iconStateClass';
 import { Heart, VerticalDots } from '~/icon';
+import {
+    getPlaybackSignalLabel,
+    type PlaybackSignal
+} from '~/modules/playback-signal';
 
 interface MusicListItemProps {
     id?: number;
@@ -17,6 +21,7 @@ interface MusicListItemProps {
     isLiked?: boolean;
     isHated?: boolean;
     hideAlbumArt?: boolean;
+    playbackSignal?: PlaybackSignal;
     onClick?: () => void;
     onLongPress?: () => void;
 }
@@ -32,18 +37,23 @@ const MusicListItem = ({
     isLiked,
     isHated,
     hideAlbumArt,
+    playbackSignal,
     onClick,
     onLongPress
 }: MusicListItemProps) => {
+    const playbackLabel = playbackSignal
+        ? getPlaybackSignalLabel(playbackSignal)
+        : null;
+
     return (
         <div
             className={cx(
-                'group/row flex h-full w-full items-center text-[var(--b-color-text)] transition-[background-color,opacity]',
-                'hover:bg-[image:var(--b-gradient-row-hover)]',
+                'group/row flex h-full w-full items-center border-b border-[var(--b-color-border-subtle)] text-[var(--b-color-text)] transition-opacity',
                 { 'opacity-40': isHated }
             )}>
             <button
                 type="button"
+                aria-current={playbackSignal ? 'true' : undefined}
                 className="ow-active-press flex min-w-0 flex-1 self-stretch items-center gap-4 px-6 py-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--b-color-focus)]"
                 onClick={onClick}
                 onContextMenu={(e) => {
@@ -52,7 +62,7 @@ const MusicListItem = ({
                 }}>
                 {hideAlbumArt ? (
                     <span className="w-12 shrink-0 text-center text-xs text-[var(--b-color-text-muted)]">
-                        {trackNumber ?? '·'}
+                        {trackNumber ?? ''}
                     </span>
                 ) : (
                     <TrackArtwork src={albumCover} alt={albumName} />
@@ -63,7 +73,11 @@ const MusicListItem = ({
                             {!!trackNumber && !hideAlbumArt && (
                                 <span className="min-w-6 text-xs text-[var(--b-color-text-muted)]">{trackNumber}.</span>
                             )}
-                            <span className="truncate">{musicName}</span>
+                            <span className={cx('truncate', {
+                                'text-[var(--b-color-point-light)]': playbackSignal?.state === 'playing'
+                            })}>
+                                {musicName}
+                            </span>
                             {versionTitle
                                 && !musicName.toLocaleLowerCase().includes(
                                     versionTitle.toLocaleLowerCase()
@@ -78,8 +92,16 @@ const MusicListItem = ({
                                 </span>
                             )}
                         </span>
-                        <span className="truncate text-xs text-[var(--b-color-text-tertiary)]">
-                            {artistName}
+                        <span className="flex min-w-0 items-center gap-1 text-xs text-[var(--b-color-text-tertiary)]">
+                            {playbackSignal && playbackLabel && (
+                                <span className={cx('shrink-0', {
+                                    'text-[var(--b-color-point-light)]': playbackSignal.state === 'playing',
+                                    'text-[var(--b-color-text-secondary)]': playbackSignal.state === 'paused'
+                                })}>
+                                    {playbackLabel} ·
+                                </span>
+                            )}
+                            <span className="truncate">{artistName}</span>
                         </span>
                     </span>
                     {isLiked && (

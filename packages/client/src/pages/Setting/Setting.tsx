@@ -28,10 +28,11 @@ export default function Setting() {
                 confirmLabel: 'Force sync'
             }))
         ) {
-            return;
+            return false;
         }
 
         socket.emit('sync-music', { force });
+        return true;
     };
 
     return (

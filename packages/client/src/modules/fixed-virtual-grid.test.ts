@@ -12,9 +12,10 @@ describe('fixed virtual grid layout', () => {
     it.each([
         [320, 2],
         [390, 2],
+        [752, 4],
         [768, 4],
         [1024, 5],
-        [1440, 6]
+        [1440, 5]
     ])('uses responsive columns at %ipx', (containerWidth, columnCount) => {
         expect(resolveFixedVirtualGridLayout({
             containerWidth,
@@ -25,27 +26,27 @@ describe('fixed virtual grid layout', () => {
 
     it('resolves rows and total height for a large desktop collection', () => {
         const layout = resolveFixedVirtualGridLayout({
-            containerWidth: 1184,
+            containerWidth: 1152,
             count: 851,
             itemHeightOffset: ITEM_HEIGHT_OFFSET
         });
 
         expect(layout).toMatchObject({
             columnGap: 16,
-            columnCount: 6,
-            itemWidth: 176,
-            itemHeight: 264,
-            rowCount: 142,
-            rowStride: 288,
-            totalHeight: 40920
+            columnCount: 5,
+            itemWidth: 208,
+            itemHeight: 296,
+            rowCount: 171,
+            rowStride: 320
         });
+        expect(layout.totalHeight).toBe(54744);
     });
 
     it.each([
         [1, 390, 1],
         [4, 390, 2],
-        [644, 1184, 108],
-        [851, 1184, 142]
+        [644, 1152, 129],
+        [851, 1152, 171]
     ])('resolves %i items into fixed rows at %ipx', (count, containerWidth, rowCount) => {
         expect(resolveFixedVirtualGridLayout({
             containerWidth,
@@ -61,10 +62,10 @@ describe('fixed virtual grid layout', () => {
             itemHeightOffset: ITEM_HEIGHT_OFFSET
         });
 
-        expect(layout.columnCount).toBe(6);
+        expect(layout.columnCount).toBe(5);
         expect(layout.itemWidth).toBe(232);
-        expect(layout.gridWidth).toBe(1472);
-        expect(layout.gridOffsetLeft).toBe(224);
+        expect(layout.gridWidth).toBe(1224);
+        expect(layout.gridOffsetLeft).toBe(348);
         expect(layout.gridOffsetLeft * 2 + layout.gridWidth).toBe(1920);
     });
 
@@ -83,7 +84,7 @@ describe('fixed virtual grid layout', () => {
 describe('fixed virtual grid range', () => {
     it('virtualizes collection rows with overscan', () => {
         const layout = resolveFixedVirtualGridLayout({
-            containerWidth: 1184,
+            containerWidth: 1152,
             count: 851,
             itemHeightOffset: ITEM_HEIGHT_OFFSET
         });
@@ -94,8 +95,8 @@ describe('fixed virtual grid range', () => {
             viewportHeight: 800,
             overscanPx: 576
         })).toEqual({
-            startRow: 15,
-            endRow: 23
+            startRow: 13,
+            endRow: 20
         });
     });
 

@@ -1,12 +1,15 @@
 import { cva } from 'class-variance-authority';
+import classNames from 'classnames';
 import React from 'react';
 
 import IconButton from '~/components/shared/IconButton';
 
+const cx = classNames;
+
 const contentClass = cva('relative z-[1]', {
     variants: {
         hasPrimaryAction: {
-            true: 'pt-[var(--b-spacing-2xl)]',
+            true: 'pt-[var(--b-spacing-2xl)] lg:pt-[var(--b-spacing-xl)]',
             false: ''
         }
     },
@@ -33,7 +36,7 @@ export const TwoTonePrimaryAction = React.forwardRef<HTMLButtonElement, TwoToneP
         size="floating"
         tone="primary"
         type={type}
-        className={className}
+        className={cx('lg:h-14 lg:w-14 lg:[&_svg]:h-6 lg:[&_svg]:w-6', className)}
         {...props}
     />
 ));
@@ -48,7 +51,7 @@ const TwoToneLayout = ({
     return (
         <div className="relative min-h-full">
             <div className="relative z-[2]">
-                <div className="relative px-[var(--b-spacing-lg)] py-[calc(var(--b-spacing-2xl)+var(--b-spacing-lg))]">
+                <div className="relative mx-auto w-full max-w-[1024px] px-[var(--b-spacing-lg)] py-[var(--b-spacing-xl)] lg:py-10">
                     {header}
                     {primaryAction && (
                         <div className="absolute bottom-0 right-[var(--b-spacing-lg)] z-20 translate-y-1/2">
@@ -60,7 +63,9 @@ const TwoToneLayout = ({
             </div>
 
             <div className={contentClass({ hasPrimaryAction: Boolean(primaryAction) })}>
-                {children}
+                <div className="mx-auto w-full max-w-[1024px] pb-[var(--b-spacing-2xl)]">
+                    {children}
+                </div>
             </div>
         </div>
     );
