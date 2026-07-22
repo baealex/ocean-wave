@@ -7,6 +7,7 @@ import { socket } from '~/socket';
 import {
     AudioSettingsSection,
     LibraryBackupSection,
+    OfflineListeningSection,
     PlaybackDevicesSection,
     PlaylistTransferSection,
     PlayModeSection,
@@ -48,6 +49,7 @@ export default function Setting() {
                 <SynchronizationSection onSyncMusic={handleClickSyncMusic} />
                 <PlaylistTransferSection />
                 <LibraryBackupSection />
+                <OfflineListeningSection />
                 <PlayModeSection />
                 <AudioSettingsSection />
                 <PlaybackDevicesSection />

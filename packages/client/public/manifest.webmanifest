@@ -1,0 +1,13 @@
+{
+  "name": "Ocean Wave",
+  "short_name": "Ocean Wave",
+  "description": "A self-hosted player for your private music library.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    { "src": "/brand-logo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

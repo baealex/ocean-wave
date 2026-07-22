@@ -49,6 +49,7 @@ export const createApiRouter = (authConfig: AuthConfig) => {
         .post('/playlists/imports/:id/relink', useAsync(views.relinkPlaylistItems))
         .post('/playlists/imports/:id/apply', useAsync(views.applyPlaylist))
         .get('/playlists/:id/export', useAsync(views.downloadPlaylist))
+        .get('/playlists/:id/offline-assets', useAsync(views.getPlaylistOfflineAssets))
         .get('/audio/:id', useAsync(views.audio))
         .get('/home', useAsync(views.home));
 };
