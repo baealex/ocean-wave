@@ -1,4 +1,5 @@
 export * from './auth';
+export * from './connectivity';
 export * from './graphql';
 export * from './library';
 export * from './library-backup';

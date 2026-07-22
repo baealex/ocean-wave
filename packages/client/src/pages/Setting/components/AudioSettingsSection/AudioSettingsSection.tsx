@@ -44,6 +44,13 @@ const AUDIO_BITRATES = [
     }
 ];
 
+const STREAM_PROFILES = [
+    { value: 'original', label: 'Original (source file)' },
+    { value: 'high', label: 'High (up to 192 kbps, about 86 MB/hour)' },
+    { value: 'balanced', label: 'Balanced (128 kbps, about 58 MB/hour)' },
+    { value: 'data-saver', label: 'Data Saver (64 kbps, about 29 MB/hour)' }
+];
+
 const AudioIcon = () => (
     <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -60,13 +67,21 @@ const AudioIcon = () => (
 
 export const AudioSettingsSection = () => {
     const navigate = useNavigate();
-    const [{ format, bitrate, useOriginal }] = useStore(audioSettingsStore);
+    const [{ format, bitrate, useOriginal, profile }] = useStore(audioSettingsStore);
 
     return (
         <SettingSection
             title="Audio Settings"
             icon={<AudioIcon />}
             description="Set playback quality and format.">
+            <SettingItem title="Streaming Profile" description="Choose a predictable quality and estimated mobile data rate.">
+                <Select
+                    ariaLabel="Streaming profile"
+                    selected={STREAM_PROFILES.find(({ value }) => value === profile)}
+                    options={STREAM_PROFILES}
+                    onChange={(value) => audioSettingsStore.setProfile(value as typeof profile)}
+                />
+            </SettingItem>
             <SettingItem
                 title="Use Original Audio Files"
                 description="Play source files without transcoding.">

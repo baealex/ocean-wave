@@ -1,4 +1,6 @@
-import { Button, SettingSection, SettingItem } from '~/components/shared';
+import { useState } from 'react';
+import { getConnectivityDiagnostics, type ConnectivityDiagnostics } from '~/api/connectivity';
+import { Button, SettingSection, SettingItem, Text } from '~/components/shared';
 
 
 const AlertIcon = () => (
@@ -17,11 +19,21 @@ const AlertIcon = () => (
 );
 
 export const TroubleshootingSection = () => {
+    const [result, setResult] = useState<(ConnectivityDiagnostics & { roundTripMs: number })>();
+    const [checking, setChecking] = useState(false);
+    const check = async () => {
+        setChecking(true);
+        try { setResult(await getConnectivityDiagnostics()); } finally { setChecking(false); }
+    };
     return (
         <SettingSection
             title="Troubleshooting"
             icon={<AlertIcon />}
             description="Having issues with the application? Try these solutions.">
+            <SettingItem title="Connection diagnostics" description="Check authentication, byte-range streaming, sockets, response delay, and transcoding load without changing your router.">
+                <Button disabled={checking} onClick={check}>{checking ? 'Checking…' : 'Run checks'}</Button>
+            </SettingItem>
+            {result && <div className="border-b border-[var(--b-color-border-subtle)] py-3"><Text as="p" size="xs" variant="muted">Authentication {result.authenticated ? 'OK' : 'failed'} · Range {result.rangeRequests ? 'OK' : 'failed'} · Audio file {result.streamReadable ? 'readable' : 'unavailable'} · Socket clients {result.socketConnections} · {result.roundTripMs} ms round trip · Transcodes {result.transcodes.active}/{result.transcodes.maximum}</Text></div>}
             <SettingItem
                 title="Refresh Application"
                 description="Reload the application to resolve common issues.">

@@ -4,6 +4,8 @@ import type { Music } from '~/models/type';
 
 import { audioSettingsStore } from '~/store/audio-settings';
 import { resolveMixDuration, shouldStartMix } from './mix-timing';
+import { audioRetryDelay, MAX_AUDIO_RETRIES, withRetryToken } from '../network-retry';
+import { toast } from '../toast';
 
 export class WebAudioChannel implements AudioChannel {
     private audio: HTMLAudioElement;
@@ -17,6 +19,9 @@ export class WebAudioChannel implements AudioChannel {
     private mixOutgoingStartedAtSeconds: number | null;
     private mixDurationMs: number;
     private loadingMixTarget: boolean;
+    private currentResource: string | null;
+    private retryAttempt: number;
+    private retryTimer: ReturnType<typeof setTimeout> | null;
 
     constructor(_handler: AudioChannelEventHandler) {
         this.audio = new Audio();
@@ -29,9 +34,15 @@ export class WebAudioChannel implements AudioChannel {
         this.mixOutgoingStartedAtSeconds = null;
         this.mixDurationMs = 0;
         this.loadingMixTarget = false;
+        this.currentResource = null;
+        this.retryAttempt = 0;
+        this.retryTimer = null;
         this.handler = {
             onPlay: () => _handler.onPlay?.(),
-            onPlaying: () => _handler.onPlaying?.(),
+            onPlaying: () => {
+                this.retryAttempt = 0;
+                _handler.onPlaying?.();
+            },
             onWaiting: () => _handler.onWaiting?.(),
             onPause: () => {
                 if (this.ignoreNextPause) {
@@ -122,6 +133,7 @@ export class WebAudioChannel implements AudioChannel {
         this.audio.addEventListener('ended', this.handler.onEnded!);
         this.audio.addEventListener('timeupdate', this.handler.onTimeUpdate as () => void);
         this.audio.addEventListener('loadedmetadata', this.applyPendingSeek);
+        this.audio.addEventListener('error', this.handleNetworkError);
     }
 
     swapAudio() {
@@ -134,6 +146,7 @@ export class WebAudioChannel implements AudioChannel {
         tempAudio.removeEventListener('ended', this.handler.onEnded!);
         tempAudio.removeEventListener('timeupdate', this.handler.onTimeUpdate as () => void);
         tempAudio.removeEventListener('loadedmetadata', this.applyPendingSeek);
+        tempAudio.removeEventListener('error', this.handleNetworkError);
         this.backgroundAudio = tempAudio;
     }
 
@@ -144,15 +157,25 @@ export class WebAudioChannel implements AudioChannel {
 
         let audioResource: string;
 
-        const { format, bitrate, useOriginal } = audioSettingsStore.state;
+        const { format, bitrate, useOriginal, profile } = audioSettingsStore.state;
         this.loadedDuration = music.duration;
         this.pendingSeekTime = null;
 
         if (useOriginal) {
-            audioResource = `/api/audio/${music.id}?notranscode=true`;
+            audioResource = `/api/audio/${music.id}?notranscode=true&profile=original`;
         } else {
-            audioResource = `/api/audio/${music.id}?format=${format}&bitrate=${bitrate}`;
+            const canPlay = typeof this.audio.canPlayType === 'function'
+                ? this.audio.canPlayType.bind(this.audio)
+                : () => '';
+            const codecs = [
+                canPlay('audio/mpeg') ? 'mp3' : '',
+                canPlay('audio/aac') ? 'aac' : '',
+                canPlay('audio/ogg') ? 'ogg' : ''
+            ].filter(Boolean).join(',');
+            audioResource = `/api/audio/${music.id}?profile=${profile}&format=${format}&bitrate=${bitrate}&codecs=${codecs}`;
         }
+        this.currentResource = audioResource;
+        this.retryAttempt = 0;
 
         this.audio.pause();
         this.audio.src = audioResource;
@@ -270,6 +293,8 @@ export class WebAudioChannel implements AudioChannel {
         this.audio.removeEventListener('ended', this.handler.onEnded!);
         this.audio.removeEventListener('timeupdate', this.handler.onTimeUpdate as () => void);
         this.audio.removeEventListener('loadedmetadata', this.applyPendingSeek);
+        this.audio.removeEventListener('error', this.handleNetworkError);
+        if (this.retryTimer) clearTimeout(this.retryTimer);
         this.audio.pause();
         this.backgroundAudio.pause();
         webAudioContext.disconnect(this.audio);
@@ -284,6 +309,26 @@ export class WebAudioChannel implements AudioChannel {
         const time = this.pendingSeekTime;
         this.pendingSeekTime = null;
         this.seek(time);
+    };
+
+    private handleNetworkError = () => {
+        if (!this.currentResource || this.retryAttempt >= MAX_AUDIO_RETRIES) {
+            toast.error('Playback could not reconnect. Check Connection diagnostics, then retry.');
+            return;
+        }
+        const resumeAt = Number.isFinite(this.audio.currentTime) ? this.audio.currentTime : 0;
+        this.retryAttempt += 1;
+        const retry = () => {
+            this.pendingSeekTime = resumeAt;
+            this.audio.src = withRetryToken(this.currentResource as string, this.retryAttempt);
+            this.audio.load();
+            void this.audio.play().catch(() => undefined);
+        };
+        if (!navigator.onLine) {
+            window.addEventListener('online', retry, { once: true });
+            return;
+        }
+        this.retryTimer = setTimeout(retry, audioRetryDelay(this.retryAttempt));
     };
 
     private finishMix(completed: boolean) {
