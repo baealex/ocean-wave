@@ -6,6 +6,7 @@ import { socket } from '~/socket';
 
 import {
     AudioSettingsSection,
+    LibraryBackupSection,
     PlaybackDevicesSection,
     PlaylistTransferSection,
     PlayModeSection,
@@ -46,6 +47,7 @@ export default function Setting() {
             <div className="flex flex-col gap-8 lg:gap-12">
                 <SynchronizationSection onSyncMusic={handleClickSyncMusic} />
                 <PlaylistTransferSection />
+                <LibraryBackupSection />
                 <PlayModeSection />
                 <AudioSettingsSection />
                 <PlaybackDevicesSection />
